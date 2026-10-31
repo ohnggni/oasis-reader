@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older (minSdk 29): same exclusions as data_extraction_rules cloud-backup. -->
+<full-backup-content>
+    <exclude domain="file" path="books/" />
+    <exclude domain="file" path="fonts/" />
+    <exclude domain="sharedpref" path="secure_store.xml" />
+</full-backup-content>

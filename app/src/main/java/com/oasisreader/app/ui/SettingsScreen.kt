@@ -1,0 +1,213 @@
+package com.oasisreader.app.ui
+
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.oasisreader.app.BuildConfig
+import com.oasisreader.app.data.Backup
+import com.oasisreader.app.data.ServerSettings
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+@Composable
+fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> Unit = {}) {
+    BackHandler(onBack = onBack)
+    val context = LocalContext.current
+    val app = context.applicationContext
+    val scope = rememberCoroutineScope()
+    val servers = remember { ServerSettings(app).all() }
+    var busy by remember { mutableStateOf<String?>(null) }
+    var withBooks by remember { mutableStateOf(true) }
+    var confirmRestore by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = "백업을 만드는 중…"
+        scope.launch {
+            try {
+                val m = Backup.export(app, uri, withBooks)
+                Toast.makeText(context, "백업했습니다: 책 ${m.books}권" + if (m.includesBookFiles) " (파일 포함)" else "", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "백업 실패: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                busy = null
+            }
+        }
+    }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) confirmRestore = uri
+    }
+
+    fun startExport(books: Boolean) {
+        withBooks = books
+        val day = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+        exporter.launch("ogreader-backup-$day${if (books) "" else "-nobooks"}.zip")
+    }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        TopBar("설정", onBack = onBack)
+        busy?.let {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
+            Section("도움말")
+            Item("📘", "사용 안내", "처음 쓰신다면: 서버 연결, 책 받기, 화면 조작", enabled = true) { onDoc(DOC_GUIDE) }
+
+            Section("OPDS 서버")
+            Item(
+                "☁️", "서버 목록 · 추가",
+                if (servers.isEmpty()) "아직 등록하지 않았습니다" else servers.joinToString(" · ") { it.name },
+                enabled = busy == null, onClick = onServer,
+            )
+
+            Section("화면")
+            val tm = com.oasisreader.app.ui.theme.ThemeMode
+            Item("🌓", "테마: ${tm.label(tm.mode)}", "시스템 따라가기 → 라이트 → 다크 (누를 때마다 바뀝니다)", enabled = true) {
+                tm.set(app, tm.ALL[(tm.ALL.indexOf(tm.mode) + 1) % tm.ALL.size])
+            }
+
+            Section("바로 읽기 (임시 보관)")
+            val cachePrefs = remember { com.oasisreader.app.data.CachePrefs(app) }
+            var limit by remember { mutableStateOf(cachePrefs.limitMb) }
+            var usage by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+            var usageKey by remember { mutableStateOf(0) }
+            LaunchedEffect(usageKey) { usage = com.oasisreader.app.data.BookStore.get(app).cacheUsage() }
+            Item(
+                "📦", "임시 보관 한도: ${com.oasisreader.app.data.CachePrefs.label(limit)}",
+                (usage?.let { (n, bytes) -> "지금 ${n}권 · ${"%.0f".format(bytes / 1048576.0)} MB. " } ?: "") +
+                    "넘으면 오래 안 본 책 파일부터 지웁니다 (읽은 위치·하이라이트는 남고, 다시 열면 다시 받습니다). 눌러서 바꾸기",
+                enabled = busy == null,
+            ) {
+                val all = com.oasisreader.app.data.CachePrefs.CHOICES
+                limit = all[(all.indexOf(limit) + 1) % all.size]
+                cachePrefs.limitMb = limit
+                scope.launch { com.oasisreader.app.data.BookStore.get(app).trimCache(cachePrefs.limitBytes); usageKey++ }
+            }
+            Item("🧹", "임시 보관 파일 지금 비우기", "서재에 보관(📌)한 책은 그대로입니다", enabled = busy == null && (usage?.first ?: 0) > 0) {
+                scope.launch {
+                    val n = com.oasisreader.app.data.BookStore.get(app).trimCache(0)
+                    Toast.makeText(context, "${n}권의 파일을 지웠습니다", Toast.LENGTH_SHORT).show()
+                    usageKey++
+                }
+            }
+
+            Section("백업 · 기기 변경 (실험적 기능)")
+            Item("💾", "백업 내보내기 (책 파일 포함)", "책·위치·하이라이트·통계·설정을 zip 하나로 저장합니다", enabled = busy == null) { startExport(true) }
+            Item("📄", "백업 내보내기 (책 파일 빼고)", "가볍게. 책은 새 폰에서 북오아시스에서 다시 받습니다", enabled = busy == null) { startExport(false) }
+            Item("♻️", "백업에서 복원", "지금 서재를 백업 내용으로 바꿉니다", enabled = busy == null) {
+                importer.launch(arrayOf("application/zip", "application/octet-stream"))
+            }
+            Text(
+                "서버 비밀번호는 백업에 들어가지 않습니다. 복원한 뒤 서버마다 한 번 다시 입력하세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+
+            Section("북오아시스")
+            Item("📄", "메타 API(oasis-meta) 안내", "정리된 카탈로그를 쓰기 위한 서버 쪽 준비. 복사·공유할 수 있습니다", enabled = true) { onDoc(DOC_META) }
+
+            Section("정보")
+            Item("ℹ️", "OG Reader ${BuildConfig.VERSION_NAME}", "북오아시스 전용 리더 · 개발 ohnggni", enabled = true) { onDoc(DOC_ABOUT) }
+            Item("📝", "릴리스 노트", null, enabled = true) { onDoc(DOC_RELEASE) }
+            Item("⚖️", "오픈소스 라이선스", null, enabled = true) { onDoc(DOC_LICENSES) }
+        }
+    }
+
+    confirmRestore?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { confirmRestore = null },
+            title = { Text("백업에서 복원하시겠습니까?") },
+            text = { Text("지금 서재의 책, 읽은 위치, 하이라이트, 통계가 백업 내용으로 바뀝니다. 되돌릴 수 없습니다. 복원이 끝나면 앱이 다시 시작됩니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestore = null
+                    busy = "복원하는 중…"
+                    scope.launch {
+                        try {
+                            Backup.restore(app, uri)
+                            Backup.restartApp(app)
+                        } catch (e: Exception) {
+                            busy = null
+                            Toast.makeText(context, "복원 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }) { Text("복원") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestore = null }) { Text("취소") } },
+        )
+    }
+}
+
+@Composable
+private fun Section(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+private fun Item(emoji: String, title: String, sub: String?, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(emoji, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            sub?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+const val DOC_GUIDE = "guide"
+const val DOC_META = "oasis-meta"
+const val DOC_ABOUT = "about"
+const val DOC_RELEASE = "release-notes"
+const val DOC_LICENSES = "licenses"
+
+fun docTitle(id: String) = when (id) {
+    DOC_GUIDE -> "사용 안내"
+    DOC_META -> "메타 API 안내"
+    DOC_ABOUT -> "OG Reader 정보"
+    DOC_RELEASE -> "릴리스 노트"
+    else -> "오픈소스 라이선스"
+}

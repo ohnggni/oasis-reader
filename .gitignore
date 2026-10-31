@@ -1,0 +1,20 @@
+# ── secrets (never commit) ──────────────────────
+*.jks
+*.keystore
+*.pem
+*.key
+.env
+
+# ── android ─────────────────────────────────────
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+
+# ── junk ────────────────────────────────────────
+.DS_Store
+*.log
