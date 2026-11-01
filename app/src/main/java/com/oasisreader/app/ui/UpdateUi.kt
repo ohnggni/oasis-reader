@@ -34,7 +34,7 @@ import com.oasisreader.app.data.Updater
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** Library banner: a newer build on GitHub (checked at most once a day). */
+/** Library banner: a newer build on GitHub (checked when the library opens, at most hourly). */
 @Composable
 fun UpdateBanner() {
     val app = LocalContext.current.applicationContext

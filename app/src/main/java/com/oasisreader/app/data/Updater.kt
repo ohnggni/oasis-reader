@@ -33,7 +33,8 @@ data class AppRelease(
 object Updater {
     private const val LATEST = "https://api.github.com/repos/ohnggni/oasis-reader/releases/latest"
     private const val APK_NAME = "OasisReader.apk"
-    private const val DAY = 24L * 60 * 60 * 1000
+    // how often the library may ask GitHub (unauthenticated: 60 requests an hour per address)
+    private const val INTERVAL = 60L * 60 * 1000
 
     @Serializable
     private data class GhAsset(
@@ -74,15 +75,15 @@ object Updater {
 
     fun isNewer(r: AppRelease?): Boolean = r != null && r.versionCode > BuildConfig.VERSION_CODE
 
-    // ---- automatic check: at most once a day, quietly ----
+    // ---- automatic check: whenever the library opens, at most once an hour ----
 
     private fun prefs(context: Context) = context.getSharedPreferences("update", Context.MODE_PRIVATE)
 
-    /** Newer release for the library banner, or null (checked at most once a day; a skipped version stays hidden). */
+    /** Newer release for the library banner, or null (asks GitHub at most once an hour; a skipped version stays hidden). */
     suspend fun dailyCheck(context: Context): AppRelease? {
         val p = prefs(context)
         val now = System.currentTimeMillis()
-        if (now - p.getLong("lastCheck", 0) < DAY) {
+        if (now - p.getLong("lastCheck", 0) < INTERVAL) {
             // between checks, keep showing what the last check found (until it is installed or skipped)
             val code = p.getInt("foundCode", 0)
             if (code <= BuildConfig.VERSION_CODE || code == p.getInt("skipped", 0)) return null

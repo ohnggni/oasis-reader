@@ -1021,7 +1021,9 @@ private fun ReaderSeekBar(
     val chapter = remember(pkg, v) { chapterTitleFor(pkg, seekTarget(pkg, v).first) }
     val accent = MaterialTheme.colorScheme.primary
     Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.navigationBarsPadding().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 4.dp)) {
+        // lifted well clear of the bottom edge: with gesture navigation a swipe up from there
+        // means home / recent apps, and the slider must not catch it (it may cover a line of text)
+        Column(Modifier.navigationBarsPadding().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 30.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     chapter.ifEmpty { " " },

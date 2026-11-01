@@ -152,7 +152,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             Item("ℹ️", "OG Reader ${BuildConfig.VERSION_NAME}", "북오아시스 전용 리더 · 개발 ohnggni", enabled = true) { onDoc(DOC_ABOUT) }
             val (checking, checkUpdate) = rememberUpdateChecker()
             Item("🔄", if (checking) "업데이트 확인 중…" else "업데이트 확인",
-                "GitHub에서 새 버전을 찾습니다. 앱을 열 때도 하루 한 번 자동으로 확인합니다", enabled = !checking) { checkUpdate() }
+                "GitHub에서 새 버전을 찾습니다. 서재를 열 때도 자동으로 확인합니다", enabled = !checking) { checkUpdate() }
             Item("📝", "릴리스 노트", null, enabled = true) { onDoc(DOC_RELEASE) }
             Item("⚖️", "오픈소스 라이선스", null, enabled = true) { onDoc(DOC_LICENSES) }
         }
