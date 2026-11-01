@@ -205,6 +205,9 @@ private fun CurlOverlay(shot: TurnShot, paper: Color, onDone: (TurnShot, Boolean
 @Composable
 private fun CurlImage(image: ImageBitmap, paper: Color, corner: androidx.compose.ui.geometry.Offset, r: Float, finger: () -> androidx.compose.ui.geometry.Offset) {
     val shader = remember { RuntimeShader(CURL_SHADER) }
+    // last fold direction: when a page laid back passes its corner, the finger-to-corner
+    // direction flips; keep folding the same way (that flip made the next page flash)
+    val keep = remember(image) { FloatArray(2) }
     Image(
         bitmap = image,
         contentDescription = null,
@@ -216,7 +219,14 @@ private fun CurlImage(image: ImageBitmap, paper: Color, corner: androidx.compose
             var nx = corner.x - fp.x
             var ny = corner.y - fp.y
             val len = kotlin.math.sqrt(nx * nx + ny * ny)
-            if (len < 1f) { nx = if (corner.x > size.width / 2) 1f else -1f; ny = 0f } else { nx /= len; ny /= len }
+            val kept = keep[0] != 0f || keep[1] != 0f
+            if (len < 1f) {
+                if (kept) { nx = keep[0]; ny = keep[1] } else { nx = if (corner.x > size.width / 2) 1f else -1f; ny = 0f }
+            } else {
+                nx /= len; ny /= len
+                if (kept && nx * keep[0] + ny * keep[1] < 0f) { nx = keep[0]; ny = keep[1] }
+                else { keep[0] = nx; keep[1] = ny }
+            }
             val uc = corner.x * nx + corner.y * ny
             val uf = fp.x * nx + fp.y * ny
             val cx = (uf + uc - Math.PI.toFloat() * r) / 2f

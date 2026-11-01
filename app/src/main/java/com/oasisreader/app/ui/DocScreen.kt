@@ -4,6 +4,9 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -113,24 +118,20 @@ private fun Markdown(text: String) {
                 ) { Text(block.joinToString("\n"), fontFamily = mono, fontSize = 12.sp, lineHeight = 17.sp) }
             }
             line.startsWith("|") -> {
-                val rows = ArrayList<String>()
+                val rows = ArrayList<List<String>>()
                 while (i < lines.size && lines[i].startsWith("|")) {
-                    if (!lines[i].replace(Regex("[|\\-: ]"), "").isEmpty()) rows.add(lines[i])
+                    // skip the |---|---| separator line
+                    if (lines[i].replace(Regex("[|\\-: ]"), "").isNotEmpty()) rows.add(lines[i].trim().trim('|').split('|').map { it.trim() })
                     i++
                 }
                 i--
-                Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).horizontalScroll(rememberScrollState())) {
-                    Text(
-                        rows.joinToString("\n") { r -> r.trim('|').split('|').joinToString("  │  ") { clean(it.trim()) } },
-                        fontFamily = mono, fontSize = 12.sp, lineHeight = 18.sp,
-                    )
-                }
+                MdTable(rows)
             }
             line.startsWith("# ") -> Heading(line.removePrefix("# "), 22)
             line.startsWith("## ") -> Heading(line.removePrefix("## "), 18)
             line.startsWith("### ") -> Heading(line.removePrefix("### "), 16)
             line.startsWith(">") -> Text(
-                clean(line.removePrefix(">").trim()),
+                rich(line.removePrefix(">").trim()),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 10.dp, top = 2.dp, bottom = 2.dp),
@@ -139,12 +140,12 @@ private fun Markdown(text: String) {
                 val indent = line.length - line.trimStart().length
                 Row(Modifier.padding(start = (indent * 6).dp, top = 2.dp, bottom = 2.dp)) {
                     Text("•  ", style = MaterialTheme.typography.bodyMedium)
-                    Text(clean(line.trimStart().removePrefix("- ")), style = MaterialTheme.typography.bodyMedium)
+                    Text(rich(line.trimStart().removePrefix("- ")), style = MaterialTheme.typography.bodyMedium)
                 }
             }
             line.isBlank() -> Spacer(Modifier.height(8.dp))
             line.startsWith("---") -> Spacer(Modifier.height(12.dp))
-            else -> Text(clean(line), style = MaterialTheme.typography.bodyMedium)
+            else -> Text(rich(line), style = MaterialTheme.typography.bodyMedium)
         }
         i++
     }
@@ -155,6 +156,73 @@ private fun Heading(t: String, size: Int) {
     Spacer(Modifier.height(10.dp))
     Text(clean(t), fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp)
     Spacer(Modifier.height(4.dp))
+}
+
+/**
+ * A real table: one row per line, cells side by side. Columns get a share of the width by how
+ * much text they hold (so short columns stay narrow), the header row is bold on a tint.
+ */
+@Composable
+private fun MdTable(rows: List<List<String>>) {
+    if (rows.isEmpty()) return
+    val cols = rows.maxOf { it.size }
+    val weights = (0 until cols).map { c ->
+        rows.maxOf { r -> clean(r.getOrNull(c).orEmpty()).length }.coerceIn(3, 26).toFloat()
+    }
+    val line = MaterialTheme.colorScheme.outlineVariant
+    val tint = MaterialTheme.colorScheme.surfaceVariant
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            .border(0.5.dp, line, RoundedCornerShape(6.dp)),
+    ) {
+        rows.forEachIndexed { ri, r ->
+            Row(
+                Modifier.fillMaxWidth().then(if (ri == 0) Modifier.background(tint) else Modifier)
+                    .height(androidx.compose.foundation.layout.IntrinsicSize.Min),
+            ) {
+                (0 until cols).forEach { c ->
+                    Text(
+                        rich(r.getOrNull(c).orEmpty()),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (ri == 0) FontWeight.SemiBold else null,
+                        modifier = Modifier.weight(weights[c]).padding(horizontal = 6.dp, vertical = 6.dp),
+                    )
+                    if (c < cols - 1) Box(Modifier.width(0.5.dp).fillMaxHeight().background(line))
+                }
+            }
+            if (ri < rows.size - 1) Box(Modifier.fillMaxWidth().height(0.5.dp).background(line))
+        }
+    }
+}
+
+/** Inline Markdown: **bold**, `code`, [text](url), and bare https:// addresses or e-mail addresses as links. */
+@Composable
+private fun rich(s: String): androidx.compose.ui.text.AnnotatedString {
+    val linkStyle = androidx.compose.ui.text.TextLinkStyles(
+        androidx.compose.ui.text.SpanStyle(
+            color = MaterialTheme.colorScheme.primary,
+            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+        ),
+    )
+    return remember(s, linkStyle) {
+        val re = Regex("""\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)]\(([^)\s]+)\)|(https?://[^\s)]+)|([\w.+-]+@[\w-]+(?:\.[\w-]+)+)""")
+        androidx.compose.ui.text.buildAnnotatedString {
+            var last = 0
+            for (m in re.findAll(s)) {
+                append(s.substring(last, m.range.first))
+                val g = m.groupValues
+                when {
+                    g[1].isNotEmpty() -> withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) { append(g[1]) }
+                    g[2].isNotEmpty() -> append(g[2])
+                    g[3].isNotEmpty() -> withLink(androidx.compose.ui.text.LinkAnnotation.Url(g[4], linkStyle)) { append(g[3]) }
+                    g[5].isNotEmpty() -> withLink(androidx.compose.ui.text.LinkAnnotation.Url(g[5], linkStyle)) { append(g[5]) }
+                    g[6].isNotEmpty() -> withLink(androidx.compose.ui.text.LinkAnnotation.Url("mailto:" + g[6], linkStyle)) { append(g[6]) }
+                }
+                last = m.range.last + 1
+            }
+            append(s.substring(last))
+        }
+    }
 }
 
 /** Drop Markdown emphasis marks; keep `code` text as it is. */
