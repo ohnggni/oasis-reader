@@ -46,6 +46,11 @@ data class MetaBook(
 ) {
     val name: String get() = displayTitle?.ifBlank { null } ?: fileName?.substringBeforeLast('.') ?: title ?: "#$id"
     val isComic: Boolean get() = fileFormat?.lowercase() in setOf("cbz", "zip", "cbr")
+    /**
+     * Real page count, only for page-based files (comics, PDF). For EPUB/TXT bookoasis keeps
+     * an internal value in total_pages (often 100 once the web viewer has opened the book).
+     */
+    val pageCount: Int? get() = totalPages.takeIf { it > 0 && (isComic || fileFormat?.lowercase() == "pdf") }
     val readable: Boolean get() = fileFormat?.lowercase() in setOf("epub", "cbz", "zip", "txt", "pdf")
 }
 

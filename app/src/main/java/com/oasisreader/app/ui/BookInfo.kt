@@ -99,7 +99,7 @@ fun BookInfoDialog(b: BookEntity, store: BookStore, onDismiss: () -> Unit) {
                 Line("마지막으로 읽은 날", date(b.lastReadAt))
                 meta?.let { m ->
                     Line("파일 날짜", com.oasisreader.app.meta.metaDate(m.fileMtime))
-                    Line("쪽수", if (m.totalPages > 0) "${m.totalPages}쪽" else null)
+                    Line("쪽수", m.pageCount?.let { "${it}쪽" })
                     Line("파일명", m.fileName)
                 }
                 b.sourceUrl?.let { u -> Line("받은 곳", ServerSettings(context).forUrl(u)?.name ?: u.substringAfter("://").substringBefore('/')) }

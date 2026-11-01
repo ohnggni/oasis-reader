@@ -434,7 +434,7 @@ private fun BookRow(
                 metaDate(b.fileMtime),
                 b.fileFormat?.uppercase(),
                 mb(b.fileSize),
-                if (b.totalPages > 0) "${b.totalPages}쪽" else null,
+                b.pageCount?.let { "${it}쪽" },
             ).joinToString(" · ")
             Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -532,7 +532,7 @@ private fun BookDetail(
             InfoLine("저자", b.author?.ifBlank { null }?.let { "$it  (서버 데이터라 틀릴 수 있습니다)" })
             InfoLine("형식", b.fileFormat?.uppercase())
             InfoLine("용량", mb(b.fileSize))
-            InfoLine("쪽수", if (b.totalPages > 0) "${b.totalPages}쪽" else null)
+            InfoLine("쪽수", b.pageCount?.let { "${it}쪽" })
             InfoLine("올라온 날", metaDate(b.fileMtime))
             InfoLine("파일명", b.fileName)
         }
