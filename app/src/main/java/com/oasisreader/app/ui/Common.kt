@@ -1,12 +1,15 @@
 package com.oasisreader.app.ui
 
 import com.oasisreader.app.ui.theme.isAppDark
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,7 +42,7 @@ fun TopBar(
 ) {
     Surface(color = barColor(), contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
         Row(
-            Modifier.fillMaxWidth().statusBarsPadding().height(56.dp).padding(end = 4.dp),
+            Modifier.fillMaxWidth().statusBarsPadding().height(if (brand) 72.dp else 56.dp).padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -48,27 +51,17 @@ fun TopBar(
                 androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 16.dp))
             }
             if (brand) {
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_og),
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 10.dp).size(36.dp),
+                BrandMark(Modifier.weight(1f))
+            } else {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
             }
-            Text(
-                title,
-                // brand title in a bundled heavy face (the phone's own font may have no bold cut)
-                style = if (brand) MaterialTheme.typography.headlineSmall.copy(
-                            fontFamily = BrandFont,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                            fontSize = 27.sp,
-                            letterSpacing = (-0.8).sp,
-                        )
-                        else MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
             actions()
         }
     }
@@ -81,10 +74,42 @@ fun EmojiButton(emoji: String, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Heavy Latin face for the app's name (Pretendard ExtraBold, Latin subset, renamed per the OFL). */
+/** Brush script for the app's name (Kaushan Script, printable ASCII only, renamed per the OFL). */
 val BrandFont = androidx.compose.ui.text.font.FontFamily(
-    androidx.compose.ui.text.font.Font(com.oasisreader.app.R.font.brand_extrabold, androidx.compose.ui.text.font.FontWeight.ExtraBold),
+    androidx.compose.ui.text.font.Font(com.oasisreader.app.R.font.brand_script),
 )
+
+/** App header: the OG mark two lines tall, then a small "Book" over a large "Reader". */
+@Composable
+private fun BrandMark(modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.primary
+    fun line(size: Int, height: Int, spacing: Float) = androidx.compose.ui.text.TextStyle(
+        fontFamily = BrandFont,
+        fontSize = size.sp,
+        lineHeight = height.sp,
+        letterSpacing = spacing.sp,
+        color = color,
+        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+            alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+            trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+        ),
+    )
+    Row(
+        modifier.semantics(mergeDescendants = true) { contentDescription = "OG Book Reader" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_og),
+            contentDescription = null,
+            modifier = Modifier.size(50.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text("Book", style = line(13, 15, 1.5f), maxLines = 1)
+            Text("Reader", style = line(37, 40, 0f), maxLines = 1, modifier = Modifier.padding(start = 6.dp))
+        }
+    }
+}
 
 /**
  * Two ways to browse a bookoasis server: the organized catalog (oasis-meta) or its OPDS folders.

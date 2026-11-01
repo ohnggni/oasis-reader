@@ -1,7 +1,13 @@
 package com.oasisreader.app
 
 import com.oasisreader.app.data.HighlightExport
+import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.data.db.HighlightEntity
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.TimeZone
@@ -64,5 +70,34 @@ class HighlightExportTest {
     @Test fun fileNames() {
         assertEquals("A B - 하이라이트.md", HighlightExport.fileName("A/B", "md"))
         assertEquals("책 - 하이라이트.json", HighlightExport.fileName("  ", "json"))
+    }
+
+    @Test fun prefix() {
+        assertEquals("그는 말했다. ", HighlightExport.prefixOf("그는 말했다. 안녕  ", "안녕"))
+        assertNull(HighlightExport.prefixOf("안녕", "안녕"))            // nothing before the quote
+        assertNull(HighlightExport.prefixOf("끝부분만 남은 앵커", "아주 긴 인용문"))  // quote longer than the anchor
+        assertNull(HighlightExport.prefixOf(null, "안녕"))
+    }
+
+    @Test fun jsonShape() {
+        val book = BookEntity(id = "b", title = "러브크래프트 걸작선", author = "러브크래프트", addedAt = 0, sourceUrl = "https://x/1")
+        val hs = listOf(
+            HighlightEntity("2", "b", 1, "무지의 섬", "#ffeb3b", "우리는 무지의 섬", "메모", oct15),
+            HighlightEntity("1", "gone", 0, "지운 책 인용", "#90caf9", null, null, oct15),
+        )
+        val root = Json.parseToJsonElement(HighlightExport.json(listOf(book), hs, { null }, now = nov1, zone = seoul)).jsonObject
+        assertEquals("og-reader-highlights", root["format"]!!.jsonPrimitive.content)
+        assertEquals("2026-11-01T12:00:00+09:00", root["exportedAt"]!!.jsonPrimitive.content)
+        val books = root["books"]!!.jsonArray
+        val first = books[0].jsonObject
+        assertEquals("b", first["bookId"]!!.jsonPrimitive.content)
+        val a = first["annotations"]!!.jsonArray[0].jsonObject
+        assertEquals("commenting", a["motivation"]!!.jsonPrimitive.content)
+        assertEquals("메모", a["body"]!!.jsonArray[0].jsonObject["value"]!!.jsonPrimitive.content)
+        val sel = a["target"]!!.jsonObject["selector"]!!.jsonObject
+        assertEquals("무지의 섬", sel["exact"]!!.jsonPrimitive.content)
+        assertEquals("우리는 ", sel["prefix"]!!.jsonPrimitive.content)
+        assertEquals("true", books[1].jsonObject["removed"]!!.jsonPrimitive.content)
+        assertEquals("highlighting", books[1].jsonObject["annotations"]!!.jsonArray[0].jsonObject["motivation"]!!.jsonPrimitive.content)
     }
 }

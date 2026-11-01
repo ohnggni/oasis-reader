@@ -4,7 +4,14 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +32,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private class MarkdownExport(val title: String, val count: Int, val text: String)
 
@@ -107,4 +117,46 @@ fun HighlightExportDialog(bookId: String, onDismiss: () -> Unit) {
             if (e != null && e.count > 0) TextButton(onClick = { saver.launch(HighlightExport.fileName(e.title, "md")) }) { Text("파일로 저장") }
         },
     )
+}
+
+/** ⋮ menu on the highlights screen: every highlight as one JSON file (W3C Web Annotation based). */
+@Composable
+fun HighlightJsonExportMenu(enabled: Boolean) {
+    val app = LocalContext.current.applicationContext
+    val scope = rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
+
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val count = withContext(Dispatchers.IO) {
+                runCatching {
+                    val db = AppDatabase.get(app)
+                    val store = BookStore.get(app)
+                    val list = db.highlights().all()
+                    val text = HighlightExport.json(db.books().all(), list, { id ->
+                        if (File(store.dir(id), "book.json").isFile) runCatching { store.readPackage(id) }.getOrNull() else null
+                    })
+                    app.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: error("no stream")
+                    list.size
+                }.getOrNull()
+            }
+            Toast.makeText(app, if (count != null) "하이라이트 ${count}개를 내보냈습니다." else "저장하지 못했습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Box {
+        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "더보기") }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text("전체 내보내기 (JSON)") },
+                enabled = enabled,
+                onClick = {
+                    menu = false
+                    val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    saver.launch("og-reader-highlights-$day.json")
+                },
+            )
+        }
+    }
 }

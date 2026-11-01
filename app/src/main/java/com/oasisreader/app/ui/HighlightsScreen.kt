@@ -54,7 +54,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("하이라이트", onBack = onBack)
+        TopBar("하이라이트", onBack = onBack) { HighlightJsonExportMenu(enabled = !highlights.isNullOrEmpty()) }
         if (highlights != null && highlights!!.isEmpty()) {
             Text(
                 "아직 하이라이트가 없습니다.\n책에서 글을 길게 눌러 고르고 색을 누르면 여기에 모입니다.",

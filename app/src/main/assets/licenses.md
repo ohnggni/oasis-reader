@@ -35,8 +35,11 @@ limitations under the License.
 - Gothic A1 — HanYang I&C
 - IBM Plex Sans KR — IBM
 
-앱 이름 표시에 쓰는 글꼴은 Pretendard ExtraBold(© 2021 Kil Hyung-jin, Reserved Font Name Pretendard)의
-라틴 문자만 남긴 수정본이며, OFL에 따라 이름을 "OGBrand"로 바꿨습니다.
+앱 이름(Book Reader) 표시에 쓰는 글꼴은 Kaushan Script(© 2011 Pablo Impallari, Igino Marini,
+Reserved Font Name Kaushan Script)의 영문자만 남긴 수정본이며, OFL에 따라 이름을 "OG Brand Script"로 바꿨습니다.
+
+로고 안의 G는 Dancing Script Bold(© 2016 The Dancing Script Project Authors,
+Reserved Font Name 'Dancing Script')의 글자 모양을 그림으로 옮긴 것입니다.
 
 전문: https://openfontlicense.org
 

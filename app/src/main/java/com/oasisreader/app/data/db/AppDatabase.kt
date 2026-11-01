@@ -123,6 +123,9 @@ interface HighlightDao {
     @Query("SELECT * FROM highlights ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<HighlightEntity>>
 
+    @Query("SELECT * FROM highlights")
+    suspend fun all(): List<HighlightEntity>
+
     @Upsert
     suspend fun upsert(h: HighlightEntity)
 
