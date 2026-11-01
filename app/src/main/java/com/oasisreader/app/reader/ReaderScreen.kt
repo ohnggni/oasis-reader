@@ -85,6 +85,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -479,6 +480,8 @@ private fun ReaderBody(
     }
 
     // bookoasis progress sync: offer another device's newer place, upload ours
+    // the page picture fades out (instead of vanishing) when a curl is let go and the page stays
+    val overlayAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
     var remote by remember { mutableStateOf<com.oasisreader.app.data.KoSync.Remote?>(null) }
     com.oasisreader.app.ui.ProgressSync(
         bookId = bookId,
@@ -710,15 +713,26 @@ private fun ReaderBody(
                         onDone = { done, ok ->
                             if (ok) { if (turnShot === done) turnShot = null }
                             else scope.launch {
-                                // let go early: the old page lies flat again on top; put it back underneath, then lift the picture
-                                webView?.evaluateJavascript("Reader.jumpBy(${if (done.forward) -1 else 1})", null)
+                                // let go early: the old page lies flat again on top; put it back underneath, then lift the picture.
+                                // The WebView draws on its own thread: wait until it has really drawn the old page again
+                                // (a fixed few frames was sometimes too early and the next page flashed), then fade the picture out.
+                                val wv = webView
+                                if (wv != null) kotlinx.coroutines.withTimeoutOrNull(600) {
+                                    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { c ->
+                                        wv.evaluateJavascript("Reader.jumpBy(${if (done.forward) -1 else 1})") {
+                                            wv.postVisualStateCallback(System.nanoTime(), object : WebView.VisualStateCallback() {
+                                                override fun onComplete(requestId: Long) { if (c.isActive) c.resumeWith(Result.success(Unit)) }
+                                            })
+                                        }
+                                    }
+                                }
                                 androidx.compose.runtime.withFrameNanos { }
-                                androidx.compose.runtime.withFrameNanos { }
-                                androidx.compose.runtime.withFrameNanos { }
+                                overlayAlpha.animateTo(0f, androidx.compose.animation.core.tween(140))
                                 if (turnShot === done) turnShot = null
+                                overlayAlpha.snapTo(1f)
                             }
                         },
-                        modifier = Modifier.fillMaxSize().padding(horizontal = sidePad),
+                        modifier = Modifier.fillMaxSize().padding(horizontal = sidePad).graphicsLayer { alpha = overlayAlpha.value },
                     )
                 }
             }

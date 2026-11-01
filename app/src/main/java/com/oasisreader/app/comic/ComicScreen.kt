@@ -321,6 +321,7 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
     }
 
     // bookoasis progress sync: KOReader page numbers (1-based) — the web viewer uses them too
+    val overlayAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
     var remote by remember { mutableStateOf<com.oasisreader.app.data.KoSync.Remote?>(null) }
     fun remotePage(r: com.oasisreader.app.data.KoSync.Remote): Int? =
         (r.pageNumber?.minus(1) ?: r.percentage?.let { (it * pageCount).toInt() - 1 })
@@ -640,10 +641,13 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                                 pager.scrollToPage(dragFrom)
                                 androidx.compose.runtime.withFrameNanos { }
                                 androidx.compose.runtime.withFrameNanos { }
+                                // fade the picture out rather than letting it vanish in one frame
+                                overlayAlpha.animateTo(0f, androidx.compose.animation.core.tween(140))
                                 if (turnShot === done) turnShot = null
+                                overlayAlpha.snapTo(1f)
                             }
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().graphicsLayer { alpha = overlayAlpha.value },
                     )
                 }
             } else {

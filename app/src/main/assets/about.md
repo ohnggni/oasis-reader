@@ -10,7 +10,8 @@
 
 ## 개발
 
-- 개발: ohnggni
+- 개발: JSLee
+- 연락: og.app.developer@gmail.com
 - 읽기 엔진은 개발자의 이전 프로젝트(HBRarchive)의 페이지 엔진을 이식했습니다.
 
 ## 저작권

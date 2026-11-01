@@ -41,7 +41,7 @@ fun TopBar(
 ) {
     Surface(color = barColor(), contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
         Row(
-            Modifier.fillMaxWidth().statusBarsPadding().height(if (brand) 72.dp else 56.dp).padding(end = 4.dp),
+            Modifier.fillMaxWidth().statusBarsPadding().height(if (brand) 60.dp else 56.dp).padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -86,13 +86,13 @@ private fun BrandMark(modifier: Modifier = Modifier) {
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_og),
             contentDescription = null,
-            modifier = Modifier.size(width = 77.dp, height = 48.dp),
+            modifier = Modifier.size(width = 58.dp, height = 36.dp),
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(9.dp))
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_wordmark),
             contentDescription = null,
-            modifier = Modifier.size(width = 112.dp, height = 49.dp),
+            modifier = Modifier.size(width = 84.dp, height = 37.dp),
         )
     }
 }

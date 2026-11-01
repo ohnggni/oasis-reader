@@ -156,7 +156,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             Item("📄", "메타 API(oasis-meta) 안내", "정리된 카탈로그를 쓰기 위한 서버 쪽 준비. 복사·공유할 수 있습니다", enabled = true) { onDoc(DOC_META) }
 
             Section("정보")
-            Item("ℹ️", "OG Reader ${BuildConfig.VERSION_NAME}", "북오아시스 전용 리더 · 개발 ohnggni", enabled = true) { onDoc(DOC_ABOUT) }
+            Item("ℹ️", "OG Reader ${BuildConfig.VERSION_NAME}", "북오아시스 전용 리더 · 개발 JSLee", enabled = true) { onDoc(DOC_ABOUT) }
             val (checking, checkUpdate) = rememberUpdateChecker()
             Item("🔄", if (checking) "업데이트 확인 중…" else "업데이트 확인",
                 "GitHub에서 새 버전을 찾습니다. 서재를 열 때도 자동으로 확인합니다", enabled = !checking) { checkUpdate() }
