@@ -741,16 +741,15 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                             modifier = Modifier.weight(1f),
                         )
                         // [ ☀️ 화면 | ▣ 보기 | ⇆ 넘김 | ☰ 이동 ]
-                        val P = com.oasisreader.app.ui.ReadPanel
                         Box(Modifier.padding(end = 10.dp)) {
                             com.oasisreader.app.reader.PillGroup(MaterialTheme.colorScheme.background) {
-                                com.oasisreader.app.reader.PillSegment(selected = panel == P.SCREEN, onClick = { panel = panel.toggle(P.SCREEN) }) { Text("☀️", fontSize = 14.sp) }
+                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.SCREEN, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.SCREEN) }) { Text("☀️", fontSize = 14.sp) }
                                 com.oasisreader.app.reader.PillDivider()
-                                com.oasisreader.app.reader.PillSegment(selected = panel == P.TEXT, onClick = { panel = panel.toggle(P.TEXT) }) { Text("▣", fontSize = 16.sp) }
+                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.TEXT, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.TEXT) }) { Text("▣", fontSize = 16.sp) }
                                 com.oasisreader.app.reader.PillDivider()
-                                com.oasisreader.app.reader.PillSegment(selected = panel == P.PAGE, onClick = { panel = panel.toggle(P.PAGE) }) { Text("⇆", fontSize = 16.sp) }
+                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.PAGE, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.PAGE) }) { Text("⇆", fontSize = 16.sp) }
                                 com.oasisreader.app.reader.PillDivider()
-                                com.oasisreader.app.reader.PillSegment(selected = panel == P.NAV, onClick = { panel = panel.toggle(P.NAV) }) { Text("☰", fontSize = 15.sp) }
+                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.NAV, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.NAV) }) { Text("☰", fontSize = 15.sp) }
                             }
                         }
                     }
