@@ -23,6 +23,9 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -286,7 +289,9 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
     var keepOn by remember { mutableStateOf(readerPrefs.keepScreenOn) }
     // same brightness setting as the book reader; only while this screen is open
     var brightness by remember { androidx.compose.runtime.mutableFloatStateOf(readerPrefs.brightness) }
-    var brightOpen by remember { mutableStateOf(false) }
+    // top-bar panels, the same four as the book reader: 화면 · 보기 · 넘김 · 이동
+    var panel by remember { mutableStateOf(com.oasisreader.app.ui.ReadPanel.NONE) }
+    var autoHide by remember { mutableStateOf(readerPrefs.autoHideBars) }
     var turnStyle by remember { mutableStateOf(readerPrefs.turnStyle) }
     var turnShot by remember { mutableStateOf<com.oasisreader.app.ui.TurnShot?>(null) }
     var turnPicker by remember { mutableStateOf(false) }
@@ -404,9 +409,9 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
     }
 
     // the bar hides itself
-    LaunchedEffect(barsVisible, barsShownAt, menuOpen, brightOpen) {
-        if (!barsVisible) { brightOpen = false; return@LaunchedEffect }
-        if (menuOpen || brightOpen) return@LaunchedEffect
+    LaunchedEffect(barsVisible, barsShownAt, panel, autoHide) {
+        if (!barsVisible) { panel = com.oasisreader.app.ui.ReadPanel.NONE; return@LaunchedEffect }
+        if (panel != com.oasisreader.app.ui.ReadPanel.NONE || !autoHide) return@LaunchedEffect
         delay(2_000)
         barsVisible = false
     }
@@ -735,72 +740,79 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        Box {
-                            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "메뉴") }
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    leadingIcon = { Text(if (mode == ComicMode.PAGE) "📜" else "📖") },
-                                    text = { Text(if (mode == ComicMode.PAGE) "세로 스크롤로 보기 (웹툰)" else "책처럼 넘겨 보기") },
-                                    onClick = {
-                                        menuOpen = false
-                                        mode = if (mode == ComicMode.PAGE) ComicMode.SCROLL else ComicMode.PAGE
-                                        prefs.edit().putString("mode_${book.id}", mode.name).apply()
-                                    },
-                                )
-                                if (mode == ComicMode.PAGE) {
-                                    DropdownMenuItem(
-                                        leadingIcon = { Text("🎞️") },
-                                        text = { Text("넘김 효과 (${turnStyle.label})") },
-                                        onClick = { menuOpen = false; turnPicker = true },
-                                    )
-                                    DropdownMenuItem(
-                                        leadingIcon = { Text(if (rtl) "➡️" else "⬅️") },
-                                        text = { Text(if (rtl) "왼쪽→오른쪽으로 넘기기" else "오른쪽→왼쪽으로 넘기기 (일본 만화)") },
-                                        onClick = { menuOpen = false; rtl = !rtl; prefs.edit().putBoolean("rtl", rtl).apply() },
-                                    )
-                                    DropdownMenuItem(
-                                        leadingIcon = { Text("📕") },
-                                        text = { Text(if (coverAlone) "맞쪽: 첫 장도 짝 지어 보기" else "맞쪽: 첫 장은 혼자 보기") },
-                                        onClick = { menuOpen = false; coverAlone = !coverAlone; prefs.edit().putBoolean("cover_alone", coverAlone).apply() },
-                                    )
-                                } else {
-                                    DropdownMenuItem(
-                                        leadingIcon = { Text(if (narrow) "↔️" else "🎯") },
-                                        text = { Text(if (narrow) "화면 너비에 맞추기" else "가운데 좁게 보기") },
-                                        onClick = { menuOpen = false; narrow = !narrow; prefs.edit().putBoolean("narrow", narrow).apply() },
-                                    )
-                                }
-                                DropdownMenuItem(
-                                    leadingIcon = { Text("🔆") }, text = { Text("화면 밝기") },
-                                    onClick = { menuOpen = false; brightOpen = true },
-                                )
-                                DropdownMenuItem(
-                                    leadingIcon = { Text("⏮️") }, text = { Text("처음부터") },
-                                    onClick = { menuOpen = false; curPage = 0; curFrac = 0f; viewKey++ },
-                                )
-                                DropdownMenuItem(
-                                    leadingIcon = { Text(if (keepOn) "🔆" else "💡") },
-                                    text = { Text(if (keepOn) "화면 켜짐 유지 끄기" else "화면 켜짐 유지 켜기") },
-                                    onClick = { menuOpen = false; keepOn = !keepOn; readerPrefs.keepScreenOn = keepOn },
-                                )
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    leadingIcon = { Text(if (finished) "↩️" else "✅") },
-                                    text = { Text(if (finished) "다 읽음 취소" else "다 읽음으로 표시") },
-                                    onClick = {
-                                        menuOpen = false
-                                        finished = !finished
-                                        val at = if (finished) System.currentTimeMillis() else null
-                                        scope.launch { db.books().setFinished(book.id, at) }
-                                    },
-                                )
+                        // [ ☀️ 화면 | ▣ 보기 | ⇆ 넘김 | ☰ 이동 ]
+                        val P = com.oasisreader.app.ui.ReadPanel
+                        Box(Modifier.padding(end = 10.dp)) {
+                            com.oasisreader.app.reader.PillGroup(MaterialTheme.colorScheme.background) {
+                                com.oasisreader.app.reader.PillSegment(selected = panel == P.SCREEN, onClick = { panel = panel.toggle(P.SCREEN) }) { Text("☀️", fontSize = 14.sp) }
+                                com.oasisreader.app.reader.PillDivider()
+                                com.oasisreader.app.reader.PillSegment(selected = panel == P.TEXT, onClick = { panel = panel.toggle(P.TEXT) }) { Text("▣", fontSize = 16.sp) }
+                                com.oasisreader.app.reader.PillDivider()
+                                com.oasisreader.app.reader.PillSegment(selected = panel == P.PAGE, onClick = { panel = panel.toggle(P.PAGE) }) { Text("⇆", fontSize = 16.sp) }
+                                com.oasisreader.app.reader.PillDivider()
+                                com.oasisreader.app.reader.PillSegment(selected = panel == P.NAV, onClick = { panel = panel.toggle(P.NAV) }) { Text("☰", fontSize = 15.sp) }
                             }
                         }
                     }
-                    if (brightOpen) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                            com.oasisreader.app.reader.BrightnessPanel(brightness) { brightness = it; readerPrefs.brightness = it }
-                            TextButton(onClick = { brightOpen = false; barsShownAt = System.currentTimeMillis() }, modifier = Modifier.align(Alignment.End)) { Text("닫기") }
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    AnimatedVisibility(visible = panel != com.oasisreader.app.ui.ReadPanel.NONE) {
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.42f).dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            when (panel) {
+                                com.oasisreader.app.ui.ReadPanel.SCREEN -> {
+                                    com.oasisreader.app.reader.BrightnessPanel(brightness) { brightness = it; readerPrefs.brightness = it }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", null, keepOn, { keepOn = it; readerPrefs.keepScreenOn = it }, Modifier.weight(1f))
+                                        com.oasisreader.app.ui.PanelSwitch("바 자동 숨김", null, autoHide, {
+                                            autoHide = it; readerPrefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
+                                        }, Modifier.weight(1f))
+                                    }
+                                }
+                                com.oasisreader.app.ui.ReadPanel.TEXT -> {
+                                    com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "세로 스크롤 (웹툰)"), if (mode == ComicMode.PAGE) 0 else 1) { i ->
+                                        mode = if (i == 0) ComicMode.PAGE else ComicMode.SCROLL
+                                        prefs.edit().putString("mode_${book.id}", mode.name).apply()
+                                    }
+                                    if (mode == ComicMode.PAGE) {
+                                        com.oasisreader.app.ui.PanelChoice("방향", listOf("왼쪽 → 오른쪽", "오른쪽 → 왼쪽 (일본 만화)"), if (rtl) 1 else 0) { i ->
+                                            rtl = i == 1; prefs.edit().putBoolean("rtl", rtl).apply()
+                                        }
+                                        com.oasisreader.app.ui.PanelChoice("맞쪽", listOf("첫 장은 혼자", "첫 장도 짝 지어"), if (coverAlone) 0 else 1) { i ->
+                                            coverAlone = i == 0; prefs.edit().putBoolean("cover_alone", coverAlone).apply()
+                                        }
+                                    } else {
+                                        com.oasisreader.app.ui.PanelChoice("폭", listOf("화면 너비에 맞추기", "가운데 좁게"), if (narrow) 1 else 0) { i ->
+                                            narrow = i == 1; prefs.edit().putBoolean("narrow", narrow).apply()
+                                        }
+                                    }
+                                }
+                                com.oasisreader.app.ui.ReadPanel.PAGE -> {
+                                    if (mode == ComicMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
+                                        current = turnStyle, speed = turnSpeed,
+                                        onPick = { st -> turnStyle = st; readerPrefs.turnStyle = st },
+                                        onSpeed = { sp -> turnSpeed = sp; readerPrefs.turnSpeed = sp },
+                                    ) else Text(
+                                        "세로 스크롤에서는 넘김 효과가 없습니다.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                    )
+                                }
+                                com.oasisreader.app.ui.ReadPanel.NAV -> {
+                                    com.oasisreader.app.ui.PanelAction("⏮️", "처음부터") { panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = 0; curFrac = 0f; viewKey++ }
+                                    com.oasisreader.app.ui.PanelAction(if (finished) "↩️" else "✅", if (finished) "다 읽음 취소" else "다 읽음으로 표시") {
+                                        finished = !finished
+                                        val at = if (finished) System.currentTimeMillis() else null
+                                        scope.launch { db.books().setFinished(book.id, at) }
+                                    }
+                                }
+                                else -> {}
+                            }
                         }
                     }
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)

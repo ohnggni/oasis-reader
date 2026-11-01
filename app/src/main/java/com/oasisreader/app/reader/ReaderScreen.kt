@@ -95,6 +95,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -813,20 +815,20 @@ private fun ReaderBody(
                             Column {
                                 Column(
                                     Modifier.fillMaxWidth()
-                                        .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.62f).dp)
+                                        .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.42f).dp)
                                         .verticalScroll(rememberScrollState())
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
                                     when (panel) {
                                         Panel.SCREEN -> {
                                             BrightnessPanel(value = brightness, onChange = { brightness = it; prefs.brightness = it })
                                             ThemeRow(theme, onTheme)
-                                            com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", "읽는 동안 화면이 꺼지지 않습니다 (10분 동안 넘기지 않으면 해제)", keepOn) {
-                                                keepOn = it; prefs.keepScreenOn = it
-                                            }
-                                            com.oasisreader.app.ui.PanelSwitch("상단바 자동 숨김", "2초 뒤에 상단바를 숨깁니다", autoHide) {
-                                                autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
+                                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                                com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", null, keepOn, { keepOn = it; prefs.keepScreenOn = it }, Modifier.weight(1f))
+                                                com.oasisreader.app.ui.PanelSwitch("바 자동 숨김", null, autoHide, {
+                                                    autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
+                                                }, Modifier.weight(1f))
                                             }
                                         }
                                         Panel.TEXT -> {
@@ -864,13 +866,13 @@ private fun ReaderBody(
                                                     webView?.evaluateJavascript("Reader.setLineHeight(${lh / 10f})", null)
                                                 },
                                             )
-                                            com.oasisreader.app.ui.PanelSwitch("출판사 스타일", "책에 들어 있는 글꼴·정렬·여백을 따릅니다", publisherStyle) {
+                                            com.oasisreader.app.ui.PanelSwitch("출판사 스타일 (책의 글꼴·정렬)", null, publisherStyle, {
                                                 publisherStyle = it; prefs.publisherStyle = it; reloadHere()
-                                            }
+                                            })
                                             com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
                                         }
                                         Panel.PAGE -> {
-                                            com.oasisreader.app.ui.PanelChoice("보기 방식", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) { i ->
+                                            com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) { i ->
                                                 setMode(if (i == 0) ReaderMode.PAGE else ReaderMode.SCROLL)
                                             }
                                             if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
@@ -1310,7 +1312,7 @@ private fun android.content.Context.findActivity(): Activity? {
 
 /** Rounded "button" container for the reader bar: lighter than the bar, hairline border. */
 @Composable
-private fun PillGroup(fill: Color, content: @Composable RowScope.() -> Unit) {
+internal fun PillGroup(fill: Color, content: @Composable RowScope.() -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = fill,
@@ -1322,7 +1324,7 @@ private fun PillGroup(fill: Color, content: @Composable RowScope.() -> Unit) {
 }
 
 @Composable
-private fun PillSegment(
+internal fun PillSegment(
     enabled: Boolean = true,
     selected: Boolean = false,
     onClick: () -> Unit,
@@ -1341,7 +1343,7 @@ private fun PillSegment(
 }
 
 @Composable
-private fun PillDivider() {
+internal fun PillDivider() {
     Box(Modifier.width(0.75.dp).height(18.dp).background(MaterialTheme.colorScheme.outlineVariant))
 }
 
@@ -1401,24 +1403,14 @@ private fun PanelLabel(text: String) = Text(
 @Composable
 internal fun BrightnessPanel(value: Float, onChange: (Float) -> Unit) {
     val auto = value < 0f
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        PanelLabel("화면 밝기")
-        Spacer(Modifier.weight(1f))
-        FilterChip(
-            selected = auto,
-            onClick = { onChange(if (auto) 0.5f else -1f) },
-            label = { Text("자동 (시스템)") },
+    com.oasisreader.app.ui.PanelRow("밝기") {
+        com.oasisreader.app.ui.ThinSlider(
+            value = if (auto) 0.5f else value, range = 0.02f..1f,
+            onChange = { onChange(it.coerceIn(0.02f, 1f)) },
+            modifier = Modifier.weight(1f).alpha(if (auto) 0.45f else 1f),
         )
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("🔅", fontSize = 16.sp)
-        Slider(
-            value = if (auto) 0.5f else value,
-            onValueChange = { onChange(it.coerceIn(0.02f, 1f)) },
-            valueRange = 0.02f..1f,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp).alpha(if (auto) 0.45f else 1f),
-        )
-        Text("🔆", fontSize = 18.sp)
+        Spacer(Modifier.width(8.dp))
+        com.oasisreader.app.ui.PanelDropdown(if (auto) "자동" else "직접", listOf("자동", "직접"), { onChange(if (it == 0) -1f else 0.5f) })
     }
 }
 
@@ -1428,52 +1420,27 @@ private fun SizePanel(
     value: Int, onChange: (Int) -> Unit,
     lineHeight: Int, onLineHeight: (Int) -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        PanelLabel("글자 크기")
-        Spacer(Modifier.weight(1f))
-        Text("${value}px", style = MaterialTheme.typography.labelLarge)
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(
-            enabled = value > ReaderPrefs.MIN_FONT,
-            onClick = { onChange(value - 1) },
-            contentPadding = CompactPad,
-            modifier = Modifier.widthIn(min = 40.dp),
-        ) { Text("가", fontSize = 13.sp) }
-        Slider(
+    com.oasisreader.app.ui.PanelRow("크기") {
+        com.oasisreader.app.ui.ThinSlider(
             value = value.toFloat(),
-            onValueChange = { onChange(it.roundToInt()) },
-            valueRange = ReaderPrefs.MIN_FONT.toFloat()..ReaderPrefs.MAX_FONT.toFloat(),
+            range = ReaderPrefs.MIN_FONT.toFloat()..ReaderPrefs.MAX_FONT.toFloat(),
             steps = ReaderPrefs.MAX_FONT - ReaderPrefs.MIN_FONT - 1,
+            onChange = { onChange(it.roundToInt()) },
             modifier = Modifier.weight(1f),
         )
-        TextButton(
-            enabled = value < ReaderPrefs.MAX_FONT,
-            onClick = { onChange(value + 1) },
-            contentPadding = CompactPad,
-            modifier = Modifier.widthIn(min = 40.dp),
-        ) { Text("가", fontSize = 20.sp) }
+        Text("${value}px", style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 40.dp), textAlign = TextAlign.End)
     }
-    Spacer(Modifier.height(6.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        PanelLabel("줄 간격")
-        Spacer(Modifier.weight(1f))
-        TextButton(enabled = lineHeight > 14, onClick = { onLineHeight(lineHeight - 1) }, contentPadding = CompactPad) { Text("－") }
-        Text(String.format("%.1f", lineHeight / 10f), style = MaterialTheme.typography.labelLarge)
-        TextButton(enabled = lineHeight < 24, onClick = { onLineHeight(lineHeight + 1) }, contentPadding = CompactPad) { Text("＋") }
+    com.oasisreader.app.ui.PanelRow("줄간격") {
+        com.oasisreader.app.ui.ThinSlider(
+            value = lineHeight.toFloat(), range = 14f..24f, steps = 9,
+            onChange = { onLineHeight(it.roundToInt()) },
+            modifier = Modifier.weight(1f),
+        )
+        Text(String.format("%.1f", lineHeight / 10f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 40.dp), textAlign = TextAlign.End)
     }
-    Spacer(Modifier.height(6.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        PanelLabel("글자 굵기")
-        Spacer(Modifier.weight(1f))
-        listOf("보통", "조금 굵게", "굵게").forEachIndexed { i, label ->
-            FilterChip(
-                selected = weight == i,
-                onClick = { onWeight(i) },
-                label = { Text(label, fontWeight = if (i == 0) FontWeight.Normal else if (i == 1) FontWeight.Medium else FontWeight.Bold) },
-                modifier = Modifier.padding(start = 6.dp),
-            )
-        }
+    val weights = listOf("보통", "조금 굵게", "굵게")
+    com.oasisreader.app.ui.PanelRow("굵기") {
+        com.oasisreader.app.ui.PanelDropdown(weights.getOrElse(weight) { weights[0] }, weights, onWeight)
     }
 }
 
@@ -1487,116 +1454,94 @@ private fun FontPanel(
     onAdd: () -> Unit,
     onRemove: (FontOption) -> Unit,
 ) {
-    // the user's own font files first
-    PanelLabel("내 글꼴")
-    Spacer(Modifier.height(4.dp))
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FontManager.customs.forEach { f ->
-            FilterChip(selected = selectedId == f.id, onClick = { onPick(f) }, label = { Text(f.label, maxLines = 1) })
-        }
-        androidx.compose.material3.AssistChip(onClick = onAdd, label = { Text("＋ 글꼴 파일 추가") })
-        FontManager.customs.firstOrNull { it.id == selectedId }?.let { f ->
-            TextButton(onClick = { onRemove(f) }, contentPadding = CompactPad) { Text("이 글꼴 삭제", color = MaterialTheme.colorScheme.error) }
+    // one drop-down: my fonts, then 명조, then 고딕 (⬇ = downloads on first use)
+    val all = FontManager.customs + FontManager.ALL.filter { it.kind == FontOption.Kind.SERIF } + FontManager.ALL.filter { it.kind != FontOption.Kind.SERIF }
+    fun name(f: FontOption): String {
+        val base = f.label.substringBefore(" ·")
+        return when {
+            busyId == f.id -> "$base ${(progress * 100).toInt()}%"
+            f in FontManager.customs -> "$base (내 글꼴)"
+            !fonts.isReady(f) -> "⬇ $base"
+            else -> base
         }
     }
-    Spacer(Modifier.height(10.dp))
-    for (kind in FontOption.Kind.entries) {
-        val serif = kind == FontOption.Kind.SERIF
-        PanelLabel(if (serif) "명조" else "고딕")
-        Spacer(Modifier.height(4.dp))
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            FontManager.ALL.filter { it.kind == kind }.forEach { f ->
-                val ready = fonts.isReady(f)
-                val busy = busyId == f.id
-                FilterChip(
-                    selected = selectedId == f.id,
-                    enabled = busyId == null || busy,
-                    onClick = { onPick(f) },
-                    label = {
-                        Text(
-                            when {
-                                busy -> "${f.label.substringBefore(" ·")} ${(progress * 100).toInt()}%"
-                                ready -> f.label.substringBefore(" ·")
-                                else -> "⬇ " + f.label.substringBefore(" ·")
-                            },
-                            fontFamily = if (serif) FontFamily.Serif else FontFamily.SansSerif,
-                        )
-                    },
-                )
-            }
-        }
-        if (serif) Spacer(Modifier.height(10.dp))
+    val current = all.firstOrNull { it.id == selectedId }
+    com.oasisreader.app.ui.PanelRow("글꼴") {
+        com.oasisreader.app.ui.PanelDropdown(
+            current?.let(::name) ?: "기본",
+            all.map(::name),
+            { i -> if (busyId == null) onPick(all[i]) },
+            modifier = Modifier.weight(1f, fill = false),
+            footer = { close ->
+                HorizontalDivider()
+                DropdownMenuItem(text = { Text("＋ 글꼴 파일 추가") }, onClick = { close(); onAdd() })
+                current?.takeIf { it in FontManager.customs }?.let { f ->
+                    DropdownMenuItem(
+                        text = { Text("이 글꼴 삭제", color = MaterialTheme.colorScheme.error) },
+                        onClick = { close(); onRemove(f) },
+                    )
+                }
+            },
+        )
     }
 }
 
-/** Page margins: four steppers, each relative to the default (0 = as before). */
+/** Page margins: pick a side, then one slim slider for it (relative to the default; 0 = as before). */
 @Composable
 private fun MarginPanel(top: Int, bottom: Int, left: Int, right: Int, onChange: (Int, Int, Int, Int) -> Unit) {
-    androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 8.dp), thickness = 0.5.dp)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        PanelLabel("여백")
-        Spacer(Modifier.weight(1f))
-        TextButton(
-            enabled = top != 0 || bottom != 0 || left != 0 || right != 0,
-            onClick = { onChange(0, 0, 0, 0) }, contentPadding = CompactPad,
-        ) { Text("기본으로") }
+    var side by remember { mutableIntStateOf(0) }
+    val sides = listOf("위", "아래", "왼쪽", "오른쪽")
+    val v = listOf(top, bottom, left, right)[side]
+    val range = if (side < 2) ReaderPrefs.MARGIN_V else ReaderPrefs.MARGIN_H
+    fun set(x: Int) = when (side) {
+        0 -> onChange(x, bottom, left, right)
+        1 -> onChange(top, x, left, right)
+        2 -> onChange(top, bottom, x, right)
+        else -> onChange(top, bottom, left, x)
     }
-    @Composable
-    fun androidx.compose.foundation.layout.RowScope.Step(label: String, v: Int, range: IntRange, set: (Int) -> Unit) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 36.dp))
-            TextButton(enabled = v > range.first, onClick = { set((v - 4).coerceAtLeast(range.first)) }, contentPadding = CompactPad) { Text("－") }
-            Text(if (v == 0) "기본" else if (v > 0) "+$v" else "$v", style = MaterialTheme.typography.labelLarge, modifier = Modifier.widthIn(min = 34.dp), textAlign = TextAlign.Center)
-            TextButton(enabled = v < range.last, onClick = { set((v + 4).coerceAtMost(range.last)) }, contentPadding = CompactPad) { Text("＋") }
+    com.oasisreader.app.ui.PanelRow("여백") {
+        com.oasisreader.app.ui.PanelDropdown(sides[side], sides, { side = it })
+        Spacer(Modifier.width(6.dp))
+        com.oasisreader.app.ui.ThinSlider(
+            value = v.toFloat(), range = range.first.toFloat()..range.last.toFloat(),
+            onChange = { set((it / 4f).roundToInt() * 4) },
+            modifier = Modifier.weight(1f),
+        )
+        Text(if (v == 0) "기본" else if (v > 0) "+$v" else "$v", style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 36.dp), textAlign = TextAlign.End)
+        if (top != 0 || bottom != 0 || left != 0 || right != 0) {
+            TextButton(onClick = { onChange(0, 0, 0, 0) }, contentPadding = CompactPad) { Text("초기화", style = MaterialTheme.typography.labelMedium) }
         }
-    }
-    Row {
-        Step("위", top, ReaderPrefs.MARGIN_V) { onChange(it, bottom, left, right) }
-        Step("아래", bottom, ReaderPrefs.MARGIN_V) { onChange(top, it, left, right) }
-    }
-    Row {
-        Step("왼쪽", left, ReaderPrefs.MARGIN_H) { onChange(top, bottom, it, right) }
-        Step("오른쪽", right, ReaderPrefs.MARGIN_H) { onChange(top, bottom, left, it) }
     }
 }
 
-/** Page colour swatches: tap to choose; "자동" follows the app's light/dark setting. */
+/** Page colour swatches in one short line: tap to choose; the half/half one ("자동") follows light/dark. */
 @Composable
 private fun ThemeRow(current: ReaderTheme, onPick: (ReaderTheme) -> Unit) {
-    Spacer(Modifier.height(10.dp))
-    PanelLabel("배경")
-    Spacer(Modifier.height(6.dp))
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        ReaderTheme.entries.forEach { t ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onPick(t) }) {
+    com.oasisreader.app.ui.PanelRow("배경") {
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReaderTheme.entries.forEach { t ->
                 Box(
-                    Modifier.size(38.dp)
+                    Modifier.size(26.dp)
                         .background(
                             if (t == ReaderTheme.AUTO) androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(ReaderTheme.PAPER.bg), Color(ReaderTheme.NIGHT.bg)))
                             else androidx.compose.ui.graphics.SolidColor(Color(t.bg)),
                             androidx.compose.foundation.shape.CircleShape,
                         )
                         .border(
-                            if (t == current) 2.5.dp else 1.dp,
+                            if (t == current) 2.dp else 0.8.dp,
                             if (t == current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                             androidx.compose.foundation.shape.CircleShape,
-                        ),
+                        )
+                        .clickable { onPick(t) }
+                        .semantics { contentDescription = t.label },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("가", color = Color(if (t == ReaderTheme.AUTO) ReaderTheme.PAPER.fg else t.fg), fontSize = 14.sp)
+                    Text("가", color = Color(if (t == ReaderTheme.AUTO) ReaderTheme.PAPER.fg else t.fg), fontSize = 11.sp)
                 }
-                Spacer(Modifier.height(3.dp))
-                Text(t.label, style = MaterialTheme.typography.labelSmall)
             }
         }
     }

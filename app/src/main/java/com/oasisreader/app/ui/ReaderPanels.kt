@@ -1,6 +1,22 @@
 package com.oasisreader.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,34 +53,93 @@ fun PanelTitle(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
 }
 
-/** One on/off setting: label (and a hint) on the left, a switch on the right. */
+/** One on/off setting in a single short line (hints stay out: panels must leave the page visible). */
 @Composable
-fun PanelSwitch(label: String, hint: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
+fun PanelSwitch(label: String, @Suppress("UNUSED_PARAMETER") hint: String?, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier.fillMaxWidth()) {
+    Row(modifier.height(36.dp).clickable { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.scale(0.75f))
     }
 }
 
-/** A row of chips where one is chosen. */
+/** A setting line: a short label column, then the control(s). */
 @Composable
-fun PanelChoice(label: String?, options: List<String>, selected: Int, onPick: (Int) -> Unit) {
-    Column {
-        label?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEachIndexed { i, o -> FilterChip(selected = i == selected, onClick = { onPick(i) }, label = { Text(o) }) }
+fun PanelRow(label: String, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(52.dp))
+        content()
+    }
+}
+
+/** Slim slider: 3dp track, small dot (the stock one is far too tall for a reading panel). */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun ThinSlider(
+    value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit,
+    modifier: Modifier = Modifier, steps: Int = 0, enabled: Boolean = true,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val rest = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+    androidx.compose.material3.Slider(
+        value = value, onValueChange = onChange, valueRange = range, steps = steps, enabled = enabled,
+        thumb = { Box(Modifier.size(14.dp).background(if (enabled) accent else rest, CircleShape)) },
+        track = { st ->
+            androidx.compose.material3.SliderDefaults.Track(
+                sliderState = st, modifier = Modifier.height(3.dp), enabled = enabled,
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    activeTrackColor = accent, inactiveTrackColor = rest,
+                    activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent,
+                    disabledActiveTrackColor = rest, disabledInactiveTrackColor = rest,
+                ),
+                drawStopIndicator = null, thumbTrackGapSize = 0.dp,
+            )
+        },
+        modifier = modifier.height(28.dp),
+    )
+}
+
+/** A choice from a list, shown as one small "value ▾" button that opens a drop-down. */
+@Composable
+fun PanelDropdown(
+    current: String, items: List<String>, onPick: (Int) -> Unit, modifier: Modifier = Modifier,
+    footer: (@Composable (close: () -> Unit) -> Unit)? = null,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(
+            Modifier.clip(RoundedCornerShape(8.dp))
+                .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                .clickable { open = true }.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(current, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Text("  ▾", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            items.forEachIndexed { i, label ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text((if (label == current) "✓ " else "    ") + label) },
+                    onClick = { open = false; onPick(i) },
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.height(40.dp),
+                )
+            }
+            footer?.invoke { open = false }
         }
     }
+}
+
+/** A labelled choice from a short list (a drop-down). */
+@Composable
+fun PanelChoice(label: String?, options: List<String>, selected: Int, onPick: (Int) -> Unit) {
+    PanelRow(label.orEmpty()) { PanelDropdown(options.getOrElse(selected) { "" }, options, onPick) }
 }
 
 /** An action in the 이동 panel: emoji + label, the whole row tappable. */
 @Composable
 fun PanelAction(emoji: String, label: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(emoji, fontSize = 17.sp)
@@ -73,14 +148,17 @@ fun PanelAction(emoji: String, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Page-turn effect and its speed, as chips (the curl falls back to 덮기 on phones without it). */
+/** Page-turn effect and (for curl / cover) its speed, on one line. */
 @Composable
 fun TurnStylePicker(current: TurnStyle, speed: TurnSpeed, onPick: (TurnStyle) -> Unit, onSpeed: (TurnSpeed) -> Unit) {
     val styles = TurnStyle.entries
-    PanelChoice("넘김 효과", styles.map { it.label }, styles.indexOf(current)) { onPick(styles[it]) }
-    if (current == TurnStyle.CURL || current == TurnStyle.COVER) {
-        val speeds = TurnSpeed.entries
-        PanelChoice("넘김 속도", speeds.map { it.label }, speeds.indexOf(speed)) { onSpeed(speeds[it]) }
+    val speeds = TurnSpeed.entries
+    PanelRow("넘김") {
+        PanelDropdown(current.label, styles.map { it.label }, { onPick(styles[it]) })
+        if (current == TurnStyle.CURL || current == TurnStyle.COVER) {
+            Spacer(Modifier.width(8.dp))
+            PanelDropdown(speed.label, speeds.map { it.label }, { onSpeed(speeds[it]) })
+        }
     }
 }
 
@@ -90,14 +168,18 @@ fun TurnStylePicker(current: TurnStyle, speed: TurnSpeed, onPick: (TurnStyle) ->
  */
 @Composable
 fun BookSettingsRow(hasOwn: Boolean, onSaveAsDefault: () -> Unit, onReset: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(32.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             if (hasOwn) "이 책에만 적용 중" else "기본 설정을 따르는 중",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onSaveAsDefault) { Text("기본값으로 저장") }
-        if (hasOwn) TextButton(onClick = onReset) { Text("되돌리기") }
+        TextButton(onClick = onSaveAsDefault, contentPadding = PaddingValues(horizontal = 8.dp)) {
+            Text("기본값으로 저장", style = MaterialTheme.typography.labelMedium)
+        }
+        if (hasOwn) TextButton(onClick = onReset, contentPadding = PaddingValues(horizontal = 8.dp)) {
+            Text("되돌리기", style = MaterialTheme.typography.labelMedium)
+        }
     }
 }
