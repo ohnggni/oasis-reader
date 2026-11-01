@@ -25,7 +25,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.oasisreader.app.data.BookDetails
 import com.oasisreader.app.data.BookStore
+import com.oasisreader.app.data.ServerSettings
+import com.oasisreader.app.data.db.BookEntity
+import com.oasisreader.app.data.db.ReadingTimeEntity
+import com.oasisreader.app.epub.EpubParser
+import com.oasisreader.app.meta.MetaApi
 import com.oasisreader.app.data.HighlightExport
 import com.oasisreader.app.data.db.AppDatabase
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +66,10 @@ fun HighlightExportDialog(bookId: String, onDismiss: () -> Unit) {
                 MarkdownExport(
                     title = title,
                     count = list.size,
-                    text = HighlightExport.markdown(title, book?.author ?: pkg?.author, list, { HighlightExport.chapterTitle(pkg, it) }),
+                    text = HighlightExport.markdown(
+                        title, book?.author ?: pkg?.author, list, { HighlightExport.chapterTitle(pkg, it) },
+                        details = loadDetails(app, store, book, title, db.readingTime().forBook(bookId)),
+                    ),
                 )
             }.getOrNull()
         }
@@ -134,9 +143,15 @@ fun HighlightJsonExportMenu(enabled: Boolean) {
                     val db = AppDatabase.get(app)
                     val store = BookStore.get(app)
                     val list = db.highlights().all()
-                    val text = HighlightExport.json(db.books().all(), list, { id ->
+                    val books = db.books().all().associateBy { it.id }
+                    val times = db.readingTime().all().groupBy { it.bookId }
+                    val details = list.map { it.bookId }.distinct().associateWith { id ->
+                        val b = books[id]
+                        if (b == null) BookDetails() else loadDetails(app, store, b, b.title, times[id].orEmpty())
+                    }
+                    val text = HighlightExport.json(books.values.toList(), list, { id ->
                         if (File(store.dir(id), "book.json").isFile) runCatching { store.readPackage(id) }.getOrNull() else null
-                    })
+                    }, { details[it] ?: BookDetails() })
                     app.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: error("no stream")
                     list.size
                 }.getOrNull()
@@ -159,4 +174,40 @@ fun HighlightJsonExportMenu(enabled: Boolean) {
             )
         }
     }
+}
+
+/**
+ * Book details for an export: the EPUB's own metadata (only while its files are on the phone),
+ * the bookoasis meta server's series and synopsis (books downloaded from a server with oasis-meta),
+ * and the reading records. Anything that fails is simply left out. Call off the main thread.
+ */
+internal suspend fun loadDetails(
+    app: android.content.Context,
+    store: BookStore,
+    book: BookEntity?,
+    title: String,
+    times: List<ReadingTimeEntity>,
+): BookDetails {
+    if (book == null) return BookDetails()
+    val epub = if (book.format == BookStore.FORMAT_EPUB || book.format == BookStore.FORMAT_TXT)
+        runCatching { EpubParser.extraMeta(store.contentDir(book.id)) }.getOrDefault(emptyMap()) else emptyMap()
+    val meta = runCatching {
+        val url = book.sourceUrl ?: return@runCatching null
+        val (db, id) = MetaApi.idFromDownload(url) ?: return@runCatching null
+        val server = ServerSettings(app).forUrl(url)?.takeIf { it.metaUrl.isNotBlank() } ?: return@runCatching null
+        MetaApi(server, db).book(id)
+    }.getOrNull()
+    val read = times.filter { it.seconds > 0 }
+    return BookDetails(
+        series = BookDetails.series(meta?.seriesName, title),
+        publisher = epub["출판사"],
+        published = epub["발행일"],
+        subjects = epub["분류"],
+        description = BookDetails.description(meta?.summary, meta?.summaryTrust, epub["소개"]),
+        firstReadDay = read.minOfOrNull { it.day },
+        lastReadDay = read.maxOfOrNull { it.day },
+        readingSeconds = read.sumOf { it.seconds },
+        finishedAt = book.finishedAt,
+        progress = book.progress.takeIf { book.finishedAt == null && book.lastReadAt != null },
+    )
 }

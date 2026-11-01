@@ -146,6 +146,12 @@ interface ReadingTimeDao {
 
     @Query("SELECT * FROM reading_time")
     fun observeAll(): Flow<List<ReadingTimeEntity>>
+
+    @Query("SELECT * FROM reading_time WHERE bookId = :bookId")
+    suspend fun forBook(bookId: String): List<ReadingTimeEntity>
+
+    @Query("SELECT * FROM reading_time")
+    suspend fun all(): List<ReadingTimeEntity>
 }
 
 @Database(

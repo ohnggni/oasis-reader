@@ -1,5 +1,6 @@
 package com.oasisreader.app
 
+import com.oasisreader.app.data.BookDetails
 import com.oasisreader.app.data.HighlightExport
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.data.db.HighlightEntity
@@ -41,7 +42,7 @@ class HighlightExportTest {
             # 러브크래프트 걸작선
             하워드 필립스 러브크래프트
 
-            하이라이트 4개 · 메모 1개 · 2026.10.15 ~ 2026.11.1
+            - 하이라이트 4개 · 메모 1개
 
             > 머리말 인용
 
@@ -99,5 +100,56 @@ class HighlightExportTest {
         assertEquals("우리는 ", sel["prefix"]!!.jsonPrimitive.content)
         assertEquals("true", books[1].jsonObject["removed"]!!.jsonPrimitive.content)
         assertEquals("highlighting", books[1].jsonObject["annotations"]!!.jsonArray[0].jsonObject["motivation"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun markdownWithDetails() {
+        val md = HighlightExport.markdown(
+            title = "러브크래프트 걸작선",
+            author = "러브크래프트",
+            highlights = listOf(h("1", 0, "머리말 인용", oct15)),
+            chapterOf = { "" },
+            details = BookDetails(
+                series = "걸작선", publisher = "황금가지", published = "2009-05-01", subjects = "소설, 공포",
+                description = "첫 문단\n\n둘째 문단",
+                firstReadDay = "2026-10-15", lastReadDay = "2026-10-30", readingSeconds = 6 * 3600 + 20 * 60 + 5,
+                finishedAt = nov1,
+            ),
+            now = nov1, zone = seoul,
+        )
+        val expected = """
+            # 러브크래프트 걸작선
+            러브크래프트 · 황금가지 · 2009
+
+            - 시리즈: 걸작선
+            - 분류: 소설, 공포
+            - 읽은 기간: 2026.10.15 ~ 2026.11.1 (다 읽음)
+            - 독서 시간: 약 6시간 20분
+            - 하이라이트 1개
+
+            ## 책 소개
+
+            첫 문단
+
+            둘째 문단
+
+            ## 하이라이트
+
+            > 머리말 인용
+
+            ---
+            OG Reader에서 내보냄 · 2026.11.1
+
+        """.trimIndent()
+        assertEquals(expected, md)
+    }
+
+    @Test fun detailRules() {
+        assertEquals("정상 줄거리", BookDetails.description("정상 줄거리", "ok", "EPUB 소개"))
+        assertEquals("EPUB 소개", BookDetails.description("엉뚱한 책", "suspect", "EPUB 소개"))
+        assertNull(BookDetails.description("엉뚱한 책", "suspect", null))
+        assertEquals("앤틱 로맨틱", BookDetails.series("앤틱 로맨틱 [하즈키 카오루]", "앤틱 로맨틱 01권"))
+        assertNull(BookDetails.series("러브크래프트 걸작선 [하워드 필립스 러브크래프트]", "러브크래프트 걸작선"))
+        assertEquals("약 35분", HighlightExport.readingTime(35 * 60))
+        assertNull(HighlightExport.readingTime(30))
     }
 }

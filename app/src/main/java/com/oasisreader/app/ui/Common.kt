@@ -89,9 +89,11 @@ private fun BrandMark(modifier: Modifier = Modifier) {
         lineHeight = height.sp,
         letterSpacing = spacing.sp,
         color = color,
+        // Trim.None: the script face is ~1.45 em tall, and with a line height below that
+        // Trim.Both puts the font's own ascent/descent back — that was the gap between the lines
         lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
             alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
-            trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+            trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
         ),
     )
     Row(
@@ -105,8 +107,8 @@ private fun BrandMark(modifier: Modifier = Modifier) {
         )
         Spacer(Modifier.width(10.dp))
         Column {
-            Text("Book", style = line(13, 15, 1.5f), maxLines = 1)
-            Text("Reader", style = line(37, 40, 0f), maxLines = 1, modifier = Modifier.padding(start = 6.dp))
+            Text("Book", style = line(13, 14, 1.5f), maxLines = 1)
+            Text("Reader", style = line(37, 36, 0f), maxLines = 1, modifier = Modifier.padding(start = 6.dp))
         }
     }
 }
