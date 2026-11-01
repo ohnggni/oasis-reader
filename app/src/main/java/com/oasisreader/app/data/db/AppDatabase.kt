@@ -114,6 +114,9 @@ interface HighlightDao {
     @Query("SELECT * FROM highlights WHERE bookId = :bookId ORDER BY spineIndex, createdAt")
     fun observeFor(bookId: String): Flow<List<HighlightEntity>>
 
+    @Query("SELECT * FROM highlights WHERE bookId = :bookId ORDER BY spineIndex, createdAt")
+    suspend fun allFor(bookId: String): List<HighlightEntity>
+
     @Query("SELECT * FROM highlights WHERE bookId = :bookId AND spineIndex = :spine")
     suspend fun forChapter(bookId: String, spine: Int): List<HighlightEntity>
 

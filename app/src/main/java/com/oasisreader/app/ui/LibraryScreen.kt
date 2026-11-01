@@ -108,6 +108,7 @@ fun LibraryScreen(
     val filter = ShelfFilter.valueOf(filterName)
     var menuFor by remember { mutableStateOf<BookEntity?>(null) }
     var infoFor by remember { mutableStateOf<BookEntity?>(null) }
+    var exportFor by remember { mutableStateOf<BookEntity?>(null) }
     var confirmDelete by remember { mutableStateOf<BookEntity?>(null) }
     var renaming by remember { mutableStateOf<BookEntity?>(null) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -245,6 +246,7 @@ fun LibraryScreen(
     }
 
     infoFor?.let { b -> BookInfoDialog(b, store) { infoFor = null } }
+    exportFor?.let { b -> HighlightExportDialog(b.id) { exportFor = null } }
 
     menuFor?.let { b ->
         AlertDialog(
@@ -260,6 +262,7 @@ fun LibraryScreen(
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { menuFor = null; infoFor = b }) { Text("ℹ️ 책 정보") }
                     TextButton(onClick = { menuFor = null; renaming = b }) { Text("✏️ 제목 바꾸기") }
+                    TextButton(onClick = { menuFor = null; exportFor = b }) { Text("📝 하이라이트 내보내기") }
                     if (b.sourceUrl != null) TextButton(onClick = { menuFor = null; onPin(b, !b.pinned) }) {
                         Text(if (b.pinned) "☁️ 임시로 두기 (공간 부족하면 파일만 지워짐)" else "📌 서재에 보관 (지금은 임시)")
                     }

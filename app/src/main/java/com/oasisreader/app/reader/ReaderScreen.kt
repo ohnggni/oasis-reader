@@ -968,15 +968,8 @@ private fun ReaderBody(
 }
 
 /** Title of the toc entry that covers spine item [index] (the last one at or before it). */
-private fun chapterTitleFor(p: EpubPackage, index: Int): String {
-    var best: String? = null
-    var bestIdx = -1
-    for (t in p.toc) {
-        val i = p.spineIndexOf(t.path)
-        if (i in 0..index && i >= bestIdx) { best = t.title; bestIdx = i }
-    }
-    return best.orEmpty()
-}
+private fun chapterTitleFor(p: EpubPackage, index: Int): String =
+    com.oasisreader.app.data.HighlightExport.chapterTitle(p, index)
 
 @Composable
 private fun Failure(message: String, onRetry: (() -> Unit)?, onBack: () -> Unit) {
@@ -1021,6 +1014,7 @@ private fun MissingFiles(canFetch: Boolean, auto: Boolean, busy: Boolean, onFetc
 @Composable
 private fun BookHighlightsDialog(bookId: String, db: AppDatabase, onPick: (HighlightEntity) -> Unit, onDismiss: () -> Unit) {
     val list by remember(bookId) { db.highlights().observeFor(bookId) }.collectAsState(initial = null)
+    var exporting by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("이 책의 하이라이트") },
@@ -1046,7 +1040,11 @@ private fun BookHighlightsDialog(bookId: String, db: AppDatabase, onPick: (Highl
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+        dismissButton = {
+            if (!list.isNullOrEmpty()) TextButton(onClick = { exporting = true }) { Text("내보내기") }
+        },
     )
+    if (exporting) com.oasisreader.app.ui.HighlightExportDialog(bookId) { exporting = false }
 }
 
 @Composable
