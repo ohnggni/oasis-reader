@@ -86,7 +86,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "OasisReader $V" \
-            --notes "$(git log -1 --pretty=%B | head -20)" \
+            --notes "$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' | head -20)" \
             --latest
 
       - name: Remove signing key

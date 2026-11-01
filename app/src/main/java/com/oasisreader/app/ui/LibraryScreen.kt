@@ -150,6 +150,7 @@ fun LibraryScreen(
             }
             EmojiButton("⚙️", "설정", onSettings)
         }
+        UpdateBanner()
         if (importing) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         Row(
