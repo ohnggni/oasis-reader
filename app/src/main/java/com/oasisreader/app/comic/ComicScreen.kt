@@ -320,6 +320,33 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
         }
     }
 
+    // bookoasis progress sync: KOReader page numbers (1-based) — the web viewer uses them too
+    var remote by remember { mutableStateOf<com.oasisreader.app.data.KoSync.Remote?>(null) }
+    fun remotePage(r: com.oasisreader.app.data.KoSync.Remote): Int? =
+        (r.pageNumber?.minus(1) ?: r.percentage?.let { (it * pageCount).toInt() - 1 })
+            ?.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+    com.oasisreader.app.ui.ProgressSync(
+        bookId = book.id,
+        document = book.kosyncDoc,
+        lastReadAt = book.lastReadAt,
+        ready = true,
+        positionKey = curPage to lastPageShown,
+        place = { (lastPageShown + 1).toString() to progress },
+        differs = { r -> remotePage(r)?.let { it != curPage && it != lastPageShown } == true },
+        onRemote = { remote = it },
+    )
+    remote?.let { r ->
+        val page = remotePage(r)
+        com.oasisreader.app.ui.RemoteProgressDialog(
+            where = "${com.oasisreader.app.ui.remoteDeviceLabel(r)}에서 ${page?.plus(1) ?: "?"}쪽까지 읽었습니다 (전체 ${pageCount}쪽).",
+            onGo = {
+                remote = null
+                if (page != null) { curPage = page; curFrac = 0f; lastPageShown = page; viewKey++ }
+            },
+            onStay = { remote = null },
+        )
+    }
+
     // active reading time (same rule as the book reader)
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(book.id) {

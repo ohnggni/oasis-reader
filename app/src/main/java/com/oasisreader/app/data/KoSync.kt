@@ -3,8 +3,21 @@ package com.oasisreader.app.data
 import android.content.Context
 import com.oasisreader.app.BuildConfig
 import com.oasisreader.app.data.db.AppDatabase
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.floatOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import java.io.File
@@ -114,6 +127,96 @@ object KoSync {
                 }
             }
         }
+    }
+
+    // ---- progress ----
+
+    /** A position kept on the server (KOReader: progress = xpointer or page number, percentage 0..1). */
+    data class Remote(
+        val progress: String?,
+        val percentage: Float?,
+        val device: String?,
+        val deviceId: String?,
+        val timestamp: Long,      // epoch seconds, server clock
+    ) {
+        val fromOgReader get() = deviceId?.startsWith("ogreader-") == true
+        val pageNumber get() = progress?.trim()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()
+    }
+
+    /** The server's position for a book, or null when it has none (or cannot be reached). */
+    suspend fun pull(a: Account, document: String): Remote? = withContext(Dispatchers.IO) {
+        runCatching {
+            Http.client.newCall(request(a, "/syncs/progress/$document").get().build()).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                val o = Http.json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject
+                if (o.isEmpty()) return@use null
+                fun str(k: String) = o[k]?.jsonPrimitive?.takeIf { it.isString }?.content
+                Remote(
+                    progress = o["progress"]?.jsonPrimitive?.content?.takeIf { it != "null" },
+                    percentage = o["percentage"]?.jsonPrimitive?.floatOrNull,
+                    device = str("device"),
+                    deviceId = str("device_id"),
+                    timestamp = o["timestamp"]?.jsonPrimitive?.longOrNull ?: 0L,
+                )
+            }
+        }.getOrNull()
+    }
+
+    suspend fun push(c: Context, a: Account, document: String, progress: String, percentage: Float): Boolean =
+        withContext(Dispatchers.IO) {
+            val body = buildJsonObject {
+                put("document", document)
+                put("progress", progress)
+                put("percentage", (percentage.coerceIn(0f, 1f) * 10000).toInt() / 10000.0)
+                put("device", deviceName())
+                put("device_id", deviceId(c))
+            }.toString().toRequestBody("application/json".toMediaType())
+            runCatching {
+                Http.client.newCall(request(a, "/syncs/progress").put(body).build()).execute().use { it.isSuccessful }
+            }.getOrDefault(false)
+        }
+
+    /** Uploads that must outlive the screen that started them (closing a book). */
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    fun pushInBackground(c: Context, document: String, progress: String, percentage: Float) {
+        val a = account(c) ?: return
+        val app = c.applicationContext
+        background.launch { push(app, a, document, progress, percentage) }
+    }
+
+    /**
+     * Worth offering a jump: another device (or the bookoasis web viewer) stored it, after this
+     * phone last read the book, and it is somewhere else.
+     */
+    fun isNewerElsewhere(c: Context, r: Remote, localLastReadAt: Long?, differs: Boolean): Boolean =
+        r.deviceId != deviceId(c) && r.timestamp * 1000 > (localLastReadAt ?: 0L) + 5_000 && differs
+
+    // ---- library: books read further on another device ----
+
+    private val _ahead = MutableStateFlow<Map<String, Float>>(emptyMap())
+    /** bookId -> where another device is (0..1); shown on the library tile until the book is opened. */
+    val ahead: StateFlow<Map<String, Float>> = _ahead
+    private var lastLibraryCheck = 0L
+
+    fun clearAhead(bookId: String) { _ahead.value = _ahead.value - bookId }
+
+    /** Ask the server about the most recently read books (at most hourly, a few dozen requests). */
+    suspend fun refreshLibrary(c: Context, books: List<com.oasisreader.app.data.db.BookEntity>) {
+        val a = account(c) ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastLibraryCheck < 60 * 60 * 1000L) return
+        lastLibraryCheck = now
+        val found = HashMap<String, Float>()
+        books.filter { it.kosyncDoc != null }
+            .sortedByDescending { it.lastReadAt ?: it.addedAt }
+            .take(60)
+            .forEach { b ->
+                val r = pull(a, b.kosyncDoc!!) ?: return@forEach
+                val pct = r.percentage ?: return@forEach
+                if (isNewerElsewhere(c, r, b.lastReadAt, kotlin.math.abs(pct - b.progress) > 0.005f)) found[b.id] = pct
+            }
+        _ahead.value = found
     }
 
     // ---- book ids ----

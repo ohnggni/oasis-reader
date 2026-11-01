@@ -41,6 +41,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,6 +108,12 @@ fun LibraryScreen(
 ) {
     var filterName by rememberSaveable { mutableStateOf(ShelfFilter.ALL.name) }
     val filter = ShelfFilter.valueOf(filterName)
+    // progress sync: books another device has read further (checked at most hourly)
+    val aheadMap by com.oasisreader.app.data.KoSync.ahead.collectAsState()
+    val syncApp = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    LaunchedEffect(loaded, books.size) {
+        if (loaded && books.isNotEmpty()) com.oasisreader.app.data.KoSync.refreshLibrary(syncApp, books)
+    }
     var menuFor by remember { mutableStateOf<BookEntity?>(null) }
     var infoFor by remember { mutableStateOf<BookEntity?>(null) }
     var exportFor by remember { mutableStateOf<BookEntity?>(null) }
@@ -232,13 +240,13 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                 ) {
                     items(shown, key = { it.id }) { b ->
-                        GridBook(b, store, onClick = { onOpen(b) }, onMenu = { menuFor = b }, compact = tileDp < 110)
+                        GridBook(b, store, onClick = { onOpen(b) }, onMenu = { menuFor = b }, compact = tileDp < 110, ahead = aheadMap[b.id])
                     }
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     items(shown, key = { it.id }) { b ->
-                        ListBook(b, store, onClick = { onOpen(b) }, onMenu = { menuFor = b })
+                        ListBook(b, store, onClick = { onOpen(b) }, onMenu = { menuFor = b }, ahead = aheadMap[b.id])
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
@@ -339,6 +347,9 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
     }
 }
 
+/** Another device read further (progress sync): shown after the library's own progress. */
+private fun aheadText(pct: Float?): String = pct?.let { " · ⇄ ${(it * 100).roundToInt()}%" }.orEmpty()
+
 private fun progressText(b: BookEntity): String = (if (b.pinned) "" else "☁️ ") + (when (b.format) { BookStore.FORMAT_COMIC -> "🖼 "; BookStore.FORMAT_PDF -> "📄 "; else -> "" }) + when {
     b.finishedAt != null -> "다 읽음"
     b.lastReadAt == null -> "새 책"
@@ -347,7 +358,7 @@ private fun progressText(b: BookEntity): String = (if (b.pinned) "" else "☁️
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMenu: () -> Unit, compact: Boolean = false) {
+private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMenu: () -> Unit, compact: Boolean = false, ahead: Float? = null) {
     Column(Modifier.combinedClickable(onClick = onClick, onLongClick = onMenu)) {
         BookCover(
             file = if (b.hasCover) store.coverFile(b.id) else null,
@@ -365,7 +376,7 @@ private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
             Column(Modifier.weight(1f)) {
                 Text(b.title, style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    listOfNotNull(b.author, progressText(b)).joinToString(" · "),
+                    listOfNotNull(b.author, progressText(b) + aheadText(ahead)).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -378,7 +389,7 @@ private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMenu: () -> Unit) {
+private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMenu: () -> Unit, ahead: Float? = null) {
     Row(
         Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onMenu)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -402,7 +413,7 @@ private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
                     LinearProgressIndicator(progress = { b.progress }, modifier = Modifier.width(90.dp).height(3.dp))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(progressText(b), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(progressText(b) + aheadText(ahead), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         MoreButton(onMenu)

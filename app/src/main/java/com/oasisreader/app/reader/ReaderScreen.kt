@@ -478,6 +478,35 @@ private fun ReaderBody(
         }
     }
 
+    // bookoasis progress sync: offer another device's newer place, upload ours
+    var remote by remember { mutableStateOf<com.oasisreader.app.data.KoSync.Remote?>(null) }
+    com.oasisreader.app.ui.ProgressSync(
+        bookId = bookId,
+        document = book?.kosyncDoc,
+        lastReadAt = book?.lastReadAt,
+        ready = state is LoadState.Ready && pkg != null,
+        positionKey = curIndex to curFraction,
+        place = { "/body/DocFragment[${curIndex + 1}]/body" to (pkg?.overall(curIndex, curFraction) ?: 0f) },
+        differs = { r ->
+            val pp = pkg
+            val t = pp?.let { remoteTarget(it, r) }
+            pp != null && t != null &&
+                (t.first != curIndex || kotlin.math.abs(pp.overall(t.first, t.second) - pp.overall(curIndex, curFraction)) > 0.005f)
+        },
+        onRemote = { remote = it },
+    )
+    remote?.let { r ->
+        val pct = r.percentage?.let { "${(it * 100).roundToInt()}%" } ?: "다른 위치"
+        com.oasisreader.app.ui.RemoteProgressDialog(
+            where = "${com.oasisreader.app.ui.remoteDeviceLabel(r)}에서 ${pct}까지 읽었습니다.",
+            onGo = {
+                remote = null
+                pkg?.let { pp -> remoteTarget(pp, r)?.let { (i, f) -> goChapter(i, f) } }
+            },
+            onStay = { remote = null },
+        )
+    }
+
     // page-turner remotes / keyboards: the same turn as a tap on the page edge
     com.oasisreader.app.ui.PageTurnKeys(enabled = state is LoadState.Ready) { dir, _ ->
         lastActive = System.currentTimeMillis()
@@ -988,6 +1017,23 @@ private fun ReaderBody(
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("취소") } },
         )
     }
+}
+
+/**
+ * Where a server position points in this book. OG Reader positions are exact percentages;
+ * a KOReader xpointer gives the chapter (/body/DocFragment[n]), placed inside it by percentage.
+ */
+internal fun remoteTarget(p: EpubPackage, r: com.oasisreader.app.data.KoSync.Remote): Pair<Int, Float>? {
+    if (p.spine.isEmpty()) return null
+    val pct = r.percentage
+    if (r.fromOgReader && pct != null) return seekTarget(p, pct)
+    val frag = Regex("""DocFragment\[(\d+)]""").find(r.progress.orEmpty())?.groupValues?.get(1)?.toIntOrNull()?.minus(1)
+    if (frag != null && frag in p.spine.indices) {
+        val within = if (pct == null) 0f
+            else ((pct * p.totalChars - p.charsBefore(frag)) / p.spine[frag].chars.coerceAtLeast(1)).toFloat().coerceIn(0f, 1f)
+        return frag to within
+    }
+    return pct?.let { seekTarget(p, it) }
 }
 
 /** Whole-book fraction -> (spine index, fraction inside that chapter), by character counts. */
