@@ -44,11 +44,13 @@ import androidx.core.graphics.drawable.toBitmap
 object Lookup {
     data class Target(val key: String, val label: String, val icon: ImageBitmap?, val emoji: String?, val open: (Context, String) -> Unit)
 
+    private fun enc(t: String) = java.net.URLEncoder.encode(t.trim(), "UTF-8").replace("+", "%20")
+
     private fun prefs(c: Context) = c.getSharedPreferences("lookup", Context.MODE_PRIVATE)
 
     /** Korean / Japanese / Chinese (hanzi only) / otherwise English Naver dictionary. */
     fun naverUrl(text: String): Pair<String, String> {
-        val q = Uri.encode(text.trim())
+        val q = enc(text)
         return when {
             text.any { it in '가'..'힣' } -> "네이버 국어사전" to "https://ko.dict.naver.com/#/search?query=$q"
             text.any { it in '぀'..'ヿ' } -> "네이버 일본어사전" to "https://ja.dict.naver.com/#/search?query=$q"
@@ -78,7 +80,7 @@ object Lookup {
         val (naverLabel, naver) = naverUrl(text)
         out += Target("web:naver", naverLabel, null, "📖") { ctx, _ -> ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(naver)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         out += Target("web:wiki", "위키백과", null, "🌐") { ctx, t ->
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ko.wikipedia.org/w/index.php?search=" + Uri.encode(t.trim()))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ko.wikipedia.org/w/index.php?search=" + enc(t))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         out += Target("copy", "복사", null, "📋") { ctx, t ->
             (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("text", t))
