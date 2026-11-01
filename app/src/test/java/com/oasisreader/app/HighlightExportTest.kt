@@ -152,4 +152,20 @@ class HighlightExportTest {
         assertEquals("약 35분", HighlightExport.readingTime(35 * 60))
         assertNull(HighlightExport.readingTime(30))
     }
+
+    @Test fun positions() {
+        val html = "<html><head><title>제목</title></head><body><p>가나다 라마바.</p><p>사아자 라마바 차카타</p></body></html>"
+        val text = HighlightExport.plainText(html)
+        val full = text.filterNot { it.isWhitespace() }               // 가나다라마바.사아자라마바차카타
+        // first occurrence without an anchor, second one when the anchor says so
+        assertEquals(3f / full.length, HighlightExport.fractionIn(text, "라마바", null)!!, 1e-6f)
+        assertEquals(10f / full.length, HighlightExport.fractionIn(text, "라마바", "사아자 라마바")!!, 1e-6f)
+        assertNull(HighlightExport.fractionIn(text, "없는 문장", null))
+        assertEquals("37%", HighlightExport.percent(0.372f))
+        assertEquals("1%", HighlightExport.percent(0.001f))
+
+        val md = HighlightExport.markdown("책", null, listOf(h("1", 0, "인용", oct15, note = "메모")), { "" },
+            positionOf = { 0.372f }, now = nov1, zone = seoul)
+        assertEquals(true, md.contains("> 인용\n\n*— 37%*\n\n메모\n"))
+    }
 }

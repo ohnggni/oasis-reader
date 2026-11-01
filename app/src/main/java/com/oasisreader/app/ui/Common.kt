@@ -1,7 +1,6 @@
 package com.oasisreader.app.ui
 
 import com.oasisreader.app.ui.theme.isAppDark
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -74,28 +73,12 @@ fun EmojiButton(emoji: String, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Brush script for the app's name (Kaushan Script, printable ASCII only, renamed per the OFL). */
-val BrandFont = androidx.compose.ui.text.font.FontFamily(
-    androidx.compose.ui.text.font.Font(com.oasisreader.app.R.font.brand_script),
-)
-
-/** App header: the OG mark two lines tall, then a small "Book" over a large "Reader". */
+/**
+ * App header: the OG mark and the "Book / Reader" wordmark, both vector drawings
+ * (a script font's tall line box left big gaps between the two lines).
+ */
 @Composable
 private fun BrandMark(modifier: Modifier = Modifier) {
-    val color = MaterialTheme.colorScheme.primary
-    fun line(size: Int, height: Int, spacing: Float) = androidx.compose.ui.text.TextStyle(
-        fontFamily = BrandFont,
-        fontSize = size.sp,
-        lineHeight = height.sp,
-        letterSpacing = spacing.sp,
-        color = color,
-        // Trim.None: the script face is ~1.45 em tall, and with a line height below that
-        // Trim.Both puts the font's own ascent/descent back — that was the gap between the lines
-        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
-            alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
-            trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
-        ),
-    )
     Row(
         modifier.semantics(mergeDescendants = true) { contentDescription = "OG Book Reader" },
         verticalAlignment = Alignment.CenterVertically,
@@ -106,10 +89,11 @@ private fun BrandMark(modifier: Modifier = Modifier) {
             modifier = Modifier.size(50.dp),
         )
         Spacer(Modifier.width(10.dp))
-        Column {
-            Text("Book", style = line(13, 14, 1.5f), maxLines = 1)
-            Text("Reader", style = line(37, 36, 0f), maxLines = 1, modifier = Modifier.padding(start = 6.dp))
-        }
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_wordmark),
+            contentDescription = null,
+            modifier = Modifier.size(width = 112.dp, height = 49.dp),
+        )
     }
 }
 

@@ -69,6 +69,7 @@ fun HighlightExportDialog(bookId: String, onDismiss: () -> Unit) {
                     text = HighlightExport.markdown(
                         title, book?.author ?: pkg?.author, list, { HighlightExport.chapterTitle(pkg, it) },
                         details = loadDetails(app, store, book, title, db.readingTime().forBook(bookId)),
+                        positionOf = positions(store, bookId, pkg, list).let { m -> { h -> m[h.id] } },
                     ),
                 )
             }.getOrNull()
@@ -149,9 +150,11 @@ fun HighlightJsonExportMenu(enabled: Boolean) {
                         val b = books[id]
                         if (b == null) BookDetails() else loadDetails(app, store, b, b.title, times[id].orEmpty())
                     }
-                    val text = HighlightExport.json(books.values.toList(), list, { id ->
+                    fun pkgOf(id: String) =
                         if (File(store.dir(id), "book.json").isFile) runCatching { store.readPackage(id) }.getOrNull() else null
-                    }, { details[it] ?: BookDetails() })
+                    val pos = HashMap<String, Float>()
+                    list.groupBy { it.bookId }.forEach { (id, hs) -> pos.putAll(positions(store, id, pkgOf(id), hs)) }
+                    val text = HighlightExport.json(books.values.toList(), list, ::pkgOf, { details[it] ?: BookDetails() }, { pos[it.id] })
                     app.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: error("no stream")
                     list.size
                 }.getOrNull()
@@ -210,4 +213,27 @@ internal suspend fun loadDetails(
         finishedAt = book.finishedAt,
         progress = book.progress.takeIf { book.finishedAt == null && book.lastReadAt != null },
     )
+}
+
+/**
+ * Highlight id -> place in the whole book (0..1). The quote is looked up in its chapter file
+ * while the book's files are on the phone; otherwise the chapter's start stands in for it.
+ */
+internal fun positions(
+    store: BookStore,
+    bookId: String,
+    pkg: com.oasisreader.app.epub.EpubPackage?,
+    highlights: List<com.oasisreader.app.data.db.HighlightEntity>,
+): Map<String, Float> {
+    if (pkg == null || pkg.spine.isEmpty()) return emptyMap()
+    val texts = HashMap<Int, String?>()
+    return highlights.associate { h ->
+        val i = h.spineIndex.coerceIn(0, pkg.spine.size - 1)
+        val text = texts.getOrPut(i) {
+            runCatching { File(store.contentDir(bookId), pkg.spine[i].path).takeIf { it.isFile }?.readText() }
+                .getOrNull()?.let(HighlightExport::plainText)
+        }
+        val frac = text?.let { HighlightExport.fractionIn(it, h.text, h.anchor) } ?: 0f
+        h.id to pkg.overall(i, frac)
+    }
 }

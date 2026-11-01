@@ -77,6 +77,7 @@ object HighlightExport {
         highlights: List<HighlightEntity>,
         chapterOf: (Int) -> String,
         details: BookDetails = BookDetails(),
+        positionOf: (HighlightEntity) -> Float? = { null },
         now: Long = System.currentTimeMillis(),
         zone: TimeZone = TimeZone.getDefault(),
     ): String {
@@ -140,6 +141,7 @@ object HighlightExport {
             if (c.isNotEmpty()) chapter = c
             sb.append("\n")
             quoteLines(h.text).forEach { sb.append("> ").append(it).append("\n") }
+            positionOf(h)?.let { sb.append("\n*— ").append(percent(it)).append("*\n") }
             h.note?.trim()?.takeIf { it.isNotEmpty() }?.let { note ->
                 sb.append("\n").append(paragraph(note)).append("\n")
             }
@@ -160,6 +162,7 @@ object HighlightExport {
         highlights: List<HighlightEntity>,
         packageOf: (String) -> EpubPackage?,
         detailsOf: (String) -> BookDetails = { BookDetails() },
+        positionOf: (HighlightEntity) -> Float? = { null },
         now: Long = System.currentTimeMillis(),
         zone: TimeZone = TimeZone.getDefault(),
     ): String {
@@ -201,7 +204,7 @@ object HighlightExport {
                         }
                         putJsonArray("annotations") {
                             list.sortedWith(compareBy<HighlightEntity> { it.spineIndex }.thenBy { it.createdAt })
-                                .forEach { h -> add(annotation(h, bookId, pkg, ::t)) }
+                                .forEach { h -> add(annotation(h, bookId, pkg, positionOf(h), ::t)) }
                         }
                     }
                 }
@@ -212,7 +215,7 @@ object HighlightExport {
 
     private val pretty = Json { prettyPrint = true; prettyPrintIndent = "  " }
 
-    private fun annotation(h: HighlightEntity, bookId: String, pkg: EpubPackage?, t: (Long) -> String): JsonObject {
+    private fun annotation(h: HighlightEntity, bookId: String, pkg: EpubPackage?, position: Float?, t: (Long) -> String): JsonObject {
         val quote = h.text.trim()
         val note = h.note?.trim()?.takeIf { it.isNotEmpty() }
         return buildJsonObject {
@@ -239,6 +242,7 @@ object HighlightExport {
             }
             putJsonObject("ogreader") {
                 put("spineIndex", h.spineIndex)
+                position?.let { put("progression", Math.round(it * 1000) / 1000.0) }
                 chapterTitle(pkg, h.spineIndex).takeIf { it.isNotEmpty() }?.let { put("chapter", it) }
                 put("color", h.color)
                 h.anchor?.let { put("anchor", it) }
@@ -257,6 +261,41 @@ object HighlightExport {
     fun fileName(title: String, ext: String): String {
         val safe = title.replace(Regex("""[\\/:*?"<>|\n\r\t]"""), " ").replace(Regex("\\s+"), " ").trim().take(80)
         return "${safe.ifEmpty { "책" }} - 하이라이트.$ext"
+    }
+
+    /** 0.372 -> "37%" (never "0%" for a quote that is in the book). */
+    internal fun percent(p: Float): String = "${(p * 100).toInt().coerceIn(if (p > 0f) 1 else 0, 100)}%"
+
+    /** Visible text of a chapter file (body text only, tags dropped, common entities decoded). */
+    fun plainText(html: String): String = html
+        .replace(Regex("(?is)<head\\b.*?</head>|<script\\b.*?</script>|<style\\b.*?</style>"), " ")
+        .replace(Regex("<[^>]+>"), " ")
+        .replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+        .replace("&#39;", "'").replace("&apos;", "'").replace("&amp;", "&")
+
+    /**
+     * Where a quote sits inside its chapter (0..1), matching like the page script does:
+     * whitespace ignored, and when the quote occurs more than once the occurrence whose
+     * preceding text ends like the stored anchor wins. Null when it cannot be found.
+     */
+    fun fractionIn(chapterText: String, quote: String, anchor: String?): Float? {
+        val full = chapterText.filterNot { it.isWhitespace() }
+        val q = quote.filterNot { it.isWhitespace() }
+        if (q.isEmpty() || full.isEmpty()) return null
+        val tail = anchor?.filterNot { it.isWhitespace() }?.takeLast(20).orEmpty()
+        var at = -1
+        var first = -1
+        var from = 0
+        while (true) {
+            val p = full.indexOf(q, from)
+            if (p < 0) break
+            if (first < 0) first = p
+            if (tail.isEmpty() || full.substring(0, p + q.length).endsWith(tail)) { at = p; break }
+            from = p + 1
+        }
+        if (at < 0) at = first
+        if (at < 0) return null
+        return at.toFloat() / full.length
     }
 
     /** "약 6시간 20분" / "약 35분"; nothing under a minute. */
