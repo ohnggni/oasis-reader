@@ -58,6 +58,17 @@ data class HighlightEntity(
     val createdAt: Long,
 )
 
+/** A saved place in a book: chapter (or comic page) + fraction, with a few words from that page. */
+@Entity(tableName = "bookmarks", indices = [Index("bookId")])
+data class BookmarkEntity(
+    @PrimaryKey val id: String,
+    val bookId: String,
+    val spineIndex: Int,
+    val fraction: Float,
+    val snippet: String,
+    val createdAt: Long,
+)
+
 /** Active reading seconds per local day and book (running totals). */
 @Entity(tableName = "reading_time", primaryKeys = ["day", "bookId"])
 data class ReadingTimeEntity(
@@ -145,6 +156,21 @@ interface HighlightDao {
 }
 
 @Dao
+interface BookmarkDao {
+    @Query("SELECT * FROM bookmarks WHERE bookId = :bookId ORDER BY spineIndex, fraction")
+    fun observeFor(bookId: String): Flow<List<BookmarkEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(b: BookmarkEntity)
+
+    @Query("DELETE FROM bookmarks WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM bookmarks WHERE bookId = :bookId")
+    suspend fun deleteForBook(bookId: String)
+}
+
+@Dao
 interface ReadingTimeDao {
     @Query("SELECT * FROM reading_time WHERE day = :day AND bookId = :bookId")
     suspend fun get(day: String, bookId: String): ReadingTimeEntity?
@@ -163,14 +189,15 @@ interface ReadingTimeDao {
 }
 
 @Database(
-    entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class],
-    version = 4,
+    entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class],
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun books(): BookDao
     abstract fun highlights(): HighlightDao
     abstract fun readingTime(): ReadingTimeDao
+    abstract fun bookmarks(): BookmarkDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -178,7 +205,7 @@ abstract class AppDatabase : RoomDatabase() {
         // NOTE: once real data exists, schema changes need real Migrations — never a destructive fallback.
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "oasis.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build().also { instance = it }
         }
 
@@ -208,5 +235,13 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE books ADD COLUMN kosyncDoc TEXT")
+    }
+}
+
+/** v5: bookmarks. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `bookmarks` (`id` TEXT NOT NULL, `bookId` TEXT NOT NULL, `spineIndex` INTEGER NOT NULL, `fraction` REAL NOT NULL, `snippet` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookmarks_bookId` ON `bookmarks` (`bookId`)")
     }
 }

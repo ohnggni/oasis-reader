@@ -24,6 +24,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -327,6 +329,33 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
 
     // bookoasis progress sync: KOReader page numbers (1-based) — the web viewer uses them too
     val overlayAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
+    // bookmarks: a page each
+    val bookmarks by remember(book.id) { db.bookmarks().observeFor(book.id) }.collectAsState(initial = emptyList())
+    val hereMark = bookmarks.firstOrNull { it.spineIndex == curPage || it.spineIndex == lastPageShown }
+    var marksOpen by remember { mutableStateOf(false) }
+    fun toggleBookmark() {
+        val m = hereMark
+        if (m != null) {
+            scope.launch { db.bookmarks().delete(m.id) }
+            android.widget.Toast.makeText(context, "책갈피를 지웠습니다.", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            val pg = curPage
+            scope.launch {
+                db.bookmarks().insert(com.oasisreader.app.data.db.BookmarkEntity(
+                    id = System.currentTimeMillis().toString(36) + (Math.random() * 1e6).toLong().toString(36),
+                    bookId = book.id, spineIndex = pg, fraction = 0f, snippet = "${pg + 1}쪽", createdAt = System.currentTimeMillis(),
+                ))
+            }
+            android.widget.Toast.makeText(context, "책갈피를 저장했습니다.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    if (marksOpen) com.oasisreader.app.reader.BookmarksDialog(
+        list = bookmarks,
+        where = { b -> "${b.spineIndex + 1} / $pageCount" },
+        onPick = { b -> marksOpen = false; panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = b.spineIndex; curFrac = 0f; lastPageShown = b.spineIndex; viewKey++ },
+        onDelete = { b -> scope.launch { db.bookmarks().delete(b.id) } },
+        onDismiss = { marksOpen = false },
+    )
     var remote by remember { mutableStateOf<com.oasisreader.app.data.KoSync.Remote?>(null) }
     fun remotePage(r: com.oasisreader.app.data.KoSync.Remote): Int? =
         (r.pageNumber?.minus(1) ?: r.percentage?.let { (it * pageCount).toInt() - 1 })
@@ -740,6 +769,9 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
+                        IconButton(onClick = { toggleBookmark() }, modifier = Modifier.size(40.dp)) {
+                            com.oasisreader.app.reader.BookmarkGlyph(filled = hereMark != null, color = if (hereMark != null) MaterialTheme.colorScheme.primary else chrome, width = 13.dp)
+                        }
                         // [ ☀️ 화면 | ▣ 보기 | ⇆ 넘김 | ☰ 이동 ]
                         Box(Modifier.padding(end = 10.dp)) {
                             com.oasisreader.app.reader.PillGroup(MaterialTheme.colorScheme.background) {
@@ -803,6 +835,7 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                                     )
                                 }
                                 com.oasisreader.app.ui.ReadPanel.NAV -> {
+                                    com.oasisreader.app.ui.PanelAction("🔖", "책갈피 (${bookmarks.size})") { marksOpen = true }
                                     com.oasisreader.app.ui.PanelAction("⏮️", "처음부터") { panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = 0; curFrac = 0f; viewKey++ }
                                     com.oasisreader.app.ui.PanelAction(if (finished) "↩️" else "✅", if (finished) "다 읽음 취소" else "다 읽음으로 표시") {
                                         finished = !finished

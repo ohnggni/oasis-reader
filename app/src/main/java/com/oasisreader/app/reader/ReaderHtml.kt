@@ -22,6 +22,8 @@ data class ReaderConfig(
     val fontFamily: String,          // CSS font-family stack
     val highlights: List<PageHighlight>,
     val focus: String? = null,       // highlight id to open at
+    val find: String? = null,        // search: mark and open at the findNth-th match of this text
+    val findNth: Int = 0,
     val animate: Boolean = true,     // slide when turning pages
     val spread: Boolean = false,     // two facing pages (fold open, hinge vertical)
     val weight: Int = 0,             // 0 normal / 1 slightly bolder / 2 bolder
@@ -143,7 +145,8 @@ html.dark #content * { background-image: none !important; }
   border: 0; margin: 1em auto; background: #000 !important;
 }
 #content mark.hl { color: inherit !important; border-radius: 2px; padding: 0 1px; }
-#content mark.hl.flash { animation: hlflash 1.1s ease-in-out 2; }
+#content mark.hl.flash, #content mark.find.flash { animation: hlflash 1.1s ease-in-out 2; }
+#content mark.find { color: inherit !important; border-radius: 2px; padding: 0 1px; }
 @keyframes hlflash { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 4px var(--accent); } }
 #content .brk { word-break: break-all !important; }
 /* text weight: thicken glyph outlines, so single-weight fonts (e.g. Gowun Dodum) work too */
@@ -568,6 +571,17 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     },
     goFraction: function (f) { layout(f); },
     goAnchor: function (id) { anchorId = id; if (!goAnchor()) report(); },
+    /* a few words from the top of the page on screen (bookmark label) */
+    pageText: function () {
+      try {
+        var r = document.caretRangeFromPoint(padL + 6, padTop + 14);
+        var start = r && content.contains(r.startContainer) ? r.startContainer : null;
+        var w = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null), n, out = '';
+        if (start) { w.currentNode = start; out = (start.nodeType === 3 ? start.nodeValue.slice(r.startOffset) : ''); }
+        while (out.replace(/\s+/g, ' ').trim().length < 70 && (n = w.nextNode())) out += n.nodeValue;
+        return out.replace(/\s+/g, ' ').trim().slice(0, 70);
+      } catch (e) { return ''; }
+    },
     removeHighlight: function (id) { var f = fraction(); removeHighlight(id); if (paged) layout(f); }
   };
 
@@ -702,6 +716,32 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 
   /* existing highlights, first layout, re-layout as images and fonts load */
   CFG.highlights.forEach(applyHighlight);
+  /* opened from search: mark the match, open at it (like a highlight from the list), clear it later */
+  if (CFG.find) (function markFind() {
+    var idx = textIndex();
+    var F = collapse(idx.full), low = F.s.toLowerCase();
+    var q = collapse(CFG.find).s.trim().toLowerCase();
+    if (!q) return;
+    var at = -1, from = 0;
+    for (var n = 0; n <= CFG.findNth; n++) { at = low.indexOf(q, from); if (at < 0) break; from = at + 1; }
+    if (at < 0) at = low.indexOf(q);
+    if (at < 0) return;
+    wrapRange(idx, F.map[at], F.map[at + q.length - 1] + 1, '__find', '#ffca28');
+    var marks = content.querySelectorAll('mark[data-hl="__find"]');
+    for (var i = 0; i < marks.length; i++) marks[i].className = 'find';
+    focusId = '__find';
+    setTimeout(function () {
+      var f = fraction();
+      var ms = content.querySelectorAll('mark[data-hl="__find"]');
+      for (var j = 0; j < ms.length; j++) {
+        var m = ms[j], par = m.parentNode;
+        while (m.firstChild) par.insertBefore(m.firstChild, m);
+        par.removeChild(m); par.normalize();
+      }
+      if (focusId === '__find') focusId = null;
+      if (paged) layout(f);
+    }, 8000);
+  })();
   layout(CFG.start);
   for (var j = 0; j < imgs.length; j++) {
     if (!imgs[j].complete) imgs[j].addEventListener('load', function () { layout(); });

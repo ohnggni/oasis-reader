@@ -141,6 +141,8 @@ private data class Target(
     val start: Float,
     val anchor: String? = null,
     val focus: String? = null,
+    val find: String? = null,
+    val findNth: Int = 0,
     val token: Long = System.nanoTime(),
 )
 
@@ -188,6 +190,7 @@ private fun ReaderBody(
 
     var barsVisible by remember { mutableStateOf(true) }
     var pageLabel by remember { mutableStateOf("") }
+    var pageTotal by remember { mutableIntStateOf(0) }
     var fontPx by remember { mutableIntStateOf(prefs.fontPx) }
     var lineHeight by remember { mutableIntStateOf(prefs.lineHeight) }
     var mode by remember { mutableStateOf(prefs.mode) }
@@ -360,6 +363,8 @@ private fun ReaderBody(
                     fontFamily = font.cssStack(),
                     highlights = hls,
                     focus = t.focus,
+                    find = t.find,
+                    findNth = t.findNth,
                     animate = turnStyle != com.oasisreader.app.ui.TurnStyle.NONE,
                     spread = spread,
                     weight = weight,
@@ -506,6 +511,57 @@ private fun ReaderBody(
         Toast.makeText(context, "이 책은 다시 기본 설정을 따릅니다.", Toast.LENGTH_SHORT).show()
     }
 
+    // ── search & bookmarks ──
+    val findState = remember { FindState() }
+    var findOpen by remember { mutableStateOf(false) }
+    var marksOpen by remember { mutableStateOf(false) }
+    val bookmarks by remember(bookId) { db.bookmarks().observeFor(bookId) }.collectAsState(initial = emptyList())
+    val hereMark = bookmarks.firstOrNull {
+        bookmarkHere(it, curIndex, curFraction, if (mode == ReaderMode.PAGE) pageTotal else null)
+    }
+    fun toggleBookmark() {
+        val m = hereMark
+        if (m != null) {
+            scope.launch { db.bookmarks().delete(m.id) }
+            Toast.makeText(context, "책갈피를 지웠습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val idx = curIndex; val f = curFraction
+        fun save(snippet: String) {
+            scope.launch {
+                db.bookmarks().insert(com.oasisreader.app.data.db.BookmarkEntity(
+                    id = System.currentTimeMillis().toString(36) + (Math.random() * 1e6).toLong().toString(36),
+                    bookId = bookId, spineIndex = idx, fraction = f, snippet = snippet, createdAt = System.currentTimeMillis(),
+                ))
+            }
+            Toast.makeText(context, "책갈피를 저장했습니다.", Toast.LENGTH_SHORT).show()
+        }
+        val wv = webView
+        if (wv == null) save("") else wv.evaluateJavascript("window.Reader && Reader.pageText()") { r ->
+            save(runCatching { org.json.JSONTokener(r).nextValue() as? String }.getOrNull().orEmpty())
+        }
+    }
+    if (findOpen) pkg?.let { pp ->
+        FindDialog(
+            state = findState, store = store, bookId = bookId, pkg = pp,
+            onPick = { h, q -> findOpen = false; panel = Panel.NONE; target = Target(h.spineIndex, h.fraction, find = q, findNth = h.nth) },
+            onDismiss = { findOpen = false },
+        )
+    }
+    if (marksOpen) BookmarksDialog(
+        list = bookmarks,
+        where = { b ->
+            val pp = pkg
+            if (pp == null) "" else listOfNotNull(
+                chapterTitleFor(pp, b.spineIndex).ifBlank { null },
+                "${(pp.overall(b.spineIndex, b.fraction) * 100).roundToInt()}%",
+            ).joinToString(" · ")
+        },
+        onPick = { b -> marksOpen = false; panel = Panel.NONE; goChapter(b.spineIndex, b.fraction) },
+        onDelete = { b -> scope.launch { db.bookmarks().delete(b.id) } },
+        onDismiss = { marksOpen = false },
+    )
+
     var exportOpen by remember { mutableStateOf(false) }
     if (exportOpen) com.oasisreader.app.ui.HighlightExportDialog(bookId) { exportOpen = false }
 
@@ -640,7 +696,7 @@ private fun ReaderBody(
                         page = s as? LoadState.Ready,
                         onCreated = { webView = it },
                         onPage = { cur, total ->
-                            pageLabel = "$cur / $total"; lastActive = System.currentTimeMillis()
+                            pageLabel = "$cur / $total"; pageTotal = total; lastActive = System.currentTimeMillis()
                             if (turnHold && state is LoadState.Ready) scope.launch {
                                 // the new chapter has laid out: let it paint, then turn
                                 androidx.compose.runtime.withFrameNanos { }
@@ -787,6 +843,9 @@ private fun ReaderBody(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f).padding(end = 8.dp),
                             )
+                            IconButton(onClick = { toggleBookmark() }, modifier = Modifier.size(40.dp)) {
+                                BookmarkGlyph(filled = hereMark != null, color = if (hereMark != null) MaterialTheme.colorScheme.primary else chrome, width = 13.dp)
+                            }
                             // [ ☀️ 화면 | 가 글자 | ▤ 쪽 | ☰ 이동 ]: each opens its panel under the bar
                             PillGroup(paper) {
                                 PillSegment(selected = panel == Panel.SCREEN, onClick = { panel = panel.toggle(Panel.SCREEN) }) {
@@ -894,6 +953,8 @@ private fun ReaderBody(
                                         }
                                         Panel.NAV -> {
                                             if (p != null) com.oasisreader.app.ui.PanelAction("📑", "목차") { panel = Panel.NONE; tocOpen = true }
+                                            if (p != null) com.oasisreader.app.ui.PanelAction("🔍", "본문 검색") { findOpen = true }
+                                            com.oasisreader.app.ui.PanelAction("🔖", "책갈피 (${bookmarks.size})") { marksOpen = true }
                                             com.oasisreader.app.ui.PanelAction("🖍️", "이 책의 하이라이트") { panel = Panel.NONE; hlListOpen = true }
                                             com.oasisreader.app.ui.PanelAction("📝", "하이라이트 내보내기") { panel = Panel.NONE; exportOpen = true }
                                             val finished = book?.finishedAt != null
@@ -912,6 +973,12 @@ private fun ReaderBody(
                     }
                 }
             }
+
+            // this page is bookmarked: a small ribbon in the top corner
+            if (hereMark != null && state is LoadState.Ready && !showBars) BookmarkGlyph(
+                filled = true, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), width = 11.dp,
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 18.dp + sidePad),
+            )
 
             // page indicator — book mode: "3 / 34 · 12%", scroll mode: "12%"
             if (state is LoadState.Ready || turnShot != null) {

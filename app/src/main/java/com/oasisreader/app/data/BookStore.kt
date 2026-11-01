@@ -217,6 +217,7 @@ class BookStore(private val context: Context) {
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         db.highlights().deleteForBook(id)
+        db.bookmarks().deleteForBook(id)
         db.books().delete(id)
         synchronized(packageCache) { packageCache.remove(id) }
         synchronized(comicCache) { comicCache.remove(id) }
