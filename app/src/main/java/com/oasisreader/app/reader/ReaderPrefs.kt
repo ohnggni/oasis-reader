@@ -153,6 +153,12 @@ class ReaderPrefs(context: Context, private val bookId: String? = null) {
     }
 
     /** Forget this book's own settings: it follows the defaults again. */
+    /** Every book goes back to the defaults (their own settings are dropped). */
+    fun resetAllBooks() = book.edit().clear().apply()
+
+    /** How many books have settings of their own. */
+    val booksWithOwn: Int get() = book.all.keys.map { it.substringBefore(':') }.toSet().size
+
     fun resetBook() {
         if (bookId == null) return
         val e = book.edit()

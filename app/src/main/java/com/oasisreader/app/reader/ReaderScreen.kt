@@ -866,7 +866,7 @@ private fun ReaderBody(
                                                     webView?.evaluateJavascript("Reader.setLineHeight(${lh / 10f})", null)
                                                 },
                                             )
-                                            com.oasisreader.app.ui.PanelSwitch("출판사 스타일 (책의 글꼴·정렬)", null, publisherStyle, {
+                                            com.oasisreader.app.ui.PanelSwitch("책 디자인 사용 (제목·문단 모양)", null, publisherStyle, {
                                                 publisherStyle = it; prefs.publisherStyle = it; reloadHere()
                                             })
                                             com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
@@ -1415,7 +1415,7 @@ internal fun BrightnessPanel(value: Float, onChange: (Float) -> Unit) {
 }
 
 @Composable
-private fun SizePanel(
+internal fun SizePanel(
     weight: Int, onWeight: (Int) -> Unit,
     value: Int, onChange: (Int) -> Unit,
     lineHeight: Int, onLineHeight: (Int) -> Unit,
@@ -1445,7 +1445,7 @@ private fun SizePanel(
 }
 
 @Composable
-private fun FontPanel(
+internal fun FontPanel(
     fonts: FontManager,
     selectedId: String,
     busyId: String?,
@@ -1488,7 +1488,7 @@ private fun FontPanel(
 
 /** Page margins: pick a side, then one slim slider for it (relative to the default; 0 = as before). */
 @Composable
-private fun MarginPanel(top: Int, bottom: Int, left: Int, right: Int, onChange: (Int, Int, Int, Int) -> Unit) {
+internal fun MarginPanel(top: Int, bottom: Int, left: Int, right: Int, onChange: (Int, Int, Int, Int) -> Unit) {
     var side by remember { mutableIntStateOf(0) }
     val sides = listOf("위", "아래", "왼쪽", "오른쪽")
     val v = listOf(top, bottom, left, right)[side]
@@ -1516,7 +1516,7 @@ private fun MarginPanel(top: Int, bottom: Int, left: Int, right: Int, onChange: 
 
 /** Page colour swatches in one short line: tap to choose; the half/half one ("자동") follows light/dark. */
 @Composable
-private fun ThemeRow(current: ReaderTheme, onPick: (ReaderTheme) -> Unit) {
+internal fun ThemeRow(current: ReaderTheme, onPick: (ReaderTheme) -> Unit) {
     com.oasisreader.app.ui.PanelRow("배경") {
         Row(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()),

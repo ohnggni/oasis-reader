@@ -93,6 +93,7 @@ private object Route {
     const val SERVER = "server:"         // server:<id> to edit, "server:" to add
     const val STATS = "stats"
     const val SETTINGS = "settings"
+    const val READING_DEFAULTS = "reading_defaults"
     const val HIGHLIGHTS = "highlights"
     const val READER = "reader:"
     const val DOC = "doc:"               // doc:<asset name without .md>
@@ -192,7 +193,9 @@ private fun App() {
             onBack = { route = Route.LIBRARY },
             onServer = { route = Route.SERVERS },
             onDoc = { id -> route = Route.DOC + id },
+            onReadingDefaults = { route = Route.READING_DEFAULTS },
         )
+        route == Route.READING_DEFAULTS -> com.oasisreader.app.reader.ReadingDefaultsScreen(onBack = { route = Route.SETTINGS })
         route.startsWith(Route.DOC) -> {
             val id = route.removePrefix(Route.DOC)
             com.oasisreader.app.ui.DocScreen(

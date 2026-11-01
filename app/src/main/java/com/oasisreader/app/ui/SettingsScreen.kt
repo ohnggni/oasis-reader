@@ -42,7 +42,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> Unit = {}, onReadingDefaults: () -> Unit = {}) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val app = context.applicationContext
@@ -98,6 +98,9 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             Item("🌓", "테마: ${tm.label(tm.mode)}", "시스템 따라가기 → 라이트 → 다크 (누를 때마다 바뀝니다)", enabled = true) {
                 tm.set(app, tm.ALL[(tm.ALL.indexOf(tm.mode) + 1) % tm.ALL.size])
             }
+
+            Section("읽기")
+            Item("📖", "읽기 기본값", "글꼴·크기·여백·배경·넘김 등 새 책이 시작할 설정. 책 안에서 바꾸면 그 책에만 남습니다", enabled = true) { onReadingDefaults() }
 
             Section("북오아시스 진행 동기화")
             var kosyncOpen by remember { mutableStateOf(false) }
