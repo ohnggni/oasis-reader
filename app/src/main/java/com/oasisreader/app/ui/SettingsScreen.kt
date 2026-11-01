@@ -99,6 +99,13 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 tm.set(app, tm.ALL[(tm.ALL.indexOf(tm.mode) + 1) % tm.ALL.size])
             }
 
+            Section("북오아시스 진행 동기화")
+            var kosyncOpen by remember { mutableStateOf(false) }
+            var kosyncRev by remember { mutableStateOf(0) }
+            val kosyncSub = remember(kosyncRev) { kosyncSummary(app) }
+            Item("☁️", "읽은 위치 동기화", kosyncSub, enabled = true) { kosyncOpen = true }
+            if (kosyncOpen) KosyncDialog { kosyncOpen = false; kosyncRev++ }
+
             Section("리모컨 · 키보드")
             var volumeKeys by remember { mutableStateOf(PageKeys.volumeKeys(app)) }
             Item("🔊", "볼륨 버튼으로 쪽 넘기기: ${if (volumeKeys) "켜짐" else "꺼짐"}",

@@ -118,6 +118,8 @@ private fun App() {
     LaunchedEffect(Unit) {
         // "[만화] 1"-style titles from earlier downloads: rename them from oasis-meta (once per start)
         runCatching { store.trimCache(com.oasisreader.app.data.CachePrefs(app).limitBytes) }
+        // books added before progress sync existed: give them their KOReader document id
+        runCatching { com.oasisreader.app.data.KoSync.backfillDocs(app) }
         val n = runCatching { com.oasisreader.app.meta.TitleFixer.run(app) }.getOrDefault(0)
         if (n > 0) Toast.makeText(context, "제목 ${n}개를 정리했습니다", Toast.LENGTH_SHORT).show()
     }

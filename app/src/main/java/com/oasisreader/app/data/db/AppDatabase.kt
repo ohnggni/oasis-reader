@@ -42,6 +42,8 @@ data class BookEntity(
     // false = opened with "바로 읽기": the file may be dropped when the cache is full
     // (position, highlights and the cover stay; it is fetched again on open)
     @ColumnInfo(defaultValue = "1") val pinned: Boolean = true,
+    // KOReader document id (partial MD5 of the original file) for bookoasis progress sync
+    val kosyncDoc: String? = null,
 )
 
 @Entity(tableName = "highlights", indices = [Index("bookId")])
@@ -89,6 +91,12 @@ interface BookDao {
 
     @Query("UPDATE books SET pinned = :pinned WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
+
+    @Query("UPDATE books SET kosyncDoc = :doc WHERE id = :id")
+    suspend fun setKosyncDoc(id: String, doc: String?)
+
+    @Query("SELECT * FROM books WHERE kosyncDoc IS NULL")
+    suspend fun withoutKosyncDoc(): List<BookEntity>
 
     @Query("UPDATE books SET title = :title WHERE id = :id")
     suspend fun rename(id: String, title: String)
@@ -156,7 +164,7 @@ interface ReadingTimeDao {
 
 @Database(
     entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -170,7 +178,7 @@ abstract class AppDatabase : RoomDatabase() {
         // NOTE: once real data exists, schema changes need real Migrations — never a destructive fallback.
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "oasis.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build().also { instance = it }
         }
 
@@ -193,5 +201,12 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE books ADD COLUMN pinned INTEGER NOT NULL DEFAULT 1")
+    }
+}
+
+/** v4: KOReader document id for bookoasis progress sync (filled in from each book's original file). */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE books ADD COLUMN kosyncDoc TEXT")
     }
 }

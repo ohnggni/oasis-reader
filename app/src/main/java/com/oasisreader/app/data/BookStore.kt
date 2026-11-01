@@ -180,6 +180,7 @@ class BookStore(private val context: Context) {
                 hasCover = d.hasCover,
                 format = format,
                 pinned = pinned,
+                kosyncDoc = runCatching { KoSync.partialMd5(kept) }.getOrNull(),
             )
             db.books().insert(book)
             book
@@ -208,7 +209,10 @@ class BookStore(private val context: Context) {
         if (!tmp.renameTo(contentDir(id))) throw IOException("책을 저장하지 못했습니다")
         synchronized(packageCache) { packageCache.remove(id) }
         synchronized(comicCache) { comicCache.remove(id) }
-        book?.let { db.books().insert(it.copy(hasCover = described.hasCover, fileBytes = source.length(), format = format)) }
+        book?.let {
+            val doc = it.kosyncDoc ?: runCatching { KoSync.partialMd5(source) }.getOrNull()
+            db.books().insert(it.copy(hasCover = described.hasCover, fileBytes = source.length(), format = format, kosyncDoc = doc))
+        }
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
