@@ -82,7 +82,7 @@ object HighlightExport {
     ): String {
         val day = SimpleDateFormat("yyyy.M.d", Locale.KOREA).apply { timeZone = zone }
         fun d(t: Long) = day.format(Date(t))
-        fun ymd(v: String) = v.split('-').let { p -> if (p.size == 3) "${p[0]}.${p[1].toInt()}.${p[2].toInt()}" else ymd }
+        fun ymd(v: String): String = v.split('-').let { p -> if (p.size == 3) "${p[0]}.${p[1].toInt()}.${p[2].toInt()}" else v }
 
         val list = highlights.sortedWith(compareBy<HighlightEntity> { it.spineIndex }.thenBy { it.createdAt })
         val sb = StringBuilder()
