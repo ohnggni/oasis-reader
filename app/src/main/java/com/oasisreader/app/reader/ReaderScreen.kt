@@ -49,6 +49,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -395,6 +396,18 @@ private fun ReaderBody(
 
     fun reloadHere() { target = Target(curIndex, curFraction) }
 
+    fun setMode(m: ReaderMode) {
+        if (m == mode) return
+        mode = m; prefs.mode = m
+        pageLabel = ""   // the page reports again in the new mode
+        webView?.evaluateJavascript("Reader.setMode('${if (m == ReaderMode.PAGE) "page" else "scroll"}')", null)
+    }
+
+    fun saveAsDefaults() {
+        prefs.saveAsDefaults()
+        Toast.makeText(context, "이 책의 글꼴·크기·여백·배경·넘김 설정을 기본값으로 저장했습니다.", Toast.LENGTH_SHORT).show()
+    }
+
     fun goChapter(index: Int, start: Float = 0f, anchor: String? = null) {
         val p = pkg ?: return
         if (index !in p.spine.indices) return
@@ -478,6 +491,21 @@ private fun ReaderBody(
             }
         }
     }
+
+    fun resetBookSettings() {
+        prefs.resetBook()
+        fontPx = prefs.fontPx; lineHeight = prefs.lineHeight; mode = prefs.mode
+        weight = prefs.weight; fontId = prefs.fontId; publisherStyle = prefs.publisherStyle
+        turnStyle = prefs.turnStyle; turnSpeed = prefs.turnSpeed
+        mTop = prefs.marginTop; mBottom = prefs.marginBottom; mLeft = prefs.marginLeft; mRight = prefs.marginRight
+        onTheme(prefs.theme)
+        prefs.resetBook()   // onTheme wrote the theme back for this book
+        reloadHere()
+        Toast.makeText(context, "이 책은 다시 기본 설정을 따릅니다.", Toast.LENGTH_SHORT).show()
+    }
+
+    var exportOpen by remember { mutableStateOf(false) }
+    if (exportOpen) com.oasisreader.app.ui.HighlightExportDialog(bookId) { exportOpen = false }
 
     // bookoasis progress sync: offer another device's newer place, upload ours
     // the page picture fades out (instead of vanishing) when a curl is let go and the page stays
@@ -757,129 +785,22 @@ private fun ReaderBody(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f).padding(end = 8.dp),
                             )
-                            // [ ☀️ | 가 | ✒️ | ⋮ ]: panels under the bar + the overflow menu
-                            Box {
-                                PillGroup(paper) {
-                                    PillSegment(selected = panel == Panel.BRIGHTNESS, onClick = { panel = panel.toggle(Panel.BRIGHTNESS) }) {
-                                        Text("☀️", fontSize = 14.sp)
-                                    }
-                                    PillDivider()
-                                    PillSegment(selected = panel == Panel.SIZE, onClick = { panel = panel.toggle(Panel.SIZE) }) {
-                                        Text("가", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-                                    PillDivider()
-                                    PillSegment(selected = panel == Panel.FONT, onClick = { panel = panel.toggle(Panel.FONT) }) {
-                                        Text("✒️", fontSize = 14.sp)
-                                    }
-                                    PillDivider()
-                                    PillSegment(selected = menuOpen, onClick = { panel = Panel.NONE; menuOpen = true }) {
-                                        Icon(Icons.Filled.MoreVert, contentDescription = "메뉴", modifier = Modifier.size(18.dp))
-                                    }
+                            // [ ☀️ 화면 | 가 글자 | ▤ 쪽 | ☰ 이동 ]: each opens its panel under the bar
+                            PillGroup(paper) {
+                                PillSegment(selected = panel == Panel.SCREEN, onClick = { panel = panel.toggle(Panel.SCREEN) }) {
+                                    Text("☀️", fontSize = 14.sp)
                                 }
-                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji("📑") },
-                                        text = { Text("목차") },
-                                        enabled = p != null,
-                                        onClick = { menuOpen = false; tocOpen = true },
-                                    )
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji("🖍️") },
-                                        text = { Text("이 책의 하이라이트") },
-                                        onClick = { menuOpen = false; hlListOpen = true },
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji(if (mode == ReaderMode.PAGE) "📜" else "📖") },
-                                        text = { Text(if (mode == ReaderMode.PAGE) "스크롤로 보기" else "책처럼 넘겨 보기") },
-                                        onClick = {
-                                            menuOpen = false
-                                            mode = if (mode == ReaderMode.PAGE) ReaderMode.SCROLL else ReaderMode.PAGE
-                                            prefs.mode = mode
-                                            pageLabel = ""   // the page reports again in the new mode
-                                            webView?.evaluateJavascript(
-                                                "Reader.setMode('${if (mode == ReaderMode.PAGE) "page" else "scroll"}')", null
-                                            )
-                                        },
-                                    )
-                                    if (mode == ReaderMode.PAGE) {
-                                        DropdownMenuItem(
-                                            leadingIcon = { MenuEmoji("🎞️") },
-                                            text = { Text("넘김 효과 (${turnStyle.label})") },
-                                            onClick = { menuOpen = false; turnPicker = true },
-                                        )
-                                    }
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji("🎨") },
-                                        text = { Text(if (publisherStyle) "책 스타일 끄기" else "책 스타일 켜기") },
-                                        onClick = {
-                                            menuOpen = false
-                                            publisherStyle = !publisherStyle
-                                            prefs.publisherStyle = publisherStyle
-                                            reloadHere()
-                                        },
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji("⭐") },
-                                        text = { Text("이 책 설정을 기본값으로") },
-                                        onClick = {
-                                            menuOpen = false
-                                            prefs.saveAsDefaults()
-                                            Toast.makeText(context, "이 책의 글꼴·크기·여백·배경·넘김 설정을 기본값으로 저장했습니다.", Toast.LENGTH_SHORT).show()
-                                        },
-                                    )
-                                    if (prefs.hasOwn) DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji("↩️") },
-                                        text = { Text("이 책 설정 초기화") },
-                                        onClick = {
-                                            menuOpen = false
-                                            prefs.resetBook()
-                                            fontPx = prefs.fontPx; lineHeight = prefs.lineHeight; mode = prefs.mode
-                                            weight = prefs.weight; fontId = prefs.fontId; publisherStyle = prefs.publisherStyle
-                                            turnStyle = prefs.turnStyle; turnSpeed = prefs.turnSpeed
-                                            mTop = prefs.marginTop; mBottom = prefs.marginBottom; mLeft = prefs.marginLeft; mRight = prefs.marginRight
-                                            onTheme(prefs.theme)
-                                            prefs.resetBook()   // onTheme wrote the theme back for this book
-                                            reloadHere()
-                                            Toast.makeText(context, "이 책은 다시 기본 설정을 따릅니다.", Toast.LENGTH_SHORT).show()
-                                        },
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji(if (keepOn) "🔆" else "💡") },
-                                        text = { Text(if (keepOn) "화면 켜짐 유지 끄기" else "화면 켜짐 유지 켜기") },
-                                        onClick = {
-                                            menuOpen = false
-                                            keepOn = !keepOn; prefs.keepScreenOn = keepOn
-                                            Toast.makeText(
-                                                context,
-                                                if (keepOn) "읽는 동안 화면이 꺼지지 않습니다 (10분 동안 넘기지 않으면 해제)" else "화면 꺼짐은 시스템 설정을 따릅니다",
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji(if (autoHide) "📌" else "🫥") },
-                                        text = { Text(if (autoHide) "상단바 고정" else "상단바 자동 숨기기") },
-                                        onClick = {
-                                            menuOpen = false
-                                            autoHide = !autoHide; prefs.autoHideBars = autoHide
-                                            barsShownAt = System.currentTimeMillis()
-                                        },
-                                    )
-                                    HorizontalDivider()
-                                    val finished = book?.finishedAt != null
-                                    DropdownMenuItem(
-                                        leadingIcon = { MenuEmoji(if (finished) "↩️" else "✅") },
-                                        text = { Text(if (finished) "다 읽음 취소" else "다 읽음으로 표시") },
-                                        onClick = {
-                                            menuOpen = false
-                                            val at = if (finished) null else System.currentTimeMillis()
-                                            book = book?.copy(finishedAt = at)
-                                            scope.launch { db.books().setFinished(bookId, at) }
-                                        },
-                                    )
+                                PillDivider()
+                                PillSegment(selected = panel == Panel.TEXT, onClick = { panel = panel.toggle(Panel.TEXT) }) {
+                                    Text("가", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                PillDivider()
+                                PillSegment(selected = panel == Panel.PAGE, onClick = { panel = panel.toggle(Panel.PAGE) }) {
+                                    Text("▤", fontSize = 16.sp)
+                                }
+                                PillDivider()
+                                PillSegment(selected = panel == Panel.NAV, onClick = { panel = panel.toggle(Panel.NAV) }) {
+                                    Text("☰", fontSize = 15.sp)
                                 }
                             }
                         }
@@ -890,61 +811,96 @@ private fun ReaderBody(
                             exit = shrinkVertically() + fadeOut(),
                         ) {
                             Column {
-                                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.62f).dp)
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
                                     when (panel) {
-                                        Panel.BRIGHTNESS -> {
-                                            BrightnessPanel(
-                                                value = brightness,
-                                                onChange = { brightness = it; prefs.brightness = it },
-                                            )
+                                        Panel.SCREEN -> {
+                                            BrightnessPanel(value = brightness, onChange = { brightness = it; prefs.brightness = it })
                                             ThemeRow(theme, onTheme)
+                                            com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", "읽는 동안 화면이 꺼지지 않습니다 (10분 동안 넘기지 않으면 해제)", keepOn) {
+                                                keepOn = it; prefs.keepScreenOn = it
+                                            }
+                                            com.oasisreader.app.ui.PanelSwitch("상단바 자동 숨김", "2초 뒤에 상단바를 숨깁니다", autoHide) {
+                                                autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
+                                            }
                                         }
-                                        Panel.SIZE -> SizePanel(
-                                            weight = weight,
-                                            onWeight = { w ->
-                                                weight = w; prefs.weight = w
-                                                webView?.evaluateJavascript("Reader.setWeight($w)", null)
-                                            },
-                                            value = fontPx,
-                                            onChange = { v ->
-                                                if (v != fontPx) {
-                                                    fontPx = v; prefs.fontPx = v
-                                                    webView?.evaluateJavascript("Reader.setFont($v)", null)
-                                                }
-                                            },
-                                            lineHeight = lineHeight,
-                                            onLineHeight = { lh ->
-                                                lineHeight = lh; prefs.lineHeight = lh
-                                                webView?.evaluateJavascript("Reader.setLineHeight(${lh / 10f})", null)
-                                            },
-                                        )
-                                        else -> {}
-                                    }
-                                    if (panel == Panel.SIZE) {
-                                        MarginPanel(
-                                            top = mTop, bottom = mBottom, left = mLeft, right = mRight,
-                                            onChange = { t, b, l, r ->
-                                                mTop = t; mBottom = b; mLeft = l; mRight = r
-                                                prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
-                                            },
-                                        )
-                                    }
-                                    when (panel) {
-                                        Panel.FONT -> FontPanel(
-                                            fonts = fonts,
-                                            selectedId = fontId,
-                                            busyId = fontBusy,
-                                            progress = fontProgress,
-                                            onPick = { f -> pickFont(f) },
-                                            onAdd = {
-                                                fontFilePicker.launch(arrayOf("font/ttf", "font/otf", "font/woff", "font/woff2", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
-                                            },
-                                            onRemove = { f ->
-                                                fonts.removeCustom(f)
-                                                applyFont(FontManager.byId(null))
-                                                Toast.makeText(context, "「${f.label}」 글꼴을 삭제했습니다.", Toast.LENGTH_SHORT).show()
-                                            },
-                                        )
+                                        Panel.TEXT -> {
+                                            FontPanel(
+                                                fonts = fonts,
+                                                selectedId = fontId,
+                                                busyId = fontBusy,
+                                                progress = fontProgress,
+                                                onPick = { f -> pickFont(f) },
+                                                onAdd = {
+                                                    fontFilePicker.launch(arrayOf("font/ttf", "font/otf", "font/woff", "font/woff2", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
+                                                },
+                                                onRemove = { f ->
+                                                    fonts.removeCustom(f)
+                                                    applyFont(FontManager.byId(null))
+                                                    Toast.makeText(context, "「${f.label}」 글꼴을 삭제했습니다.", Toast.LENGTH_SHORT).show()
+                                                },
+                                            )
+                                            SizePanel(
+                                                weight = weight,
+                                                onWeight = { w ->
+                                                    weight = w; prefs.weight = w
+                                                    webView?.evaluateJavascript("Reader.setWeight($w)", null)
+                                                },
+                                                value = fontPx,
+                                                onChange = { v ->
+                                                    if (v != fontPx) {
+                                                        fontPx = v; prefs.fontPx = v
+                                                        webView?.evaluateJavascript("Reader.setFont($v)", null)
+                                                    }
+                                                },
+                                                lineHeight = lineHeight,
+                                                onLineHeight = { lh ->
+                                                    lineHeight = lh; prefs.lineHeight = lh
+                                                    webView?.evaluateJavascript("Reader.setLineHeight(${lh / 10f})", null)
+                                                },
+                                            )
+                                            com.oasisreader.app.ui.PanelSwitch("출판사 스타일", "책에 들어 있는 글꼴·정렬·여백을 따릅니다", publisherStyle) {
+                                                publisherStyle = it; prefs.publisherStyle = it; reloadHere()
+                                            }
+                                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
+                                        }
+                                        Panel.PAGE -> {
+                                            com.oasisreader.app.ui.PanelChoice("보기 방식", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) { i ->
+                                                setMode(if (i == 0) ReaderMode.PAGE else ReaderMode.SCROLL)
+                                            }
+                                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
+                                                current = turnStyle, speed = turnSpeed,
+                                                onPick = { st ->
+                                                    turnStyle = st; prefs.turnStyle = st
+                                                    webView?.evaluateJavascript("Reader.setTurn('${st.id}')", null)
+                                                },
+                                                onSpeed = { sp -> turnSpeed = sp; prefs.turnSpeed = sp },
+                                            )
+                                            MarginPanel(
+                                                top = mTop, bottom = mBottom, left = mLeft, right = mRight,
+                                                onChange = { t, b, l, r ->
+                                                    mTop = t; mBottom = b; mLeft = l; mRight = r
+                                                    prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
+                                                },
+                                            )
+                                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
+                                        }
+                                        Panel.NAV -> {
+                                            if (p != null) com.oasisreader.app.ui.PanelAction("📑", "목차") { panel = Panel.NONE; tocOpen = true }
+                                            com.oasisreader.app.ui.PanelAction("🖍️", "이 책의 하이라이트") { panel = Panel.NONE; hlListOpen = true }
+                                            com.oasisreader.app.ui.PanelAction("📝", "하이라이트 내보내기") { panel = Panel.NONE; exportOpen = true }
+                                            val finished = book?.finishedAt != null
+                                            com.oasisreader.app.ui.PanelAction(if (finished) "↩️" else "✅", if (finished) "다 읽음 취소" else "다 읽음으로 표시") {
+                                                val at = if (finished) null else System.currentTimeMillis()
+                                                book = book?.copy(finishedAt = at)
+                                                scope.launch { db.books().setFinished(bookId, at) }
+                                            }
+                                        }
                                         else -> {}
                                     }
                                 }
@@ -1427,7 +1383,7 @@ private fun rememberSpread(): Boolean {
 }
 
 private enum class Panel {
-    NONE, BRIGHTNESS, SIZE, FONT;
+    NONE, SCREEN, TEXT, PAGE, NAV;
     fun toggle(p: Panel) = if (this == p) NONE else p
 }
 

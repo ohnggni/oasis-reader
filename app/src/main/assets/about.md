@@ -16,6 +16,6 @@
 
 ## 저작권
 
-© 2026 ohnggni. All rights reserved.
+© 2026 JSLee. All rights reserved.
 
 이 앱은 있는 그대로 제공되며, 사용으로 생긴 데이터 손실이나 서버 문제에 대해 개발자는 책임을 지지 않습니다.
