@@ -478,6 +478,13 @@ private fun ReaderBody(
         }
     }
 
+    // page-turner remotes / keyboards: the same turn as a tap on the page edge
+    com.oasisreader.app.ui.PageTurnKeys(enabled = state is LoadState.Ready) { dir, _ ->
+        lastActive = System.currentTimeMillis()
+        if (panel != Panel.NONE) panel = Panel.NONE
+        webView?.evaluateJavascript(if (dir > 0) "Reader.next()" else "Reader.prev()", null)
+    }
+
     BackHandler {
         when {
             panel != Panel.NONE -> panel = Panel.NONE
@@ -920,6 +927,22 @@ private fun ReaderBody(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
                 )
             }
+
+            // with the top bar: a bottom bar whose thin slider spans the whole book
+            if (p != null) AnimatedVisibility(
+                visible = showBars && state is LoadState.Ready,
+                enter = fadeIn(), exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                ReaderSeekBar(
+                    pkg = p, overall = overall, barColor = barColor, chrome = chrome,
+                    onDrag = { barsShownAt = System.currentTimeMillis(); lastActive = System.currentTimeMillis() },
+                    onSeek = { v ->
+                        val (i, f) = seekTarget(p, v)
+                        goChapter(i, f)
+                    },
+                )
+            }
         }
     }
 
@@ -964,6 +987,74 @@ private fun ReaderBody(
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("취소") } },
         )
+    }
+}
+
+/** Whole-book fraction -> (spine index, fraction inside that chapter), by character counts. */
+internal fun seekTarget(p: EpubPackage, v: Float): Pair<Int, Float> {
+    if (p.spine.isEmpty()) return 0 to 0f
+    val target = v.coerceIn(0f, 1f) * p.totalChars
+    var before = 0L
+    p.spine.forEachIndexed { i, s ->
+        val n = s.chars.coerceAtLeast(1)
+        if (target < before + n || i == p.spine.lastIndex) return i to ((target - before) / n).toFloat().coerceIn(0f, 1f)
+        before += n
+    }
+    return p.spine.lastIndex to 1f
+}
+
+/** Bottom bar: chapter title and % of the place under the thumb, over a thin whole-book slider. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ReaderSeekBar(
+    pkg: EpubPackage,
+    overall: Float,
+    barColor: Color,
+    chrome: Color,
+    onDrag: () -> Unit,
+    onSeek: (Float) -> Unit,
+) {
+    var drag by remember { mutableStateOf<Float?>(null) }
+    // keep showing where we jumped to until the book reports its new place
+    LaunchedEffect(overall) { drag = null }
+    val v = drag ?: overall
+    val chapter = remember(pkg, v) { chapterTitleFor(pkg, seekTarget(pkg, v).first) }
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.navigationBarsPadding().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    chapter.ifEmpty { " " },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = chrome,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("${(v * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = chrome)
+            }
+            Slider(
+                value = v,
+                onValueChange = { drag = it; onDrag() },
+                onValueChangeFinished = { drag?.let(onSeek) },
+                thumb = {
+                    Box(Modifier.size(14.dp).background(accent, androidx.compose.foundation.shape.CircleShape))
+                },
+                track = { st ->
+                    androidx.compose.material3.SliderDefaults.Track(
+                        sliderState = st,
+                        modifier = Modifier.height(3.dp),
+                        colors = androidx.compose.material3.SliderDefaults.colors(
+                            activeTrackColor = accent,
+                            inactiveTrackColor = chrome.copy(alpha = 0.25f),
+                        ),
+                        drawStopIndicator = null,
+                        thumbTrackGapSize = 0.dp,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth().height(28.dp),
+            )
+        }
     }
 }
 

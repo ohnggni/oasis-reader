@@ -99,6 +99,14 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 tm.set(app, tm.ALL[(tm.ALL.indexOf(tm.mode) + 1) % tm.ALL.size])
             }
 
+            Section("리모컨 · 키보드")
+            var volumeKeys by remember { mutableStateOf(PageKeys.volumeKeys(app)) }
+            Item("🔊", "볼륨 버튼으로 쪽 넘기기: ${if (volumeKeys) "켜짐" else "꺼짐"}",
+                "켜면 책을 보는 동안 볼륨 − 는 다음 쪽, + 는 이전 쪽. 블루투스 페이지 리모컨의 ←/→·Page Up/Down·Space 는 늘 쪽을 넘깁니다", enabled = true) {
+                volumeKeys = !volumeKeys
+                PageKeys.setVolumeKeys(app, volumeKeys)
+            }
+
             Section("바로 읽기 (임시 보관)")
             val cachePrefs = remember { com.oasisreader.app.data.CachePrefs(app) }
             var limit by remember { mutableStateOf(cachePrefs.limitMb) }

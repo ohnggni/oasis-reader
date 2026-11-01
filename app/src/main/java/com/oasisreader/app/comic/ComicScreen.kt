@@ -449,6 +449,13 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                             }
                         }
                     }
+                    // page-turner remotes / keyboards; ←/→ follow the screen in a right-to-left book
+                    com.oasisreader.app.ui.PageTurnKeys { dir, horizontal ->
+                        if (zoom > 1.01f) return@PageTurnKeys
+                        lastActive = System.currentTimeMillis()
+                        val d = if (horizontal && rtl) -dir else dir
+                        turnTo(pager.currentPage + d)
+                    }
                     HorizontalPager(
                         state = pager,
                         reverseLayout = rtl,
@@ -641,6 +648,10 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                     val viewW = if (narrow) minOf(maxWidth, 600.dp) else maxWidth
                     val targetPx = with(density) { viewW.roundToPx() }
                     val viewportH = hPx.toFloat()
+                    com.oasisreader.app.ui.PageTurnKeys { dir, _ ->
+                        lastActive = System.currentTimeMillis()
+                        scope.launch { listState.animateScrollBy(dir * viewportH * 0.85f) }
+                    }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier

@@ -60,6 +60,10 @@ import com.oasisreader.app.ui.theme.OasisTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    /** Page-turner remotes / keyboards / volume keys reach the open book before any view does. */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        com.oasisreader.app.ui.PageKeys.dispatch(this, event) || super.dispatchKeyEvent(event)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
