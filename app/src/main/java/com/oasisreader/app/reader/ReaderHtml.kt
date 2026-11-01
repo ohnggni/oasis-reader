@@ -196,6 +196,10 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 #hlbar button {
   width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bg); padding: 0;
 }
+#hlbar button.look {
+  width: auto; border-radius: 14px; padding: 0 10px; margin-left: 4px;
+  background: var(--bg); color: var(--fg); font: 600 13px/24px sans-serif; border: 0;
+}
 </style>
 </head>
 <body>
@@ -220,7 +224,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   var page = 0, total = 1, cols = 1;
   var padTop = CFG.padTop, padBottom = CFG.padBottom;
   var noop = function () {};
-  var bridge = window.Oasis || { page: noop, progress: noop, tap: noop, addHighlight: noop, tapHighlight: noop, openImage: noop, edge: noop, link: noop, turn: noop };
+  var bridge = window.Oasis || { page: noop, progress: noop, tap: noop, addHighlight: noop, tapHighlight: noop, openImage: noop, edge: noop, link: noop, turn: noop, lookup: noop };
   var dark = html.classList.contains('dark');
 
   html.style.setProperty('--fs', CFG.fontPx + 'px');
@@ -469,6 +473,22 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     btn.addEventListener('click', function (e) { e.preventDefault(); createFromSelection(c); });
     bar.appendChild(btn);
   });
+  /* look the selection up in a dictionary / translator (the app shows the choices) */
+  (function () {
+    var btn = document.createElement('button');
+    btn.className = 'look';
+    btn.textContent = '찾아보기';
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var s = currentSelection();
+      if (!s) return;
+      var t = s.text.trim();
+      window.getSelection().removeAllRanges();
+      bar.style.display = 'none';
+      if (bridge.lookup) bridge.lookup(t);
+    });
+    bar.appendChild(btn);
+  })();
   bar.style.display = 'none';
 
   function currentSelection() {
@@ -477,7 +497,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     var r = sel.getRangeAt(0);
     if (!content.contains(r.commonAncestorContainer)) return null;
     var text = sel.toString();
-    if (text.trim().length < 2) return null;
+    if (text.trim().length < 1) return null;
     return { range: r, text: text };
   }
 
@@ -502,6 +522,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     pre.setEnd(s.range.endContainer, s.range.endOffset);
     var anchor = pre.toString().slice(-50);
     var id = String(Date.now());
+    if (s.text.trim().length < 2) return;
     var h = { id: id, text: s.text.trim(), color: color, anchor: anchor };
     window.getSelection().removeAllRanges();
     bar.style.display = 'none';

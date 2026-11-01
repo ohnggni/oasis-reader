@@ -562,6 +562,9 @@ private fun ReaderBody(
         onDismiss = { marksOpen = false },
     )
 
+    var lookupText by remember { mutableStateOf<String?>(null) }
+    lookupText?.let { t -> com.oasisreader.app.ui.LookupDialog(t) { lookupText = null } }
+
     var exportOpen by remember { mutableStateOf(false) }
     if (exportOpen) com.oasisreader.app.ui.HighlightExportDialog(bookId) { exportOpen = false }
 
@@ -722,6 +725,7 @@ private fun ReaderBody(
                             }
                         },
                         onTapHighlight = { id -> deleteTarget = id },
+                        onLookup = { t -> lookupText = t },
                         onOpenImage = { src -> imageFile(src)?.let { viewerFile = it } },
                         onEdge = { dir, tapY ->
                             lastActive = System.currentTimeMillis()
@@ -1272,6 +1276,7 @@ private fun ReaderWebView(
     onTapCenter: () -> Unit,
     onAddHighlight: (String, String, String, String) -> Unit,
     onTapHighlight: (String) -> Unit,
+    onLookup: (String) -> Unit,
     onOpenImage: (String) -> Unit,
     onEdge: (Int, Float) -> Unit,
     onLink: (String) -> Unit,
@@ -1297,6 +1302,7 @@ private fun ReaderWebView(
     callbacks.onTap = onTapCenter
     callbacks.onAdd = onAddHighlight
     callbacks.onTapHl = onTapHighlight
+    callbacks.onLookup = onLookup
     callbacks.onImage = onOpenImage
     callbacks.onEdge = onEdge
     callbacks.onLink = onLink
@@ -1346,6 +1352,7 @@ private class Callbacks {
     var onTap: () -> Unit = {}
     var onAdd: (String, String, String, String) -> Unit = { _, _, _, _ -> }
     var onTapHl: (String) -> Unit = {}
+    var onLookup: (String) -> Unit = {}
     var onImage: (String) -> Unit = {}
     var onEdge: (Int, Float) -> Unit = { _, _ -> }
     var onLink: (String) -> Unit = {}
@@ -1365,6 +1372,7 @@ private class JsBridge(private val main: Handler, private val cb: Callbacks) {
     @JavascriptInterface fun openImage(src: String) { main.post { cb.onImage(src) } }
     @JavascriptInterface fun edge(dir: Int, y: Float) { main.post { cb.onEdge(dir, if (y.isNaN()) 0.5f else y) } }
     @JavascriptInterface fun link(url: String) { main.post { cb.onLink(url) } }
+    @JavascriptInterface fun lookup(text: String) { main.post { cb.onLookup(text) } }
     @JavascriptInterface fun turn(dir: Int, y: Float) { main.post { cb.onTurn(dir > 0, y) } }
     @JavascriptInterface fun dragStart(dir: Int, yFrac: Float, w: Float) { main.post { cb.onDrag(0, w, yFrac, dir.toFloat()) } }
     @JavascriptInterface fun dragMove(x: Float, y: Float) { main.post { cb.onDrag(1, x, y, 0f) } }
