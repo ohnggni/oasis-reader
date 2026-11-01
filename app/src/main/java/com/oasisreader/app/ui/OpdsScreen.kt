@@ -181,6 +181,8 @@ fun OpdsScreen(
         }
 
         rootSearch?.let { sf ->
+            val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+            val focus = androidx.compose.ui.platform.LocalFocusManager.current
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -188,6 +190,7 @@ fun OpdsScreen(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
+                    keyboard?.hide(); focus.clearFocus()
                     val q = query.trim()
                     if (q.isNotEmpty()) scope.launch {
                         val u = runCatching { client.searchUrl(sf, q) }.getOrNull()

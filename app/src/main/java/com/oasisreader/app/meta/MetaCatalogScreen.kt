@@ -108,6 +108,11 @@ fun MetaCatalogScreen(
     var query by remember { mutableStateOf("") }
     var activeQuery by remember { mutableStateOf("") }
     var searchBooks by remember { mutableStateOf(false) }   // search volumes instead of series
+    // series view: tiles (size adjustable) or a list, remembered per phone
+    var seriesList by remember { mutableStateOf(prefs.getBoolean("series_list", false)) }
+    var seriesTile by remember { mutableIntStateOf(prefs.getInt("series_tile", SERIES_TILE_DEFAULT).let { v -> SERIES_TILE_STEPS.minBy { kotlin.math.abs(it - v) } }) }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var openSeries by remember { mutableStateOf<MetaSeries?>(null) }
     var openBook by remember { mutableStateOf<MetaBook?>(null) }   // detail sheet over the list
     var reload by remember { mutableIntStateOf(0) }
@@ -226,7 +231,11 @@ fun MetaCatalogScreen(
             placeholder = { Text("시리즈·제목·저자 검색") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { activeQuery = query.trim() }),
+            keyboardActions = KeyboardActions(onSearch = {
+                activeQuery = query.trim()
+                // results take the screen: put the keyboard away
+                keyboard?.hide(); focus.clearFocus()
+            }),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         )
         Row(
@@ -269,6 +278,35 @@ fun MetaCatalogScreen(
                 Spacer(Modifier.width(8.dp))
             }
             if (!(activeQuery.isNotBlank() && searchBooks)) {
+                androidx.compose.material3.AssistChip(
+                    onClick = { seriesList = !seriesList; prefs.edit().putBoolean("series_list", seriesList).apply() },
+                    label = { Text(if (seriesList) "☰ 목록" else "▦ 타일") },
+                )
+                if (!seriesList) {
+                    var sizeOpen by remember { mutableStateOf(false) }
+                    Box {
+                        androidx.compose.material3.AssistChip(onClick = { sizeOpen = true }, label = { Text("⤢ 크기") })
+                        androidx.compose.material3.DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
+                            Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                Text("타일 크기", style = MaterialTheme.typography.labelLarge)
+                                androidx.compose.material3.Slider(
+                                    value = SERIES_TILE_STEPS.indexOf(seriesTile).toFloat(),
+                                    onValueChange = {
+                                        seriesTile = SERIES_TILE_STEPS[Math.round(it).coerceIn(0, SERIES_TILE_STEPS.size - 1)]
+                                        prefs.edit().putInt("series_tile", seriesTile).apply()
+                                    },
+                                    valueRange = 0f..(SERIES_TILE_STEPS.size - 1).toFloat(),
+                                    steps = SERIES_TILE_STEPS.size - 2,
+                                )
+                                Row {
+                                    Text("작게", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(Modifier.weight(1f))
+                                    Text("크게", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
                 SeriesSort.entries.forEach { o ->
                     FilterChip(
                         selected = sort == o,
@@ -301,11 +339,33 @@ fun MetaCatalogScreen(
                 }
                 item { MoreFooter(loading, hasMore, empty = bookItems.isEmpty()) { scope.launch { loadPage(page + 1) } } }
             }
+            seriesList -> LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
+                items(seriesItems.size, key = { i -> seriesItems[i].libraryId.toString() + "|" + seriesItems[i].seriesName }) { i ->
+                    val s = seriesItems[i]
+                    Row(
+                        Modifier.fillMaxWidth().clickable { openSeries = s }.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MetaCover(api, opds, s.coverUrl, s.firstBookId, s.seriesName, modifier = Modifier.width(48.dp).height(70.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(s.seriesName, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                listOfNotNull("${s.bookCount}권", metaDate(s.latestMtime)).joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                item { MoreFooter(loading, hasMore, empty = seriesItems.isEmpty()) { scope.launch { loadPage(page + 1) } } }
+            }
             else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(112.dp),
+                columns = GridCells.Adaptive(seriesTile.dp),
                 contentPadding = PaddingValues(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (seriesTile < 100) 8.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(if (seriesTile < 100) 12.dp else 16.dp),
                 modifier = Modifier.fillMaxSize().navigationBarsPadding(),
             ) {
                 items(seriesItems.size, key = { i -> seriesItems[i].libraryId.toString() + "|" + seriesItems[i].seriesName }) { i ->
@@ -605,3 +665,6 @@ private fun Summary(api: MetaApi, id: Long) {
         }
     }
 }
+
+private val SERIES_TILE_STEPS = listOf(80, 96, 112, 130, 150, 176)
+private const val SERIES_TILE_DEFAULT = 112

@@ -74,7 +74,7 @@ fun EmojiButton(emoji: String, label: String, onClick: () -> Unit) {
 }
 
 /**
- * App header: the OG mark and the "Book / Reader" wordmark, both vector drawings
+ * App header: the "OG" letters and the "Book / Reader" wordmark, both vector drawings
  * (a script font's tall line box left big gaps between the two lines).
  */
 @Composable
@@ -86,9 +86,9 @@ private fun BrandMark(modifier: Modifier = Modifier) {
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_og),
             contentDescription = null,
-            modifier = Modifier.size(50.dp),
+            modifier = Modifier.size(width = 77.dp, height = 48.dp),
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(12.dp))
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_wordmark),
             contentDescription = null,
