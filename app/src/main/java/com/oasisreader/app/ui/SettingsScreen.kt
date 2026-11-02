@@ -101,6 +101,9 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
 
             Section("읽기")
             Item("📖", "읽기 기본값", "글꼴·크기·여백·배경·넘김 등 새 책이 시작할 설정. 책 안에서 바꾸면 그 책에만 남습니다", enabled = true) { onReadingDefaults() }
+            var lookupEdit by remember { mutableStateOf(false) }
+            Item("🔍", "찾아보기 앱", "글자를 골라 찾아볼 때 나오는 번역·사전 앱의 표시와 순서", enabled = true) { lookupEdit = true }
+            if (lookupEdit) LookupSettingsDialog { lookupEdit = false }
 
             Section("북오아시스 진행 동기화")
             var kosyncOpen by remember { mutableStateOf(false) }

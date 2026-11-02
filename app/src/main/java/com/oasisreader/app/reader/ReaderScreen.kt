@@ -1313,7 +1313,7 @@ private fun ReaderWebView(
     AndroidView(
         modifier = Modifier.fillMaxSize().padding(horizontal = sidePad),
         factory = { ctx ->
-            WebView(ctx).apply {
+            QuietWebView(ctx).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
                 settings.allowFileAccess = false

@@ -196,6 +196,18 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 #hlbar button {
   width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bg); padding: 0;
 }
+/* footnote popup */
+#notepop {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 12; display: none;
+  max-height: 46vh; overflow: auto; padding: 14px 20px 10px;
+  background: var(--bg); color: var(--fg); border-top: 1px solid var(--rule);
+  box-shadow: 0 -6px 18px rgba(0,0,0,.18); border-radius: 14px 14px 0 0;
+  font-size: calc(var(--fs) * 0.88); line-height: 1.6; text-align: left;
+}
+#notepop .nbody p { margin: 0 0 .5em; }
+#notepop .nbody img { max-width: 100%; height: auto; }
+#notepop .nbar { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+#notepop .nbar button { background: none; border: 0; color: var(--accent); font: 600 14px/32px sans-serif; padding: 0 10px; }
 #hlbar button.look {
   width: auto; border-radius: 14px; padding: 0 10px; margin-left: 4px;
   background: var(--bg); color: var(--fg); font: 600 13px/24px sans-serif; border: 0;
@@ -208,6 +220,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   <div id="chapnav"><button id="cprev">◀ 이전 장</button><button id="cnext">다음 장 ▶</button></div>
 </div>
 <div id="hlbar"></div>
+<div id="notepop"><div class="nbody"></div><div class="nbar"><button id="ngo">본문에서 보기</button><button id="nclose">닫기</button></div></div>
 <div id="rhead"></div>
 <script>
 (function () {
@@ -607,17 +620,79 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   };
 
   /* links: same-chapter anchors jump here, everything else goes to the app */
-  document.addEventListener('click', function (e) {
-    var a = e.target.closest && e.target.closest('a[href]');
-    if (!a || !content.contains(a)) return;
-    e.preventDefault();
-    var abs = a.href || '';
+  function followLink(abs) {
     var hash = abs.indexOf('#') >= 0 ? abs.slice(abs.indexOf('#') + 1) : '';
     if (abs.split('#')[0] === CFG.docUrl.split('#')[0]) {
       if (hash) window.Reader.goAnchor(decodeURIComponent(hash));
       return;
     }
     bridge.link(abs);
+  }
+
+  /* ── footnotes: a note reference opens a popup instead of jumping away ── */
+  var pop = document.getElementById('notepop'), popBody = pop.querySelector('.nbody'), popHref = null;
+  function popOpen() { return pop.style.display === 'block'; }
+  function closePop() { pop.style.display = 'none'; popHref = null; }
+  document.getElementById('nclose').addEventListener('click', function (e) { e.preventDefault(); closePop(); });
+  document.getElementById('ngo').addEventListener('click', function (e) {
+    e.preventDefault(); var h = popHref; closePop(); if (h) followLink(h);
+  });
+  function typeOf(el) { return ((el.getAttribute('epub:type') || '') + ' ' + (el.getAttribute('role') || '')).toLowerCase(); }
+  function isNoteRef(a) {
+    if (/noteref/.test(typeOf(a))) return true;
+    var href = a.getAttribute('href') || '';
+    if (href.indexOf('#') < 0) return false;
+    var txt = (a.textContent || '').trim();
+    if ((a.closest('sup') || a.querySelector('sup')) && txt.length <= 6) return true;
+    return /^[\[\(（〔]?(\d{1,3}|[a-z]|[*†‡§¶]+|주\s?\d{0,3})[\]\)）〕]?$/i.test(txt);
+  }
+  /* the text of a note: the element with that id, or the paragraph / list item around an empty anchor */
+  function noteHtml(doc, id) {
+    var el = doc.getElementById(id) || doc.getElementsByName(id)[0];
+    if (!el) return null;
+    var box = el;
+    var blocks = 'aside, li, p, dd, div, section, blockquote, td';
+    if (!el.matches(blocks) || (el.textContent || '').trim().length < 2) box = el.closest(blocks) || el.parentNode || el;
+    if ((box.textContent || '').trim().length < 2) return null;
+    var c = box.cloneNode(true);
+    c.querySelectorAll('script, style').forEach(function (x) { x.remove(); });
+    c.querySelectorAll('a').forEach(function (x) {
+      var t = typeOf(x), s = (x.textContent || '').trim();
+      if (/backlink/.test(t) || /^[↩↑⤴︎]/.test(s) || /^(돌아가기|back)$/i.test(s)) x.remove();
+      else x.removeAttribute('href');
+    });
+    c.querySelectorAll('[id]').forEach(function (x) { x.removeAttribute('id'); });
+    return c.innerHTML.trim();
+  }
+  function showNote(html, href) {
+    popBody.innerHTML = html; popHref = href;
+    pop.style.display = 'block'; pop.scrollTop = 0;
+  }
+  function tryNote(a, abs) {
+    var hash = abs.indexOf('#') >= 0 ? decodeURIComponent(abs.slice(abs.indexOf('#') + 1)) : '';
+    if (!hash) return false;
+    if (abs.split('#')[0] === CFG.docUrl.split('#')[0]) {
+      var h = noteHtml(document, hash);
+      if (!h) return false;
+      showNote(h, abs); return true;
+    }
+    /* a note in another file of the book: read it without leaving the page */
+    fetch(abs.split('#')[0]).then(function (r) { return r.text(); }).then(function (t) {
+      var d = new DOMParser().parseFromString(t, 'text/html');
+      var h = noteHtml(d, hash);
+      if (h) showNote(h, abs); else followLink(abs);
+    }).catch(function () { followLink(abs); });
+    return true;
+  }
+
+  document.addEventListener('click', function (e) {
+    if (popOpen() && pop.contains(e.target)) return;
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || !content.contains(a)) return;
+    e.preventDefault();
+    var abs = a.href || '';
+    if (isNoteRef(a) && tryNote(a, abs)) return;
+    followLink(abs);
   }, true);
 
   /* taps and swipes */
@@ -650,6 +725,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   document.addEventListener('touchmove', function (e) {
     var m = e.touches[0];
     if (Math.abs(m.clientX - sx) > 10 || Math.abs(m.clientY - sy) > 10) clearTimeout(pressTimer);
+    if (popOpen()) return;
     if (!paged || turn !== 'curl' || !window.Oasis || !window.Oasis.dragStart) return;
     var t = e.touches[0];
     var dx = t.clientX - sx, dy = t.clientY - sy;
@@ -669,6 +745,10 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     var t = e.changedTouches[0];
     clearTimeout(pressTimer);
     if (pressOpened) { pressOpened = false; return; }   /* the long press already opened the picture */
+    if (popOpen()) {
+      if (!pop.contains(e.target) && dragTurn === null) closePop();
+      if (dragTurn === null) return;
+    }
     if (dragTurn !== null) {
       dragTurn = null;
       window.Oasis.dragEnd(t.clientX - sx, (t.clientX - sx) / Math.max(1, Date.now() - st));
