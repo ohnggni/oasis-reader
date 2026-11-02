@@ -9,6 +9,14 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -94,6 +102,20 @@ object Lookup {
             }
         val (naverLabel, naver) = naverUrl(text).let { if (text.isBlank()) "네이버 사전 (글자에 맞춰 국어·영어·일본어·중국어)" to it.second else it }
         out += Target("web:naver", naverLabel, null, "📖") { ctx, _ -> ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(naver)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        // web search in a browser the user likes (its own search engine), when installed
+        for ((key, label, pkg) in listOf(
+            Triple("web:chrome", "Chrome에서 검색", "com.android.chrome"),
+            Triple("web:samsung", "삼성 인터넷에서 검색", "com.sec.android.app.sbrowser"),
+        )) {
+            if (pm.getLaunchIntentForPackage(pkg) == null) continue
+            val icon = runCatching { pm.getApplicationIcon(pkg).toBitmap(72, 72).asImageBitmap() }.getOrNull()
+            out += Target(key, label, icon, "🔎") { ctx, t -> searchIn(ctx, pkg, t) }
+        }
+        out += Target("web:search", "웹 검색 (기본 앱)", null, "🔎") { ctx, t ->
+            val i = Intent(Intent.ACTION_WEB_SEARCH).putExtra(android.app.SearchManager.QUERY, t.trim()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (i.resolveActivity(ctx.packageManager) != null) ctx.startActivity(i)
+            else ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + enc(t))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
         out += Target("web:wiki", "위키백과", null, "🌐") { ctx, t ->
             ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ko.wikipedia.org/w/index.php?search=" + enc(t))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
@@ -102,6 +124,16 @@ object Lookup {
             Toast.makeText(ctx, "복사했습니다.", Toast.LENGTH_SHORT).show()
         }
         return arrange(c, out, includeHidden)
+    }
+
+    /** Search with that browser's own engine; a Google results page if it takes no search intents. */
+    private fun searchIn(ctx: Context, pkg: String, t: String) {
+        val search = Intent(Intent.ACTION_WEB_SEARCH).setPackage(pkg)
+            .putExtra(android.app.SearchManager.QUERY, t.trim()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (search.resolveActivity(ctx.packageManager) != null) { ctx.startActivity(search); return }
+        ctx.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + enc(t))).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 
     // ---- order / shown (설정 › 찾아보기 앱) ----
@@ -206,19 +238,13 @@ fun LookupSettingsDialog(onDismiss: () -> Unit) {
     var lastFirst by remember { mutableStateOf(Lookup.lastFirst(context)) }
     val byKey = remember { all.associateBy { it.key } }
     fun save() = Lookup.save(context, order, hidden, lastFirst)
-    fun move(i: Int, d: Int) {
-        val j = i + d
-        if (j !in order.indices) return
-        order = order.toMutableList().also { val x = it[i]; it[i] = it[j]; it[j] = x }
-        save()
-    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("찾아보기 앱") },
         text = {
             Column {
                 Text(
-                    "보여 줄 것을 켜고, ▲▼로 순서를 정합니다. 폰에 새로 깐 번역·사전 앱은 맨 아래에 붙습니다.",
+                    "보여 줄 것을 켜고, 오른쪽 ≡를 끌어서 순서를 정합니다. 폰에 새로 깐 번역·사전 앱은 맨 아래에 붙습니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -227,23 +253,54 @@ fun LookupSettingsDialog(onDismiss: () -> Unit) {
                     Switch(checked = lastFirst, onCheckedChange = { lastFirst = it; save() }, modifier = Modifier.scale(0.8f))
                 }
                 HorizontalDivider(thickness = 0.5.dp)
-                LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                    itemsIndexed(order, key = { _, k -> k }) { i, key ->
-                        val t = byKey[key] ?: return@itemsIndexed
-                        val shown = key !in hidden
-                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = shown, onCheckedChange = {
-                                hidden = if (it) hidden - key else hidden + key; save()
-                            })
-                            TargetIcon(t)
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                t.label, style = MaterialTheme.typography.bodyMedium,
-                                color = if (shown) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                            )
-                            TextButton(enabled = i > 0, onClick = { move(i, -1) }, contentPadding = PaddingValues(0.dp), modifier = Modifier.width(36.dp)) { Text("▲") }
-                            TextButton(enabled = i < order.size - 1, onClick = { move(i, 1) }, contentPadding = PaddingValues(0.dp), modifier = Modifier.width(36.dp)) { Text("▼") }
+                // drag the ≡ handle to reorder
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val rowPx = with(density) { 48.dp.toPx() }
+                var dragKey by remember { mutableStateOf<String?>(null) }
+                var dragOffset by remember { mutableStateOf(0f) }
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    order.forEach { key ->
+                        androidx.compose.runtime.key(key) {
+                            val t = byKey[key] ?: return@key
+                            val shown = key !in hidden
+                            val dragging = dragKey == key
+                            Row(
+                                Modifier.fillMaxWidth().height(48.dp)
+                                    .zIndex(if (dragging) 1f else 0f)
+                                    .offset { androidx.compose.ui.unit.IntOffset(0, if (dragging) dragOffset.toInt() else 0) }
+                                    .then(if (dragging) Modifier.shadow(6.dp, RoundedCornerShape(8.dp)).background(AlertDialogDefaults.containerColor, RoundedCornerShape(8.dp)) else Modifier),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = shown, onCheckedChange = {
+                                    hidden = if (it) hidden - key else hidden + key; save()
+                                })
+                                TargetIcon(t)
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    t.label, style = MaterialTheme.typography.bodyMedium,
+                                    color = if (shown) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                                )
+                                Box(
+                                    Modifier.size(44.dp).pointerInput(key) {
+                                        detectDragGestures(
+                                            onDragStart = { dragKey = key; dragOffset = 0f },
+                                            onDragEnd = { dragKey = null; dragOffset = 0f; save() },
+                                            onDragCancel = { dragKey = null; dragOffset = 0f; save() },
+                                        ) { change, amount ->
+                                            change.consume()
+                                            dragOffset += amount.y
+                                            val i = order.indexOf(key)
+                                            if (dragOffset > rowPx / 2 && i < order.size - 1) {
+                                                order = order.toMutableList().also { it.removeAt(i); it.add(i + 1, key) }; dragOffset -= rowPx
+                                            } else if (dragOffset < -rowPx / 2 && i > 0) {
+                                                order = order.toMutableList().also { it.removeAt(i); it.add(i - 1, key) }; dragOffset += rowPx
+                                            }
+                                        }
+                                    },
+                                    contentAlignment = Alignment.Center,
+                                ) { Text("≡", fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
                         }
                     }
                 }

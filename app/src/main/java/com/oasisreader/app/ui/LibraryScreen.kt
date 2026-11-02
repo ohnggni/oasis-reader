@@ -215,13 +215,21 @@ fun LibraryScreen(
                     }
                 }
             }
-            ShelfFilter.entries.forEach { f ->
-                val n = books.count { f.matches(it) }
-                FilterChip(
-                    selected = filter == f,
-                    onClick = { filterName = f.name },
-                    label = { Text("${f.label} $n") },
+            // 전체 / 읽는 중 / 안 읽음 / 다 읽음 — one drop-down
+            var filterOpen by remember { mutableStateOf(false) }
+            Box {
+                androidx.compose.material3.AssistChip(
+                    onClick = { filterOpen = true },
+                    label = { Text("${filter.label} ${books.count { filter.matches(it) }} ▾") },
                 )
+                androidx.compose.material3.DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
+                    ShelfFilter.entries.forEach { f ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text((if (f == filter) "✓ " else "    ") + "${f.label} ${books.count { f.matches(it) }}") },
+                            onClick = { filterOpen = false; filterName = f.name },
+                        )
+                    }
+                }
             }
         }
 

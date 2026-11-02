@@ -198,13 +198,20 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 }
 /* footnote popup */
 #notepop {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 12; display: none;
-  max-height: 46vh; overflow: auto; padding: 14px 20px 10px;
-  background: var(--bg); color: var(--fg); border-top: 1px solid var(--rule);
-  box-shadow: 0 -6px 18px rgba(0,0,0,.18); border-radius: 14px 14px 0 0;
+  position: fixed; left: 12px; right: 12px; bottom: 72px; z-index: 12; display: none;
+  max-height: 52vh; overflow: auto; padding: 14px 18px 8px;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--rule);
+  box-shadow: 0 6px 24px rgba(0,0,0,.28); border-radius: 14px;
   font-size: calc(var(--fs) * 0.88); line-height: 1.6; text-align: left;
 }
-#notepop .nbody p { margin: 0 0 .5em; }
+/* the book's own CSS often hides or shrinks note elements: undo that inside the popup */
+#notepop .nbody, #notepop .nbody * {
+  display: revert !important; visibility: visible !important; position: static !important;
+  font-size: inherit !important; color: inherit !important; opacity: 1 !important;
+  height: auto !important; max-height: none !important; overflow: visible !important;
+  float: none !important; margin-left: 0 !important; text-indent: 0 !important;
+}
+#notepop .nbody p { margin: 0 0 .5em !important; }
 #notepop .nbody img { max-width: 100%; height: auto; }
 #notepop .nbar { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 #notepop .nbar button { background: none; border: 0; color: var(--accent); font: 600 14px/32px sans-serif; padding: 0 10px; }
@@ -661,11 +668,14 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
       if (/backlink/.test(t) || /^[↩↑⤴︎]/.test(s) || /^(돌아가기|back)$/i.test(s)) x.remove();
       else x.removeAttribute('href');
     });
-    c.querySelectorAll('[id]').forEach(function (x) { x.removeAttribute('id'); });
+    c.querySelectorAll('[id], [class], [style]').forEach(function (x) {
+      x.removeAttribute('id'); x.removeAttribute('class'); x.removeAttribute('style');
+    });
     return c.innerHTML.trim();
   }
   function showNote(html, href) {
     popBody.innerHTML = html; popHref = href;
+    pop.style.bottom = Math.max(72, padBottom + 24) + 'px';
     pop.style.display = 'block'; pop.scrollTop = 0;
   }
   function tryNote(a, abs) {

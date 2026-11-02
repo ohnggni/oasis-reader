@@ -103,7 +103,14 @@ fun MetaCatalogScreen(
 
     var libraries by remember { mutableStateOf<List<MetaLibrary>?>(null) }
     var libError by remember { mutableStateOf<String?>(null) }
-    var libId by remember { mutableStateOf(prefs.getInt("library_$serverId", -1).takeIf { it >= 0 }) }
+    // chosen categories (none = 전체); older versions kept a single one under library_<server>
+    var libIds by remember {
+        mutableStateOf(
+            prefs.getStringSet("libraries_$serverId", null)?.mapNotNull { it.toIntOrNull() }?.toSet()
+                ?: setOfNotNull(prefs.getInt("library_$serverId", -1).takeIf { it >= 0 }),
+        )
+    }
+    val libParam = libIds.takeIf { it.isNotEmpty() }?.sorted()?.joinToString(",")
     var sort by remember { mutableStateOf(runCatching { SeriesSort.valueOf(prefs.getString("sort", null) ?: "") }.getOrDefault(SeriesSort.RECENT)) }
     var query by remember { mutableStateOf("") }
     var activeQuery by remember { mutableStateOf("") }
@@ -133,23 +140,24 @@ fun MetaCatalogScreen(
         loading = true; error = null
         try {
             if (activeQuery.isNotBlank() && searchBooks) {
-                val r = api.books(libId, null, activeQuery, "mtime_desc", p, limit = 100)
+                val r = api.books(libParam, null, activeQuery, "mtime_desc", p, limit = 100)
                 if (p == 1) bookItems.clear()
                 bookItems.addAll(r.items); hasMore = r.hasMore
             } else {
-                val r = api.series(libId, activeQuery.ifBlank { null }, sort.api, p)
+                val r = api.series(libParam, activeQuery.ifBlank { null }, sort.api, p)
                 if (p == 1) seriesItems.clear()
                 seriesItems.addAll(r.items); hasMore = r.hasMore
             }
             page = p
         } catch (e: Exception) {
-            error = e.message ?: e.javaClass.simpleName
+            error = (e.message ?: e.javaClass.simpleName) +
+                (if (libIds.size > 1) "\n(카테고리를 여러 개 고르려면 서버의 oasis-meta를 최신으로 업데이트해야 합니다)" else "")
         } finally {
             loading = false
         }
     }
 
-    LaunchedEffect(libId, sort, activeQuery, searchBooks, reload) { loadPage(1) }
+    LaunchedEffect(libParam, sort, activeQuery, searchBooks, reload) { loadPage(1) }
 
     val owned by remember { db.books().observeSourceUrls() }.collectAsState(initial = emptyList())
     val ownedSet = remember(owned) { owned.toSet() }
@@ -241,29 +249,54 @@ fun MetaCatalogScreen(
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 전체, the chosen library right after it, and every library in a drop-down
-            fun pick(id: Int?) { libId = id; prefs.edit().putInt("library_$serverId", id ?: -1).apply() }
-            FilterChip(selected = libId == null, onClick = { pick(null) }, label = { Text("전체") })
-            libraries.orEmpty().firstOrNull { it.id == libId }?.let { l ->
-                FilterChip(selected = true, onClick = {}, label = { Text(l.name) })
-            }
+            // categories: several at once (none = 전체), picked in a drop-down with check boxes
+            fun setLibs(v: Set<Int>) { libIds = v; prefs.edit().putStringSet("libraries_$serverId", v.map { it.toString() }.toSet()).apply() }
             var libOpen by remember { mutableStateOf(false) }
+            val libs = libraries.orEmpty()
             Box {
-                androidx.compose.material3.AssistChip(
+                FilterChip(
+                    selected = libIds.isNotEmpty(),
                     onClick = { libOpen = true },
-                    label = { Text("카테고리 ${libraries.orEmpty().size} ▾") },
+                    label = {
+                        Text(
+                            when (libIds.size) {
+                                0 -> "카테고리: 전체 ▾"
+                                1 -> "카테고리: ${libs.firstOrNull { it.id in libIds }?.name ?: "1개"} ▾"
+                                else -> "카테고리 ${libIds.size}개 ▾"
+                            },
+                        )
+                    },
                 )
                 androidx.compose.material3.DropdownMenu(expanded = libOpen, onDismissRequest = { libOpen = false }) {
                     androidx.compose.material3.DropdownMenuItem(
-                        text = { Text((if (libId == null) "✓ " else "    ") + "전체") },
-                        onClick = { libOpen = false; pick(null) },
+                        text = { Text("전체") },
+                        leadingIcon = { androidx.compose.material3.Checkbox(checked = libIds.isEmpty(), onCheckedChange = null) },
+                        onClick = { setLibs(emptySet()) },
                     )
-                    libraries.orEmpty().forEach { l ->
+                    HorizontalDivider()
+                    libs.forEach { l ->
                         androidx.compose.material3.DropdownMenuItem(
-                            text = { Text((if (libId == l.id) "✓ " else "    ") + l.name) },
-                            onClick = { libOpen = false; pick(l.id) },
+                            text = { Text(l.name) },
+                            leadingIcon = { androidx.compose.material3.Checkbox(checked = l.id in libIds, onCheckedChange = null) },
+                            onClick = { setLibs(if (l.id in libIds) libIds - l.id else libIds + l.id) },
                         )
+                    }
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("완료", color = MaterialTheme.colorScheme.primary) }, onClick = { libOpen = false })
+                }
+            }
+            if (!(activeQuery.isNotBlank() && searchBooks)) {
+                var sortOpen by remember { mutableStateOf(false) }
+                Box {
+                    androidx.compose.material3.AssistChip(onClick = { sortOpen = true }, label = { Text("↕ ${sort.label} ▾") })
+                    androidx.compose.material3.DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                        SeriesSort.entries.forEach { o ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text((if (o == sort) "✓ " else "    ") + o.label) },
+                                onClick = { sortOpen = false; sort = o; prefs.edit().putString("sort", o.name).apply() },
+                            )
+                        }
                     }
                 }
             }
@@ -307,13 +340,7 @@ fun MetaCatalogScreen(
                         }
                     }
                 }
-                SeriesSort.entries.forEach { o ->
-                    FilterChip(
-                        selected = sort == o,
-                        onClick = { sort = o; prefs.edit().putString("sort", o.name).apply() },
-                        label = { Text(o.label) },
-                    )
-                }
+
             }
         }
 
@@ -426,7 +453,7 @@ private fun SeriesDetail(
         error = null
         books = try {
             // volume order: natural sort of the clean titles ("2권" before "10권")
-            api.books(series.libraryId, series.seriesName, null, "title", 1, 500).items
+            api.books(series.libraryId.toString(), series.seriesName, null, "title", 1, 500).items
                 .sortedWith { a, b -> ComicParser.naturalOrder.compare(a.name, b.name) }
         } catch (e: Exception) { error = e.message; null }
     }
