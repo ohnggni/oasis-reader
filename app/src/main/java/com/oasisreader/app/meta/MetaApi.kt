@@ -112,16 +112,17 @@ class MetaApi(val server: Server, val db: String = server.metaDb) {
     suspend fun libraries(): List<MetaLibrary> =
         Http.json.decodeFromString(MetaLibraries.serializer(), get(url("/libraries", emptyMap()))).items
 
-    suspend fun series(libraryId: String?, q: String?, sort: String, page: Int, limit: Int = 36): MetaPage<MetaSeries> =
+    /** [format]: file formats, comma separated (epub,txt…); combined with the categories (AND). */
+    suspend fun series(libraryId: String?, q: String?, sort: String, page: Int, limit: Int = 36, format: String? = null): MetaPage<MetaSeries> =
         Http.json.decodeFromString(
             MetaPage.serializer(MetaSeries.serializer()),
-            get(url("/series", mapOf("library_id" to libraryId, "q" to q, "sort" to sort, "page" to page, "limit" to limit))),
+            get(url("/series", mapOf("library_id" to libraryId, "format" to format, "q" to q, "sort" to sort, "page" to page, "limit" to limit))),
         )
 
-    suspend fun books(libraryId: String?, series: String?, q: String?, sort: String, page: Int, limit: Int = 500): MetaPage<MetaBook> =
+    suspend fun books(libraryId: String?, series: String?, q: String?, sort: String, page: Int, limit: Int = 500, format: String? = null): MetaPage<MetaBook> =
         Http.json.decodeFromString(
             MetaPage.serializer(MetaBook.serializer()),
-            get(url("/books", mapOf("library_id" to libraryId, "series" to series, "q" to q, "sort" to sort, "page" to page, "limit" to limit))),
+            get(url("/books", mapOf("library_id" to libraryId, "series" to series, "format" to format, "q" to q, "sort" to sort, "page" to page, "limit" to limit))),
         )
 
     suspend fun book(id: Long): MetaBook =

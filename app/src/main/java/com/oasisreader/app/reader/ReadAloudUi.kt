@@ -3,6 +3,9 @@ package com.oasisreader.app.reader
 import android.speech.tts.Voice
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,17 +48,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-/** The small player shown while reading aloud: sentence ⏮ ⏯ ⏭, speed, sleep timer, voice, stop. */
+/** Where the floating player was dragged to (kept while the app runs). */
+private var barOffset = androidx.compose.ui.geometry.Offset.Zero
+
+/**
+ * The small floating player shown while reading aloud: sentence ⏮ ⏯ ⏭, speed, sleep timer,
+ * voice, stop. Slightly see-through; drag it (anywhere but a button) to move it out of the way.
+ */
 @Composable
 fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    var off by remember { mutableStateOf(barOffset) }
     Surface(
-        modifier = modifier,
+        modifier = modifier
+            .offset { androidx.compose.ui.unit.IntOffset(off.x.toInt(), off.y.toInt()) }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    off += drag; barOffset = off
+                }
+            },
         shape = RoundedCornerShape(24.dp),
-        color = fill,
-        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 3.dp,
+        color = fill.copy(alpha = 0.86f),
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        shadowElevation = 6.dp,
     ) {
         Row(Modifier.height(44.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("≡", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 8.dp, end = 2.dp))
             BarButton("⏮", "이전 문장") { ra.skip(-1) }
             BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기") { ra.toggle() }
             BarButton("⏭", "다음 문장") { ra.skip(1) }
@@ -88,7 +106,7 @@ private fun SleepButton(ra: ReadAloud) {
     Box {
         TextButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "수면 타이머" }) {
             Text(
-                when { left > 0 -> "⏾${left}분"; ra.sleepAtChapterEnd -> "⏾장"; else -> "⏾" },
+                when { left > 0 -> "🌙${left}분"; ra.sleepAtChapterEnd -> "🌙장"; else -> "🌙" },
                 style = MaterialTheme.typography.labelLarge,
                 color = if (left > 0 || ra.sleepAtChapterEnd) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )

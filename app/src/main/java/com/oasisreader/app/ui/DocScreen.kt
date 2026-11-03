@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -107,6 +110,14 @@ private fun Markdown(text: String) {
     while (i < lines.size) {
         val line = lines[i]
         when {
+            // <details><summary>제목</summary> … </details>: folded until tapped
+            line.trimStart().startsWith("<details>") -> {
+                val title = Regex("<summary>(.*?)</summary>").find(line)?.groupValues?.get(1)?.trim().orEmpty()
+                val block = ArrayList<String>()
+                i++
+                while (i < lines.size && !lines[i].trimStart().startsWith("</details>")) { block.add(lines[i]); i++ }
+                androidx.compose.runtime.key(i) { Details(title, block.joinToString("\n")) }
+            }
             line.startsWith("```") -> {
                 val block = ArrayList<String>()
                 i++
@@ -148,6 +159,23 @@ private fun Markdown(text: String) {
             else -> Text(rich(line), style = MaterialTheme.typography.bodyMedium)
         }
         i++
+    }
+}
+
+@Composable
+private fun Details(title: String, body: String) {
+    var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                .clickable { open = !open }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Text(if (open) "▾  " else "▸  ", style = MaterialTheme.typography.bodyMedium)
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+        if (open) Column(Modifier.padding(start = 8.dp, top = 6.dp)) { Markdown(body) }
     }
 }
 

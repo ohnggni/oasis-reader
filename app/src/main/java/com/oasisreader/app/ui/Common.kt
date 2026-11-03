@@ -75,7 +75,7 @@ fun EmojiButton(emoji: String, label: String, onClick: () -> Unit) {
 }
 
 /**
- * App header: "OG·Reader" with a small open-book mark (a vector drawing, outlines of Nunito
+ * App header: "OG", an open book and "Reader" (a vector drawing, outlines of Nunito
  * Black) and one small line under it, in the style of a radio app's station header.
  */
 @Composable
@@ -87,7 +87,7 @@ private fun BrandMark(sub: String?, modifier: Modifier = Modifier) {
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_brand),
             contentDescription = null,
-            modifier = Modifier.size(width = 174.96.dp, height = 21.37.dp),
+            modifier = Modifier.size(width = 172.59.dp, height = 21.77.dp),
         )
         if (!sub.isNullOrBlank()) Text(
             sub,

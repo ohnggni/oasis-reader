@@ -148,6 +148,11 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 4.dp),
             )
+            // presets of the organized catalog: for a saved server with a meta API
+            if (initial.id.isNotEmpty() && initial.metaUrl.isNotBlank()) {
+                Spacer(Modifier.height(20.dp))
+                com.oasisreader.app.meta.PresetSettings(initial)
+            }
             Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(

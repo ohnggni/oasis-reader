@@ -111,6 +111,13 @@ fun MetaCatalogScreen(
         )
     }
     val libParam = libIds.takeIf { it.isNotEmpty() }?.sorted()?.joinToString(",")
+    // file formats (none = 전체), combined with the categories (both must match)
+    var fmtKeys by remember {
+        mutableStateOf(prefs.getStringSet("formats_$serverId", null)?.filter { k -> CatalogFormats.ALL.any { it.key == k } }?.toSet() ?: emptySet())
+    }
+    val fmtParam = CatalogFormats.param(fmtKeys)
+    var presets by remember { mutableStateOf(CatalogPresets.load(app, serverId)) }
+    var savingPreset by remember { mutableStateOf(false) }
     var sort by remember { mutableStateOf(runCatching { SeriesSort.valueOf(prefs.getString("sort", null) ?: "") }.getOrDefault(SeriesSort.RECENT)) }
     var query by remember { mutableStateOf("") }
     var activeQuery by remember { mutableStateOf("") }
@@ -140,24 +147,24 @@ fun MetaCatalogScreen(
         loading = true; error = null
         try {
             if (activeQuery.isNotBlank() && searchBooks) {
-                val r = api.books(libParam, null, activeQuery, "mtime_desc", p, limit = 100)
+                val r = api.books(libParam, null, activeQuery, "mtime_desc", p, limit = 100, format = fmtParam)
                 if (p == 1) bookItems.clear()
                 bookItems.addAll(r.items); hasMore = r.hasMore
             } else {
-                val r = api.series(libParam, activeQuery.ifBlank { null }, sort.api, p)
+                val r = api.series(libParam, activeQuery.ifBlank { null }, sort.api, p, format = fmtParam)
                 if (p == 1) seriesItems.clear()
                 seriesItems.addAll(r.items); hasMore = r.hasMore
             }
             page = p
         } catch (e: Exception) {
             error = (e.message ?: e.javaClass.simpleName) +
-                (if (libIds.size > 1) "\n(카테고리를 여러 개 고르려면 서버의 oasis-meta를 최신으로 업데이트해야 합니다)" else "")
+                (if (libIds.size > 1 || fmtKeys.isNotEmpty()) "\n(여러 카테고리·형식 필터는 서버의 oasis-meta 최신 버전이 필요합니다)" else "")
         } finally {
             loading = false
         }
     }
 
-    LaunchedEffect(libParam, sort, activeQuery, searchBooks, reload) { loadPage(1) }
+    LaunchedEffect(libParam, fmtParam, sort, activeQuery, searchBooks, reload) { loadPage(1) }
 
     val owned by remember { db.books().observeSourceUrls() }.collectAsState(initial = emptyList())
     val ownedSet = remember(owned) { owned.toSet() }
@@ -210,7 +217,7 @@ fun MetaCatalogScreen(
 
     openSeries?.let { s -> Box(Modifier.fillMaxSize()) {
         SeriesDetail(
-            series = s, api = api, opds = opds, ownedSet = ownedSet, pinnedSet = pinnedSet, progress = progress,
+            series = s, format = fmtParam, api = api, opds = opds, ownedSet = ownedSet, pinnedSet = pinnedSet, progress = progress,
             onBack = { openSeries = null },
             onBook = { openBook = it },
             onAction = ::openOrDownload,
@@ -253,6 +260,20 @@ fun MetaCatalogScreen(
         ) {
             // categories: several at once (none = 전체), picked in a drop-down with check boxes
             fun setLibs(v: Set<Int>) { libIds = v; prefs.edit().putStringSet("libraries_$serverId", v.map { it.toString() }.toSet()).apply() }
+            fun setFormats(v: Set<String>) { fmtKeys = v; prefs.edit().putStringSet("formats_$serverId", v).apply() }
+            // saved combinations (made here or in the server settings)
+            PresetChip(
+                presets = presets, libs = libIds, formats = fmtKeys,
+                onPick = { p -> setLibs(p?.libraries?.toSet() ?: emptySet()); setFormats(p?.formats?.toSet() ?: emptySet()) },
+                onSaveCurrent = { savingPreset = true },
+            )
+            if (savingPreset) PresetDialog(
+                initial = CatalogPreset("", libIds.sorted(), CatalogFormats.ALL.map { it.key }.filter { it in fmtKeys }),
+                libraries = null,
+                onSave = { p -> presets = presets + p; CatalogPresets.save(app, serverId, presets); savingPreset = false },
+                onDelete = null,
+                onDismiss = { savingPreset = false },
+            )
             var libOpen by remember { mutableStateOf(false) }
             val libs = libraries.orEmpty()
             Box {
@@ -286,6 +307,7 @@ fun MetaCatalogScreen(
                     androidx.compose.material3.DropdownMenuItem(text = { Text("완료", color = MaterialTheme.colorScheme.primary) }, onClick = { libOpen = false })
                 }
             }
+            FormatFilterChip(fmtKeys) { setFormats(it) }
             if (!(activeQuery.isNotBlank() && searchBooks)) {
                 var sortOpen by remember { mutableStateOf(false) }
                 Box {
@@ -435,6 +457,7 @@ private fun MoreFooter(loading: Boolean, hasMore: Boolean, empty: Boolean, onMor
 @Composable
 private fun SeriesDetail(
     series: MetaSeries,
+    format: String?,
     api: MetaApi,
     opds: OpdsClient,
     ownedSet: Set<String>,
@@ -453,7 +476,7 @@ private fun SeriesDetail(
         error = null
         books = try {
             // volume order: natural sort of the clean titles ("2권" before "10권")
-            api.books(series.libraryId.toString(), series.seriesName, null, "title", 1, 500).items
+            api.books(series.libraryId.toString(), series.seriesName, null, "title", 1, 500, format = format).items
                 .sortedWith { a, b -> ComicParser.naturalOrder.compare(a.name, b.name) }
         } catch (e: Exception) { error = e.message; null }
     }
