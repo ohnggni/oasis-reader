@@ -259,9 +259,10 @@ fun LookupSettingsDialog(onDismiss: () -> Unit) {
                 var dragKey by remember { mutableStateOf<String?>(null) }
                 var dragOffset by remember { mutableStateOf(0f) }
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    order.forEach { key ->
+                    // no early return inside key { } (D8 cannot dex that non-local return)
+                    order.filter { it in byKey }.forEach { key ->
                         androidx.compose.runtime.key(key) {
-                            val t = byKey[key] ?: return@key
+                            val t = byKey.getValue(key)
                             val shown = key !in hidden
                             val dragging = dragKey == key
                             Row(
