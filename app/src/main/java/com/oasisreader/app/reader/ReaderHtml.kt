@@ -199,7 +199,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 /* footnote popup */
 #notepop {
   position: fixed; left: 12px; right: 12px; bottom: 72px; z-index: 12; display: none;
-  max-height: 52vh; overflow: auto; padding: 14px 18px 8px;
+  max-height: 60%; min-height: 0; overflow: auto; padding: 14px 18px 8px;
   background: var(--bg); color: var(--fg); border: 1px solid var(--rule);
   box-shadow: 0 6px 24px rgba(0,0,0,.28); border-radius: 14px;
   font-size: calc(var(--fs) * 0.88); line-height: 1.6; text-align: left;
@@ -675,7 +675,13 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   }
   function showNote(html, href) {
     popBody.innerHTML = html; popHref = href;
-    pop.style.bottom = Math.max(72, padBottom + 24) + 'px';
+    /* sizes in px from the window: 52vh can resolve to 0 in a WebView laid out late,
+       which squeezed the popup to its padding (one cut line, no buttons) */
+    var vh = window.innerHeight || document.documentElement.clientHeight || 600;
+    var bottom = Math.max(72, padBottom + 24);
+    pop.style.bottom = bottom + 'px';
+    pop.style.setProperty('max-height', Math.max(160, Math.min(vh * 0.6, vh - bottom - Math.max(72, padTop))) + 'px', 'important');
+    pop.style.setProperty('height', 'auto', 'important');
     pop.style.display = 'block'; pop.scrollTop = 0;
   }
   function tryNote(a, abs) {

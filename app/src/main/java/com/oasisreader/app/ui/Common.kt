@@ -37,6 +37,7 @@ fun TopBar(
     title: String,
     onBack: (() -> Unit)? = null,
     brand: Boolean = false,          // app header: logo + bold name
+    brandSub: String? = null,        // app header: one small line under the logo
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Surface(color = barColor(), contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
@@ -50,7 +51,7 @@ fun TopBar(
                 androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 16.dp))
             }
             if (brand) {
-                BrandMark(Modifier.weight(1f))
+                BrandMark(brandSub, Modifier.weight(1f))
             } else {
                 Text(
                     title,
@@ -74,25 +75,28 @@ fun EmojiButton(emoji: String, label: String, onClick: () -> Unit) {
 }
 
 /**
- * App header: the "OG" letters and the "Book / Reader" wordmark, both vector drawings
- * (a script font's tall line box left big gaps between the two lines).
+ * App header: "OG·Reader" with a small open-book mark (a vector drawing, outlines of Nunito
+ * Black) and one small line under it, in the style of a radio app's station header.
  */
 @Composable
-private fun BrandMark(modifier: Modifier = Modifier) {
-    Row(
-        modifier.semantics(mergeDescendants = true) { contentDescription = "OG Book Reader" },
-        verticalAlignment = Alignment.CenterVertically,
+private fun BrandMark(sub: String?, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Column(
+        modifier.semantics(mergeDescendants = true) { contentDescription = listOfNotNull("OG Reader", sub).joinToString(", ") },
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
         androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_og),
+            painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_brand),
             contentDescription = null,
-            modifier = Modifier.size(width = 58.dp, height = 36.dp),
+            modifier = Modifier.size(width = 174.96.dp, height = 21.37.dp),
         )
-        Spacer(Modifier.width(9.dp))
-        androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_wordmark),
-            contentDescription = null,
-            modifier = Modifier.size(width = 84.dp, height = 37.dp),
+        if (!sub.isNullOrBlank()) Text(
+            sub,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 3.dp),
         )
     }
 }

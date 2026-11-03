@@ -134,7 +134,13 @@ fun LibraryScreen(
     val shown = remember(books, filter, sort) { sortShelf(books.filter { filter.matches(it) }, sort) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("Reader", brand = true) {
+        // header line: how many books, and today's reading time (all books)
+        val timeDb = remember { com.oasisreader.app.data.db.AppDatabase.get(ctx) }
+        val times by remember { timeDb.readingTime().observeAll() }.collectAsState(initial = emptyList())
+        val todayKey = java.time.LocalDate.now().toString()
+        val todayMin = remember(times, todayKey) { (times.filter { it.day == todayKey }.sumOf { it.seconds } / 60).toInt() }
+        val brandSub = if (!loaded) null else "서재 ${books.size}권 · 오늘 ${minutesText(todayMin)}"
+        TopBar("Reader", brand = true, brandSub = brandSub) {
             // two buttons only, so "OG Reader" fits on narrow bar-type phones too
             var menu by remember { mutableStateOf(false) }
             Box {
@@ -432,3 +438,10 @@ private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
 /** Library tile widths (dp), smallest first; 100 gives three across on a phone. */
 private val TILE_STEPS = listOf(72, 86, 100, 118, 140, 166)
 private const val TILE_DEFAULT = 100
+
+/** 32분 / 1시간 / 1시간 5분 */
+internal fun minutesText(min: Int): String = when {
+    min < 60 -> "${min}분"
+    min % 60 == 0 -> "${min / 60}시간"
+    else -> "${min / 60}시간 ${min % 60}분"
+}
