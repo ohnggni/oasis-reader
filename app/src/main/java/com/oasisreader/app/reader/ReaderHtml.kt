@@ -215,6 +215,8 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 #notepop .nbody img { max-width: 100%; height: auto; }
 #notepop .nbar { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 #notepop .nbar button { background: none; border: 0; color: var(--accent); font: 600 14px/32px sans-serif; padding: 0 10px; }
+/* read aloud: the sentence being spoken (CSS Custom Highlight, no DOM change) */
+::highlight(tts) { background-color: rgba(200, 144, 46, 0.30); }
 #hlbar button.look {
   width: auto; border-radius: 14px; padding: 0 10px; margin-left: 4px;
   background: var(--bg); color: var(--fg); font: 600 13px/24px sans-serif; border: 0;
@@ -564,6 +566,80 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     return window.scrollY <= 2;
   }
 
+  /* ── read aloud: the chapter as sentences (live Ranges, so highlights added later do not break them) ── */
+  var tts = null;
+  var TTS_BLOCK = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, td, th, figcaption, caption, pre, div, section, article, aside, header, footer, table';
+  var TTS_END = '.!?。！？…', TTS_CLOSE = '.!?。！？…"\'”’」』)]）〉》';
+  function ttsBuild() {
+    var out = [], seg = null, shown = new Map();
+    function visible(el) {
+      if (shown.has(el)) return shown.get(el);
+      var v = el.getClientRects().length > 0;
+      shown.set(el, v); return v;
+    }
+    function flush() {
+      if (!seg) return;
+      var s = seg.text, a = 0;
+      function push(x, y) {
+        while (x < y && /\s/.test(s.charAt(x))) x++;
+        while (y > x && /\s/.test(s.charAt(y - 1))) y--;
+        if (y <= x) return;
+        var t = s.slice(x, y).replace(/\s+/g, ' ');
+        if (!/[0-9A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7A3]/.test(t)) return;
+        var r = document.createRange();
+        var A = at(x, false), B = at(y, true);
+        r.setStart(A.node, A.off); r.setEnd(B.node, B.off);
+        out.push({ text: t, range: r });
+      }
+      function at(o, end) {
+        var ns = seg.nodes;
+        for (var k = 0; k < ns.length; k++) {
+          var n = ns[k], len = n.node.nodeValue.length;
+          if (o < n.start + len || (end && o === n.start + len)) return { node: n.node, off: o - n.start };
+        }
+        var last = ns[ns.length - 1];
+        return { node: last.node, off: last.node.nodeValue.length };
+      }
+      for (var i = 0; i < s.length; i++) {
+        if (TTS_END.indexOf(s.charAt(i)) < 0) continue;
+        var j = i + 1;
+        while (j < s.length && TTS_CLOSE.indexOf(s.charAt(j)) >= 0) j++;
+        if (j >= s.length || /\s/.test(s.charAt(j))) { push(a, j); a = j; i = j - 1; }
+      }
+      push(a, s.length);
+      seg = null;
+    }
+    var w = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null), n;
+    while ((n = w.nextNode())) {
+      var par = n.parentNode;
+      if (!par || !par.closest) continue;
+      if (par.closest('rt, rp, script, style, noscript')) continue;
+      var sup = par.closest('sup');
+      if (sup && (sup.querySelector('a') || par.closest('a'))) continue;      /* note numbers */
+      if (!visible(par)) continue;
+      var blk = par.closest(TTS_BLOCK) || content;
+      if (!seg || seg.block !== blk) { flush(); seg = { block: blk, text: '', nodes: [] }; }
+      seg.nodes.push({ node: n, start: seg.text.length });
+      seg.text += n.nodeValue;
+    }
+    flush();
+    return out;
+  }
+  function ttsRect(i, last) {
+    var rs = tts && tts[i] ? tts[i].range.getClientRects() : [];
+    if (!rs.length) return null;
+    return last ? rs[rs.length - 1] : rs[0];
+  }
+  function ttsShow(i) {
+    var r = ttsRect(i, false);
+    if (!r) return;
+    if (paged) {
+      if (r.left >= W() - 1 || r.right <= 1) { focusId = null; anchorId = null; go(Math.floor((r.left + book.scrollLeft + 1) / W()), true); }
+    } else if (r.top < padTop || r.bottom > window.innerHeight - padBottom - 24) {
+      window.scrollTo({ top: Math.max(0, window.scrollY + r.top - padTop - 40), behavior: 'smooth' });
+    }
+  }
+
   window.Reader = {
     next: function () {
       if (atEnd()) { if (CFG.hasNext) bridge.edge(1, turnY); turnY = 0.5; return; }
@@ -612,6 +688,26 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     },
     goFraction: function (f) { layout(f); },
     goAnchor: function (id) { anchorId = id; if (!goAnchor()) report(); },
+    /* read aloud: this chapter's sentences and the first one on the page on screen */
+    ttsList: function () {
+      tts = ttsBuild();
+      var start = tts.length;
+      for (var i = 0; i < tts.length; i++) {
+        var r = ttsRect(i, true);
+        if (!r) continue;
+        if (paged ? r.right > 1 : r.bottom > padTop) { start = i; break; }
+      }
+      return { start: start, items: tts.map(function (x) { return x.text; }) };
+    },
+    ttsMark: function (i) {
+      if (!tts || !tts[i]) return;
+      try { if (window.CSS && CSS.highlights && window.Highlight) CSS.highlights.set('tts', new Highlight(tts[i].range)); } catch (e) {}
+      ttsShow(i);
+    },
+    ttsClear: function () {
+      try { if (window.CSS && CSS.highlights) CSS.highlights.delete('tts'); } catch (e) {}
+      tts = null;
+    },
     /* a few words from the top of the page on screen (bookmark label) */
     pageText: function () {
       try {
@@ -860,6 +956,8 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     }, 8000);
   })();
   layout(CFG.start);
+  /* the app may go on from here (read aloud continues into this chapter) */
+  setTimeout(function () { if (bridge.ready) bridge.ready(); }, 250);
   for (var j = 0; j < imgs.length; j++) {
     if (!imgs[j].complete) imgs[j].addEventListener('load', function () { layout(); });
   }

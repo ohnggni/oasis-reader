@@ -421,6 +421,61 @@ private fun ReaderBody(
         target = Target(index, start, anchor)
     }
 
+    // ── 소리 내 읽기: the phone's TTS reads from the page on screen, chapter after chapter ──
+    val readAloud = remember { ReadAloud(app) }
+    var aloud by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) { onDispose { readAloud.shutdown() } }
+    fun stopAloud() {
+        aloud = false
+        readAloud.stop()
+        webView?.evaluateJavascript("window.Reader && Reader.ttsClear && Reader.ttsClear()", null)
+    }
+    /** (Re)start at the first sentence on the page on screen. */
+    fun aloudFromHere() {
+        val wv = webView ?: return
+        wv.evaluateJavascript("window.Reader && Reader.ttsList ? Reader.ttsList() : null") { r ->
+            val o = runCatching { JSONObject(r) }.getOrNull()
+            val arr = o?.optJSONArray("items")
+            if (o == null || arr == null) {
+                stopAloud()
+                Toast.makeText(context, "이 화면에서는 소리 내 읽기를 할 수 없습니다.", Toast.LENGTH_SHORT).show()
+            } else if (aloud) {
+                readAloud.play(List(arr.length()) { arr.getString(it) }, o.optInt("start", 0))
+            }
+        }
+    }
+    readAloud.onSentence = { i ->
+        lastActive = System.currentTimeMillis()
+        webView?.evaluateJavascript("window.Reader && Reader.ttsMark && Reader.ttsMark($i)", null)
+    }
+    readAloud.onFinished = {
+        val p = pkg
+        when {
+            !aloud -> {}
+            p != null && (curIndex + 1) in p.spine.indices -> goChapter(curIndex + 1, 0f)   // goes on when it is ready
+            else -> { stopAloud(); Toast.makeText(context, "책 끝까지 읽었습니다.", Toast.LENGTH_SHORT).show() }
+        }
+    }
+    readAloud.onUnavailable = {
+        stopAloud()
+        Toast.makeText(context, "소리 내 읽기를 쓸 수 없습니다. 휴대폰 설정의 '텍스트 음성 변환'에서 엔진을 확인해 주세요.", Toast.LENGTH_LONG).show()
+    }
+    // not in front (home, another app, screen off): pause; ▶ goes on from the same sentence
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_STOP && readAloud.playing) readAloud.pause()
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    // the screen stays on while it reads, whatever the 화면 켜짐 유지 setting
+    val aloudPlaying = aloud && readAloud.playing
+    LaunchedEffect(aloudPlaying, window) {
+        val w = window ?: return@LaunchedEffect
+        val flag = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        if (aloudPlaying) w.addFlags(flag) else if (!keepOn) w.clearFlags(flag)
+    }
+
     fun savePosition(fraction: Float, end: Boolean) {
         val p = pkg ?: return
         curFraction = fraction
@@ -738,6 +793,7 @@ private fun ReaderBody(
                             } else go()
                         },
                         onLink = { url -> openLink(url) },
+                        onReady = { if (aloud) aloudFromHere() },   // a chapter opened while reading aloud
                         onDrag = { phase, x, y, extra ->
                             // a curl dragged with the finger: x, y in page CSS px (scaled to the view)
                             val wv = webView
@@ -958,6 +1014,10 @@ private fun ReaderBody(
                                         Panel.NAV -> {
                                             if (p != null) com.oasisreader.app.ui.PanelAction("📑", "목차") { panel = Panel.NONE; tocOpen = true }
                                             if (p != null) com.oasisreader.app.ui.PanelAction("🔍", "본문 검색") { findOpen = true }
+                                            if (p != null) com.oasisreader.app.ui.PanelAction("🔊", if (aloud) "소리 내 읽기 끝내기" else "소리 내 읽기") {
+                                                if (aloud) stopAloud()
+                                                else { panel = Panel.NONE; barsVisible = false; aloud = true; aloudFromHere() }
+                                            }
                                             com.oasisreader.app.ui.PanelAction("🔖", "책갈피 (${bookmarks.size})") { marksOpen = true }
                                             com.oasisreader.app.ui.PanelAction("🖍️", "이 책의 하이라이트") { panel = Panel.NONE; hlListOpen = true }
                                             com.oasisreader.app.ui.PanelAction("📝", "하이라이트 내보내기") { panel = Panel.NONE; exportOpen = true }
@@ -999,6 +1059,14 @@ private fun ReaderBody(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
                 )
             }
+
+            // reading aloud: the small player above the page number (and above the slider when shown)
+            if (aloud && state is LoadState.Ready) ReadAloudBar(
+                ra = readAloud,
+                fill = barColor,
+                onClose = { stopAloud() },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (showBars) 84.dp else 34.dp),
+            )
 
             // with the top bar: a bottom bar whose thin slider spans the whole book
             if (p != null) AnimatedVisibility(
@@ -1282,6 +1350,7 @@ private fun ReaderWebView(
     onLink: (String) -> Unit,
     onTurn: (Boolean, Float) -> Unit,
     onDrag: (Int, Float, Float, Float) -> Unit,
+    onReady: () -> Unit = {},
     sidePad: Dp = 0.dp,
 ) {
     val context = LocalContext.current
@@ -1308,6 +1377,7 @@ private fun ReaderWebView(
     callbacks.onLink = onLink
     callbacks.onTurn = onTurn
     callbacks.onDrag = onDrag
+    callbacks.onReady = onReady
     val bridge = remember { JsBridge(main, callbacks) }
 
     AndroidView(
@@ -1358,6 +1428,7 @@ private class Callbacks {
     var onLink: (String) -> Unit = {}
     var onTurn: (Boolean, Float) -> Unit = { _, _ -> }
     var onDrag: (Int, Float, Float, Float) -> Unit = { _, _, _, _ -> }
+    var onReady: () -> Unit = {}
 }
 
 /** Called from the page script (window.Oasis). Calls arrive on a background thread. */
@@ -1377,6 +1448,7 @@ private class JsBridge(private val main: Handler, private val cb: Callbacks) {
     @JavascriptInterface fun dragStart(dir: Int, yFrac: Float, w: Float) { main.post { cb.onDrag(0, w, yFrac, dir.toFloat()) } }
     @JavascriptInterface fun dragMove(x: Float, y: Float) { main.post { cb.onDrag(1, x, y, 0f) } }
     @JavascriptInterface fun dragEnd(dx: Float, vx: Float) { main.post { cb.onDrag(2, dx, 0f, vx) } }
+    @JavascriptInterface fun ready() { main.post { cb.onReady() } }
 }
 
 private fun android.content.Context.findActivity(): Activity? {
