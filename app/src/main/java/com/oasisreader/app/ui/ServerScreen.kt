@@ -47,7 +47,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
     val settings = remember { ServerSettings(context.applicationContext) }
     val initial = remember {
         settings.get(serverId)
-            ?: Server("", if (settings.all().isEmpty()) "북오아시스" else "", "", "", "")
+            ?: Server("", if (settings.all().isEmpty()) "내 서버" else "", "", "", "")
     }
     var name by remember { mutableStateOf(initial.name) }
     var url by remember { mutableStateOf(initial.url) }
@@ -83,7 +83,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
-                label = { Text("이름 (예: 북오아시스)") }, singleLine = true,
+                label = { Text("이름 (예: 집 서버)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
@@ -97,7 +97,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
             val plain = url.trim().startsWith("http://", ignoreCase = true)
             Text(
                 if (plain) "⚠️ http:// 는 암호화되지 않습니다. 아이디·비밀번호와 책이 그대로 오가니 집 안 네트워크(예: 192.168.x.x)에서만 쓰세요."
-                else "북오아시스 OPDS 주소입니다. 보통 서버 주소 뒤에 /opds 를 붙입니다.",
+                else "서버의 OPDS 카탈로그 주소입니다. 보통 서버 주소 뒤에 /opds 를 붙입니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (plain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),
@@ -125,7 +125,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
-                "북오아시스 옆에 직접 띄우는 oasis-meta 주소입니다 (없으면 비워두세요 · 만드는 법은 설정 › 메타 API 안내). 있으면 시리즈·표지·정리된 제목·실제 날짜·줄거리로 된 목록을 보여 줍니다. 같은 아이디/비밀번호를 씁니다.",
+                "북오아시스 서버용 부가 기능입니다. 서버 옆에 띄운 oasis-meta 주소를 넣습니다 (없으면 비워 두세요 · 만드는 법은 설정 › 메타 API 안내). 있으면 시리즈·표지·정리된 제목·실제 날짜·줄거리로 된 목록을 보여 줍니다. 같은 아이디/비밀번호를 씁니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),

@@ -197,7 +197,7 @@ fun ComicScreen(bookId: String, onBack: () -> Unit) {
                 Text("📦", fontSize = 40.sp)
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    if (b?.sourceUrl != null) "이 웹툰 파일이 이 폰에 없습니다.\n북오아시스에서 다시 받을 수 있습니다."
+                    if (b?.sourceUrl != null) "이 웹툰 파일이 이 폰에 없습니다.\n서버에서 다시 받을 수 있습니다."
                     else "이 웹툰 파일이 이 폰에 없습니다.\n파일에서 다시 가져와 주세요.",
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -261,14 +261,14 @@ class OpdsClient(private val server: Server) {
                 }
             }
         }
-        return OpdsFeed(base, feedTitle.ifEmpty { "북오아시스" }, entries, next, search)
+        return OpdsFeed(base, feedTitle.ifEmpty { "카탈로그" }, entries, next, search)
     }
 
     // ── OPDS 2.0 (JSON) ──────────────────────────────────────────
 
     private fun parseJson(base: String, text: String): OpdsFeed {
         val root = Http.json.parseToJsonElement(text) as? JsonObject ?: throw IOException("OPDS JSON 형식이 아닙니다")
-        val title = root.obj("metadata")?.str("title") ?: "북오아시스"
+        val title = root.obj("metadata")?.str("title") ?: "카탈로그"
         var next: String? = null
         var search: String? = null
         root.arr("links")?.forEach { l ->

@@ -526,12 +526,16 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   function showBar() {
     var s = currentSelection();
     if (!s) { bar.style.display = 'none'; return; }
-    var rect = s.range.getBoundingClientRect();
+    /* above the first line of the selection: a selection is usually dragged downward, so the
+       bar stays out of the way of the end handle (below only when there is no room above) */
+    var rects = s.range.getClientRects();
+    var rect = rects.length ? rects[0] : s.range.getBoundingClientRect();
+    var all = s.range.getBoundingClientRect();
     bar.style.display = 'flex';
     var bw = bar.offsetWidth, bh = bar.offsetHeight;
     var x = Math.max(8, Math.min(W() - bw - 8, rect.left + rect.width / 2 - bw / 2));
-    var y = rect.bottom + 14;
-    if (y + bh > window.innerHeight - padBottom) y = Math.max(padTop, rect.top - bh - 14);
+    var y = rect.top - bh - 16;
+    if (y < 8) y = Math.min(window.innerHeight - bh - 8, all.bottom + 30);
     bar.style.left = x + 'px';
     bar.style.top = y + 'px';
   }
@@ -570,7 +574,32 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   var tts = null;
   var TTS_BLOCK = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, td, th, figcaption, caption, pre, div, section, article, aside, header, footer, table';
   var TTS_END = '.!?。！？…', TTS_CLOSE = '.!?。！？…"\'”’」』)]）〉》';
+  /* note references are not read: a note link (any form), or a small raised number / mark */
+  var skipCache = new Map();
+  function ttsSkip(el) {
+    if (skipCache.has(el)) return skipCache.get(el);
+    var skip = false;
+    var a = el.closest('a[href]');
+    if (a && (isNoteRef(a) || /^[\[\(]?[0-9]{1,3}[\]\)]?$/.test((a.textContent || '').trim()))) skip = true;
+    if (!skip) {
+      var up = el.closest('sup') || el;
+      var txt = (up.textContent || '').trim();
+      if (txt.length <= 4 && /^[\[\(]?[0-9*†‡§¶a-z]{1,3}[\]\)]?$/i.test(txt)) {
+        if (up.tagName === 'SUP') skip = true;
+        else if (up !== content && up.parentNode) {
+          /* raised or shrunk inline marks (books that style a span instead of using <sup>) */
+          var cs = getComputedStyle(up), va = cs.verticalAlign;
+          var small = parseFloat(cs.fontSize) < parseFloat(getComputedStyle(up.parentNode).fontSize) * 0.85;
+          var lone = (up.parentNode.textContent || '').trim().length > txt.length;
+          if (lone && (va === 'super' || va === 'top' || va === 'text-top' || (small && cs.display.indexOf('inline') === 0))) skip = true;
+        }
+      }
+    }
+    skipCache.set(el, skip);
+    return skip;
+  }
   function ttsBuild() {
+    skipCache = new Map();
     var out = [], seg = null, shown = new Map();
     function visible(el) {
       if (shown.has(el)) return shown.get(el);
@@ -614,8 +643,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
       var par = n.parentNode;
       if (!par || !par.closest) continue;
       if (par.closest('rt, rp, script, style, noscript')) continue;
-      var sup = par.closest('sup');
-      if (sup && (sup.querySelector('a') || par.closest('a'))) continue;      /* note numbers */
+      if (ttsSkip(par)) continue;      /* note numbers */
       if (!visible(par)) continue;
       var blk = par.closest(TTS_BLOCK) || content;
       if (!seg || seg.block !== blk) { flush(); seg = { block: blk, text: '', nodes: [] }; }
@@ -634,7 +662,15 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     var r = ttsRect(i, false);
     if (!r) return;
     if (paged) {
-      if (r.left >= W() - 1 || r.right <= 1) { focusId = null; anchorId = null; go(Math.floor((r.left + book.scrollLeft + 1) / W()), true); }
+      /* the page the sentence starts on (same rule as links / highlights) */
+      var p = Math.max(0, Math.min(total - 1, Math.floor((r.left + book.scrollLeft + 1) / W())));
+      var want = pendingTurn !== null ? pendingTurn : page;
+      if (p !== want) {
+        focusId = null; anchorId = null;
+        /* hidden (screen off / another app): no animation, nothing would draw it */
+        if (pendingTurn !== null) commitTurn();
+        go(p, document.visibilityState !== 'hidden' && Math.abs(p - page) === 1);
+      }
     } else if (r.top < padTop || r.bottom > window.innerHeight - padBottom - 24) {
       window.scrollTo({ top: Math.max(0, window.scrollY + r.top - padTop - 40), behavior: 'smooth' });
     }
@@ -689,9 +725,21 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     goFraction: function (f) { layout(f); },
     goAnchor: function (id) { anchorId = id; if (!goAnchor()) report(); },
     /* read aloud: this chapter's sentences and the first one on the page on screen */
-    ttsList: function () {
+    ttsList: function (matchText, frac) {
       tts = ttsBuild();
       var start = tts.length;
+      if (typeof matchText === 'string' && matchText) {
+        /* after reading on from the file (screen off): the same sentence, nearest that place */
+        var norm = function (t) { return t.replace(/\s+/g, ' ').trim(); };
+        var want = norm(matchText), best = -1, bestD = 2, n = tts.length || 1;
+        for (var k = 0; k < tts.length; k++) {
+          if (norm(tts[k].text) !== want) continue;
+          var d = Math.abs(k / n - (frac || 0));
+          if (d < bestD) { bestD = d; best = k; }
+        }
+        if (best < 0) best = Math.min(tts.length - 1, Math.max(0, Math.round((frac || 0) * tts.length)));
+        if (best >= 0) { ttsShow(best); return { start: best, items: tts.map(function (x) { return x.text; }) }; }
+      }
       for (var i = 0; i < tts.length; i++) {
         var r = ttsRect(i, true);
         if (!r) continue;

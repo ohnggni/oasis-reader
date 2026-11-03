@@ -104,8 +104,15 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             var lookupEdit by remember { mutableStateOf(false) }
             Item("🔍", "찾아보기 앱", "글자를 골라 찾아볼 때 나오는 번역·사전 앱의 표시와 순서", enabled = true) { lookupEdit = true }
             if (lookupEdit) LookupSettingsDialog { lookupEdit = false }
+            var voiceEdit by remember { mutableStateOf(false) }
+            Item("🎙", "소리 내 읽기 목소리", "음성 엔진(삼성·구글 등)과 목소리, 음높이. 책을 읽는 중에는 재생 막대의 🎙", enabled = true) { voiceEdit = true }
+            if (voiceEdit) {
+                val ra = remember { com.oasisreader.app.reader.ReadAloud(app) }
+                androidx.compose.runtime.DisposableEffect(Unit) { onDispose { ra.shutdown() } }
+                com.oasisreader.app.reader.VoiceDialog(ra) { voiceEdit = false }
+            }
 
-            Section("북오아시스 진행 동기화")
+            Section("동기화")
             var kosyncOpen by remember { mutableStateOf(false) }
             var kosyncRev by remember { mutableStateOf(0) }
             val kosyncSub = remember(kosyncRev) { kosyncSummary(app) }
@@ -147,7 +154,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
 
             Section("백업 · 기기 변경 (실험적 기능)")
             Item("💾", "백업 내보내기 (책 파일 포함)", "책·위치·하이라이트·통계·설정을 zip 하나로 저장합니다", enabled = busy == null) { startExport(true) }
-            Item("📄", "백업 내보내기 (책 파일 빼고)", "가볍게. 책은 새 폰에서 북오아시스에서 다시 받습니다", enabled = busy == null) { startExport(false) }
+            Item("📄", "백업 내보내기 (책 파일 빼고)", "가볍게. 책은 새 폰에서 서버에서 다시 받습니다", enabled = busy == null) { startExport(false) }
             Item("♻️", "백업에서 복원", "지금 서재를 백업 내용으로 바꿉니다", enabled = busy == null) {
                 importer.launch(arrayOf("application/zip", "application/octet-stream"))
             }
@@ -158,11 +165,11 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
 
-            Section("북오아시스")
+            Section("서버 부가 기능")
             Item("📄", "메타 API(oasis-meta) 안내", "정리된 카탈로그를 쓰기 위한 서버 쪽 준비. 복사·공유할 수 있습니다", enabled = true) { onDoc(DOC_META) }
 
             Section("정보")
-            Item("ℹ️", "OG Reader ${BuildConfig.VERSION_NAME}", "북오아시스 전용 리더 · 개발 JSLee", enabled = true) { onDoc(DOC_ABOUT) }
+            Item("ℹ️", "OG Reader ${BuildConfig.VERSION_NAME}", "EPUB · 만화 · PDF 리더 · 개발 JSLee", enabled = true) { onDoc(DOC_ABOUT) }
             val (checking, checkUpdate) = rememberUpdateChecker()
             Item("🔄", if (checking) "업데이트 확인 중…" else "업데이트 확인",
                 "GitHub에서 새 버전을 찾습니다. 서재를 열 때도 자동으로 확인합니다", enabled = !checking) { checkUpdate() }

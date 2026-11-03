@@ -34,7 +34,7 @@ object BookSearch {
         )
     }
 
-    private fun decode(s: String): String = s
+    internal fun decode(s: String): String = s
         .replace(Regex("&#(x?)([0-9a-fA-F]+);")) { m ->
             val code = m.groupValues[2].toIntOrNull(if (m.groupValues[1].isNotEmpty()) 16 else 10)
             code?.let { String(Character.toChars(it)) } ?: m.value

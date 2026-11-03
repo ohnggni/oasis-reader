@@ -421,19 +421,47 @@ private fun ReaderBody(
         target = Target(index, start, anchor)
     }
 
-    // ── 소리 내 읽기: the phone's TTS reads from the page on screen, chapter after chapter ──
+    // ── 소리 내 읽기: a TTS engine reads from the page on screen, chapter after chapter ──
     val readAloud = remember { ReadAloud(app) }
     var aloud by remember { mutableStateOf(false) }
-    DisposableEffect(Unit) { onDispose { readAloud.shutdown() } }
+    var voiceOpen by remember { mutableStateOf(false) }
+    if (voiceOpen) VoiceDialog(readAloud) { voiceOpen = false }
+    /**
+     * Screen off / another app in front: the page cannot load the next chapter then (the UI is
+     * paused), so the next chapters are read from their files here and the place is saved directly.
+     * Back in front, the page opens where the voice is and takes over again.
+     */
+    class AloudBackground { var chapter = -1; var items: List<String> = emptyList() }
+    val aloudBg = remember { AloudBackground() }
+    fun inFront() = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+    val aloudPlayer = remember {
+        object : ReadAloudService.Player {
+            override val playing get() = readAloud.playing
+            override fun toggle() = readAloud.toggle()
+            override fun skip(d: Int) = readAloud.skip(d)
+            override fun close() { aloudClose?.invoke() }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            readAloud.shutdown()
+            if (ReadAloudService.player === aloudPlayer) ReadAloudService.hide(app)
+            aloudClose = null
+        }
+    }
     fun stopAloud() {
         aloud = false
+        aloudBg.chapter = -1
         readAloud.stop()
+        ReadAloudService.hide(app)
         webView?.evaluateJavascript("window.Reader && Reader.ttsClear && Reader.ttsClear()", null)
     }
-    /** (Re)start at the first sentence on the page on screen. */
-    fun aloudFromHere() {
+    aloudClose = { stopAloud() }
+    /** (Re)start at the first sentence on the page on screen, or at [match] (text, place in the chapter). */
+    fun aloudFromHere(match: Pair<String, Float>? = null) {
         val wv = webView ?: return
-        wv.evaluateJavascript("window.Reader && Reader.ttsList ? Reader.ttsList() : null") { r ->
+        val args = if (match == null) "" else JSONObject.quote(match.first) + "," + match.second
+        wv.evaluateJavascript("window.Reader && Reader.ttsList ? Reader.ttsList($args) : null") { r ->
             val o = runCatching { JSONObject(r) }.getOrNull()
             val arr = o?.optJSONArray("items")
             if (o == null || arr == null) {
@@ -444,36 +472,84 @@ private fun ReaderBody(
             }
         }
     }
+    fun startAloud() {
+        panel = Panel.NONE; barsVisible = false; aloud = true
+        readAloud.language = pkg?.language
+        ReadAloudService.show(app, aloudPlayer, book?.title.orEmpty(), pkg?.let { chapterTitleFor(it, curIndex) }.orEmpty())
+        aloudFromHere()
+    }
+    // the player in the notification shade needs the notification permission (Android 13+); reading works without it
+    val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { startAloud() }
+    fun requestAloud() {
+        val need = android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (need) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else startAloud()
+    }
+    readAloud.onStateChanged = { ReadAloudService.update() }
     readAloud.onSentence = { i ->
         lastActive = System.currentTimeMillis()
-        webView?.evaluateJavascript("window.Reader && Reader.ttsMark && Reader.ttsMark($i)", null)
+        val bgIdx = aloudBg.chapter
+        val pp = pkg
+        if (bgIdx >= 0 && pp != null) {
+            // read from the file: save the place every few sentences
+            if (i % 4 == 0 && aloudBg.items.isNotEmpty()) {
+                val f = (i.toFloat() / aloudBg.items.size).coerceIn(0f, 1f)
+                scope.launch { db.books().savePosition(bookId, bgIdx, f, pp.overall(bgIdx, f), System.currentTimeMillis()) }
+            }
+        } else {
+            webView?.evaluateJavascript("window.Reader && Reader.ttsMark && Reader.ttsMark($i)", null)
+        }
     }
     readAloud.onFinished = {
-        val p = pkg
+        val pp = pkg
+        val from = if (aloudBg.chapter >= 0) aloudBg.chapter else curIndex
         when {
-            !aloud -> {}
-            p != null && (curIndex + 1) in p.spine.indices -> goChapter(curIndex + 1, 0f)   // goes on when it is ready
-            else -> { stopAloud(); Toast.makeText(context, "책 끝까지 읽었습니다.", Toast.LENGTH_SHORT).show() }
+            !aloud || pp == null -> {}
+            (from + 1) !in pp.spine.indices -> { stopAloud(); Toast.makeText(context, "책 끝까지 읽었습니다.", Toast.LENGTH_SHORT).show() }
+            inFront() && aloudBg.chapter < 0 -> goChapter(from + 1, 0f)   // goes on when the page is ready
+            else -> scope.launch {
+                val next = from + 1
+                val list = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { ReadAloudText.sentences(File(store.contentDir(bookId), pp.spine[next].path).readText()) }.getOrDefault(emptyList())
+                }
+                if (!aloud) return@launch
+                aloudBg.chapter = next; aloudBg.items = list
+                db.books().savePosition(bookId, next, 0f, pp.overall(next, 0f), System.currentTimeMillis())
+                ReadAloudService.update(chapter = chapterTitleFor(pp, next))
+                readAloud.play(list, 0)
+            }
         }
     }
     readAloud.onUnavailable = {
         stopAloud()
         Toast.makeText(context, "소리 내 읽기를 쓸 수 없습니다. 휴대폰 설정의 '텍스트 음성 변환'에서 엔진을 확인해 주세요.", Toast.LENGTH_LONG).show()
     }
-    // not in front (home, another app, screen off): pause; ▶ goes on from the same sentence
+    // back in front after reading on with the screen off: open the page where the voice is
     DisposableEffect(lifecycleOwner) {
         val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
-            if (e == Lifecycle.Event.ON_STOP && readAloud.playing) readAloud.pause()
+            if (e == Lifecycle.Event.ON_START && aloud && aloudBg.chapter >= 0) {
+                val n = aloudBg.items.size
+                val f = if (n > 0) (readAloud.index.toFloat() / n).coerceIn(0f, 1f) else 0f
+                goChapter(aloudBg.chapter, f)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
-    // the screen stays on while it reads, whatever the 화면 켜짐 유지 setting
-    val aloudPlaying = aloud && readAloud.playing
-    LaunchedEffect(aloudPlaying, window) {
-        val w = window ?: return@LaunchedEffect
-        val flag = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        if (aloudPlaying) w.addFlags(flag) else if (!keepOn) w.clearFlags(flag)
+    /** A chapter opened while reading aloud: go on there (at the voice's sentence after reading from a file). */
+    fun aloudOnReady() {
+        if (!aloud) return
+        if (aloudBg.chapter >= 0) {
+            val items = aloudBg.items
+            val i = readAloud.index
+            val match = items.getOrNull(i)?.let { it to (if (items.isEmpty()) 0f else i.toFloat() / items.size) }
+            aloudBg.chapter = -1; aloudBg.items = emptyList()
+            aloudFromHere(match)
+        } else aloudFromHere()
+        ReadAloudService.update(chapter = pkg?.let { chapterTitleFor(it, curIndex) })
     }
 
     fun savePosition(fraction: Float, end: Boolean) {
@@ -793,7 +869,7 @@ private fun ReaderBody(
                             } else go()
                         },
                         onLink = { url -> openLink(url) },
-                        onReady = { if (aloud) aloudFromHere() },   // a chapter opened while reading aloud
+                        onReady = { aloudOnReady() },   // a chapter opened while reading aloud
                         onDrag = { phase, x, y, extra ->
                             // a curl dragged with the finger: x, y in page CSS px (scaled to the view)
                             val wv = webView
@@ -1015,8 +1091,7 @@ private fun ReaderBody(
                                             if (p != null) com.oasisreader.app.ui.PanelAction("📑", "목차") { panel = Panel.NONE; tocOpen = true }
                                             if (p != null) com.oasisreader.app.ui.PanelAction("🔍", "본문 검색") { findOpen = true }
                                             if (p != null) com.oasisreader.app.ui.PanelAction("🔊", if (aloud) "소리 내 읽기 끝내기" else "소리 내 읽기") {
-                                                if (aloud) stopAloud()
-                                                else { panel = Panel.NONE; barsVisible = false; aloud = true; aloudFromHere() }
+                                                if (aloud) stopAloud() else requestAloud()
                                             }
                                             com.oasisreader.app.ui.PanelAction("🔖", "책갈피 (${bookmarks.size})") { marksOpen = true }
                                             com.oasisreader.app.ui.PanelAction("🖍️", "이 책의 하이라이트") { panel = Panel.NONE; hlListOpen = true }
@@ -1064,6 +1139,7 @@ private fun ReaderBody(
             if (aloud && state is LoadState.Ready) ReadAloudBar(
                 ra = readAloud,
                 fill = barColor,
+                onVoice = { voiceOpen = true },
                 onClose = { stopAloud() },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (showBars) 84.dp else 34.dp),
             )
@@ -1218,6 +1294,9 @@ private fun ReaderSeekBar(
 }
 
 /** Title of the toc entry that covers spine item [index] (the last one at or before it). */
+/** The notification's ✕ ends reading aloud in the reader that started it. */
+private var aloudClose: (() -> Unit)? = null
+
 private fun chapterTitleFor(p: EpubPackage, index: Int): String =
     com.oasisreader.app.data.HighlightExport.chapterTitle(p, index)
 
@@ -1247,7 +1326,7 @@ private fun MissingFiles(canFetch: Boolean, auto: Boolean, busy: Boolean, onFetc
         Text("📦", fontSize = 40.sp)
         Spacer(Modifier.height(12.dp))
         Text(
-            if (canFetch) "이 책 파일이 이 폰에 없습니다.\n북오아시스에서 다시 받을 수 있습니다."
+            if (canFetch) "이 책 파일이 이 폰에 없습니다.\n서버에서 다시 받을 수 있습니다."
             else "이 책 파일이 이 폰에 없습니다.\n파일에서 다시 가져와 주세요.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
