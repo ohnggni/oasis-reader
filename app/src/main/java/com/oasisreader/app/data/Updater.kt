@@ -26,7 +26,7 @@ data class AppRelease(
 
 /**
  * App updates from the public GitHub releases: no server of our own and no push service.
- * CI tags every build v0.1.<run number> and that run number is also the versionCode, so a
+ * CI tags every build v<VERSION>.<run number> (v0.1.66, v1.0.105 …) and that run number is also the versionCode, so a
  * bigger tag number means a newer build. The APK is signed with the same fixed key, so it
  * installs over the current one.
  */
@@ -52,7 +52,7 @@ object Updater {
         val assets: List<GhAsset> = emptyList(),
     )
 
-    /** "v0.1.66" -> 66 (the last number is the build number). */
+    /** "v0.1.66" -> 66, "v1.0.105" -> 105 (the last number is the build number). */
     fun versionCodeOf(tag: String): Int? = Regex("""(\d+)\s*$""").find(tag.trim())?.groupValues?.get(1)?.toIntOrNull()
 
     /** The newest release, or null when GitHub has none with an APK. Throws on network errors. */
