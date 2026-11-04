@@ -72,7 +72,13 @@ object AudioDownloads {
         runCatching { Http.json.decodeFromString(AudioBook.serializer(), manifest(context, bookId).readText()) }.getOrNull()
             ?: runCatching { Http.json.decodeFromString(AudioBook.serializer(), File(legacyDir(context, bookId), MANIFEST).readText()) }.getOrNull()
 
-    /** Track ids kept on the phone. */
+    /** The track list as last seen from the server (null before the first request). */
+    fun trackList(context: Context, bookId: String): List<AudioTrack>? = readManifest(context, bookId)?.tracks
+
+    /** 서재 book ids that have something on the phone or in the queue. */
+    fun bookIds(context: Context): Set<String> = root(context).listFiles()?.filter { it.isDirectory }?.map { it.name }?.toSet().orEmpty()
+
+        /** Track ids kept on the phone. */
     fun keptTracks(context: Context, bookId: String): Set<Int> =
         dir(context, bookId).listFiles()?.mapNotNull { f ->
             if (f.name.endsWith("." + MediaCrypt.EXT) && f.length() > MediaCrypt.HEADER) f.name.substringBefore('.').toIntOrNull() else null
@@ -143,10 +149,12 @@ object AudioDownloads {
      * Receive [trackIds] of a 서재 audiobook (null = all its tracks). The track list comes from
      * the server in the worker; the work goes on with the app closed (a notification shows it).
      */
-    fun enqueue(context: Context, row: BookEntity, trackIds: Collection<Int>? = null) {
+    fun enqueue(context: Context, row: BookEntity, trackIds: Collection<Int>? = null, book: AudioBook? = null) {
         val app = context.applicationContext
         scope.launch {
             dir(app, row.id).mkdirs()
+            // the track list right away (the worker refreshes it), so 받기 관리 can show the tracks
+            if (book != null) writeManifest(app, row.id, book)
             updateQueue(app, row.id) { q ->
                 val add = trackIds ?: listOf(ALL)
                 Queue(wanted = (q.wanted + add).distinct(), since = if (q.wanted.isEmpty()) System.currentTimeMillis() else q.since, error = null)
@@ -174,7 +182,21 @@ object AudioDownloads {
         }
     }
 
-    /** Stop everything that is being received or waits. */
+    /** Take one waiting track out of the queue (a half part stays for later). */
+    fun dequeueTrack(context: Context, bookId: String, trackId: Int) {
+        val app = context.applicationContext
+        scope.launch {
+            updateQueue(app, bookId) { q ->
+                val list = if (ALL in q.wanted) trackList(app, bookId)?.map { it.id }.orEmpty() + (q.wanted - ALL) else q.wanted
+                val left = list.distinct() - trackId - keptTracks(app, bookId)
+                if (left.isEmpty()) Queue() else q.copy(wanted = left)
+            }
+            if (readQueue(app, bookId).wanted.isEmpty()) { progress.remove(bookId); current.remove(bookId) }
+            version++
+        }
+    }
+
+        /** Stop everything that is being received or waits. */
     fun cancelAll(context: Context) {
         val app = context.applicationContext
         WorkManager.getInstance(app).cancelUniqueWork(WORK)

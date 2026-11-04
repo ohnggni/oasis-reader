@@ -322,6 +322,9 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
         } catch (e: Exception) { error = e.message ?: e.javaClass.simpleName }
     }
     val b = book
+    val rowId = AudioLibraryLink.bookId(web.server.id, b?.id ?: item.id ?: -1)
+    val trackState = rememberTrackStates(rowId)
+    val askNotif = rememberNotificationAsk()
     when {
         error != null -> Text("⚠️ $error", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
         b == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -354,7 +357,6 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             else Text("📚 서재에 있음", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
                         }
                         // 오프라인: the tracks on the phone (puts it on the 서재 first)
-                        val rowId = AudioLibraryLink.bookId(web.server.id, b.id)
                         val dl = AudioDownloads.progress[rowId]
                         val dlErr = AudioDownloads.errors[rowId]
                         val kept = onShelf?.let { it.pinned && it.fileBytes > 0 } == true
@@ -366,7 +368,8 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                                 scope.launch {
                                     runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
                                         .onSuccess { row ->
-                                            AudioDownloads.enqueue(context, row)
+                                            askNotif()
+                                            AudioDownloads.enqueue(context, row, book = b)
                                             android.widget.Toast.makeText(context, "받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
                                         }
                                         .onFailure { android.widget.Toast.makeText(context, "받지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
@@ -398,6 +401,20 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                     Text(t.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                         fontWeight = if (now || t.id == b.startTrackId) FontWeight.Bold else FontWeight.Normal)
                     if (t.durationSec > 0) Text(hms(t.durationSec), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val (st, frac) = trackState(t.id)
+                    TrackDownloadButton(
+                        st, frac,
+                        onDownload = {
+                            askNotif()
+                            scope.launch {
+                                runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
+                                    .onSuccess { row -> AudioDownloads.enqueue(context, row, listOf(t.id), book = b) }
+                                    .onFailure { android.widget.Toast.makeText(context, "받지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                            }
+                        },
+                        onCancel = { AudioDownloads.dequeueTrack(context, rowId, t.id) },
+                        onRemove = { scope.launch { AudioDownloads.removeTrack(context, rowId, t.id) } },
+                    )
                 }
             }
         }

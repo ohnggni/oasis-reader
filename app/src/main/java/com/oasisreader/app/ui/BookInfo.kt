@@ -94,7 +94,11 @@ fun BookInfoDialog(b: BookEntity, store: BookStore, onDismiss: () -> Unit) {
                     com.oasisreader.app.audio.AudioLibraryLink.FORMAT -> "오디오북 (서버에서 스트리밍)"
                     else -> "EPUB"
                 })
-                Line("용량", "%.1f MB".format(b.fileBytes / 1048576.0))
+                Line("용량", when {
+                    b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT && b.fileBytes <= 0 -> "스트리밍 (폰에 없음)"
+                    b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT && !b.pinned -> "%.1f MB (일부 받음)".format(b.fileBytes / 1048576.0)
+                    else -> "%.1f MB".format(b.fileBytes / 1048576.0)
+                })
                 Line("보관", if (b.pinned) "서재에 보관" else "임시 보관 (공간이 부족하면 파일만 정리됩니다)")
                 Line("서재에 담은 날", date(b.addedAt))
                 Line("마지막으로 읽은 날", date(b.lastReadAt))

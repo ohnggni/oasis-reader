@@ -112,6 +112,7 @@ fun LibraryScreen(
     onSettings: () -> Unit,
     onStats: () -> Unit,
     onHighlights: () -> Unit,
+    onDownloads: () -> Unit = {},
     onDelete: (BookEntity) -> Unit,
     onRename: (BookEntity, String) -> Unit,
     onPin: (BookEntity, Boolean) -> Unit = { _, _ -> },
@@ -125,6 +126,7 @@ fun LibraryScreen(
         if (loaded && books.isNotEmpty()) com.oasisreader.app.data.KoSync.refreshLibrary(syncApp, books)
     }
     var menuFor by remember { mutableStateOf<BookEntity?>(null) }
+    val askNotif = com.oasisreader.app.audio.rememberNotificationAsk()
     var infoFor by remember { mutableStateOf<BookEntity?>(null) }
     var exportFor by remember { mutableStateOf<BookEntity?>(null) }
     var confirmDelete by remember { mutableStateOf<BookEntity?>(null) }
@@ -164,6 +166,7 @@ fun LibraryScreen(
                         Triple("📁", "파일에서 가져오기", onImportFile),
                         Triple("🖍️", "하이라이트", onHighlights),
                         Triple("📊", "독서 통계", onStats),
+                        Triple("⬇️", "받기 관리", onDownloads),
                     ).forEach { (emoji, label, action) ->
                         DropdownMenuItem(
                             leadingIcon = { Text(emoji, style = MaterialTheme.typography.titleMedium) },
@@ -301,6 +304,7 @@ fun LibraryScreen(
                         val err = ad.errors[b.id]
                         fun startDl() {
                             menuFor = null
+                            askNotif()
                             ad.enqueue(ctx, b)
                             android.widget.Toast.makeText(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
                         }

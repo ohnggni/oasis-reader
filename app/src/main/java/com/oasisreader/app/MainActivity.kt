@@ -101,6 +101,7 @@ private object Route {
     const val DOC = "doc:"               // doc:<asset name without .md>
     const val AUDIO = "audio"            // bookoasis audiobooks
     const val AUDIO_PLAYER = "audio_player"
+    const val DOWNLOADS = "downloads"    // ⬇️ 받기 관리
 }
 
 @Composable
@@ -219,6 +220,7 @@ private fun App() {
                 shareable = id == com.oasisreader.app.ui.DOC_META,
             )
         }
+        route == Route.DOWNLOADS -> com.oasisreader.app.audio.DownloadsScreen(onBack = { route = Route.LIBRARY })
         route == Route.HIGHLIGHTS -> HighlightsScreen(
             onBack = { route = Route.LIBRARY },
             onOpen = { h -> route = Route.READER + h.bookId + ":" + h.spineIndex + ":" + h.id },
@@ -272,6 +274,7 @@ private fun App() {
             onSettings = { route = Route.SETTINGS },
             onStats = { route = Route.STATS },
             onHighlights = { route = Route.HIGHLIGHTS },
+            onDownloads = { route = Route.DOWNLOADS },
             onDelete = { b -> scope.launch { store.delete(b.id) } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
