@@ -7,6 +7,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -400,7 +403,7 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
 /** Another device read further (progress sync): shown after the library's own progress. */
 private fun aheadText(pct: Float?): String = pct?.let { " · ⇄ ${(it * 100).roundToInt()}%" }.orEmpty()
 
-private fun progressText(b: BookEntity): String = (if (b.pinned) "" else "☁️ ") + (when (b.format) { BookStore.FORMAT_COMIC -> "🖼 "; BookStore.FORMAT_PDF -> "📄 "; com.oasisreader.app.audio.AudioLibraryLink.FORMAT -> "🎧 "; else -> "" }) + when {
+private fun progressText(b: BookEntity): String = when {
     b.finishedAt != null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "다 들음" else "다 읽음"
     b.lastReadAt == null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "새 오디오북" else "새 책"
     else -> "${(b.progress * 100).roundToInt()}%"
@@ -416,7 +419,7 @@ private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
                 title = b.title,
                 modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
             )
-            if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) AudioBadge(b, compact, Modifier.align(Alignment.BottomStart))
+            CoverMarks(b, store, small = compact)
         }
         if (b.lastReadAt != null && b.finishedAt == null) {
             LinearProgressIndicator(
@@ -429,7 +432,7 @@ private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
             Column(Modifier.weight(1f)) {
                 Text(b.title, style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    listOfNotNull(b.author, progressText(b) + aheadText(ahead) + downloadText(b)).joinToString(" · "),
+                    listOfNotNull(b.author, progressText(b) + aheadText(ahead)).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -454,7 +457,7 @@ private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
                 title = b.title,
                 modifier = Modifier.width(52.dp).height(76.dp),
             )
-            if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) AudioBadge(b, true, Modifier.align(Alignment.BottomStart))
+            CoverMarks(b, store, small = true)
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -469,7 +472,7 @@ private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
                     LinearProgressIndicator(progress = { b.progress }, modifier = Modifier.width(90.dp).height(3.dp))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(progressText(b) + aheadText(ahead) + downloadText(b), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(progressText(b) + aheadText(ahead), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         MoreButton(onMenu)
@@ -488,24 +491,43 @@ internal fun minutesText(min: Int): String = when {
     else -> "${min / 60}시간 ${min % 60}분"
 }
 
-/** A kept audiobook being copied to the phone: " · ⬇ 35%". */
+/**
+ * Marks on a cover, readable on any cover colour (a dark disc with a light rim):
+ * top-left what it is (📖 책 · 🖼 만화 · 📄 PDF · 🎧 오디오북), bottom-right whether it is on
+ * the phone (⬇️) or on the server only (☁️); while it comes, a ring shows how far.
+ */
 @Composable
-private fun downloadText(b: BookEntity): String =
-    com.oasisreader.app.audio.AudioDownloads.progress[b.id]?.let { " · ⬇ ${(it * 100).roundToInt()}%" }.orEmpty()
-
-/** On an audiobook's cover: 🎧 and, when it is on the phone, ⬇ (works offline). */
-@Composable
-private fun AudioBadge(b: BookEntity, compact: Boolean, modifier: Modifier = Modifier) {
-    val kept = b.pinned && b.fileBytes > 0
-    Row(
-        modifier.padding(4.dp)
-            .background(Color.Black.copy(alpha = 0.62f), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            if (compact) (if (kept) "🎧⬇" else "🎧") else (if (kept) "🎧 오디오북 ⬇" else "🎧 오디오북"),
-            color = Color.White, fontSize = if (compact) 10.sp else 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+private fun androidx.compose.foundation.layout.BoxScope.CoverMarks(b: BookEntity, store: BookStore, small: Boolean) {
+    val audio = b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT
+    val kind = when (b.format) {
+        com.oasisreader.app.audio.AudioLibraryLink.FORMAT -> "🎧" to "오디오북"
+        BookStore.FORMAT_COMIC -> "🖼️" to "만화"
+        BookStore.FORMAT_PDF -> "📄" to "PDF"
+        else -> "📖" to "책"
+    }
+    val dl = if (audio) com.oasisreader.app.audio.AudioDownloads.progress[b.id] else null
+    val onPhone = if (audio) b.pinned && b.fileBytes > 0
+        else remember(b.id, b.pinned, b.lastReadAt, b.fileBytes) { store.originalOf(b.id) != null || store.contentDir(b.id).isDirectory }
+    val size = if (small) 18.dp else 22.dp
+    Mark(kind.first, kind.second, size, Modifier.align(Alignment.TopStart))
+    Box(Modifier.align(Alignment.BottomEnd).padding(3.dp), contentAlignment = Alignment.Center) {
+        Mark(if (onPhone) "⬇️" else "☁️", if (onPhone) "폰에 있음" else "서버에만 있음 (열면 받음)", size, Modifier, pad = 0.dp)
+        if (dl != null) androidx.compose.material3.CircularProgressIndicator(
+            progress = { dl }, strokeWidth = 2.dp, color = Color(0xFF7CD992), trackColor = Color.Transparent,
+            modifier = Modifier.size(size + 4.dp),
         )
+    }
+}
+
+@Composable
+private fun Mark(emoji: String, label: String, size: androidx.compose.ui.unit.Dp, modifier: Modifier, pad: androidx.compose.ui.unit.Dp = 3.dp) {
+    Box(
+        modifier.padding(pad).size(size)
+            .background(Color.Black.copy(alpha = 0.55f), androidx.compose.foundation.shape.CircleShape)
+            .border(0.8.dp, Color.White.copy(alpha = 0.75f), androidx.compose.foundation.shape.CircleShape)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(emoji, fontSize = (size.value * 0.52f).sp, lineHeight = (size.value * 0.6f).sp)
     }
 }
