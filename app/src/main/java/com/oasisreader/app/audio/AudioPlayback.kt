@@ -161,6 +161,15 @@ object AudioPlayback {
             p.prepare()
         } else if (startIndex != null) {
             p.seekTo(startIndex, ((startSec ?: 0.0) * 1000).toLong())
+        } else if (!p.isPlaying) {
+            // the same book is still loaded (paused): go to the server's place when it is further
+            // along — it was listened to on the web or another phone meanwhile
+            val idx = b.tracks.indexOfFirst { it.id == b.startTrackId }
+            val here = p.currentMediaItemIndex
+            val hereSec = p.currentPosition / 1000.0
+            if (idx >= 0 && (idx > here || (idx == here && b.startSeconds > hereSec + 5))) {
+                p.seekTo(idx, (b.startSeconds * 1000).toLong().coerceAtLeast(0))
+            }
         }
         p.play()
         context.startService(Intent(context, AudioService::class.java))
@@ -252,14 +261,24 @@ object AudioPlayback {
                     dao.upsert(com.oasisreader.app.data.db.ReadingTimeEntity(day, id, cur + heard))
                 }
             }
+            val rate = speed.toDouble()
             runCatching {
                 w.post("/api/media/audiobooks/${b.id}/progress", buildJsonObject {
                     put("current_track_id", t.id)
                     put("current_time", sec)
-                    put("playback_rate", speed.toDouble())
+                    put("playback_rate", rate)
                     put("total_progress_pct", if (completed) 100.0 else pct)
                     if (completed) put("is_completed", 1)
                 })
+            }.onSuccess {
+                ctx?.let { c -> AudioProgressSync.sent(c, b.serverId, b.id); AudioProgressSync.schedule(c) }
+            }.onFailure {
+                // offline (a book on the phone) or the server was away: send it later
+                if (b.serverId.isNotEmpty()) ctx?.let { c ->
+                    AudioProgressSync.keep(c, AudioProgressSync.Pending(
+                        b.serverId, b.id, b.title, t.id, idx, sec, rate, pct, completed, System.currentTimeMillis(),
+                    ))
+                }
             }
         }
     }

@@ -774,7 +774,8 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   function followLink(abs) {
     var hash = abs.indexOf('#') >= 0 ? abs.slice(abs.indexOf('#') + 1) : '';
     if (abs.split('#')[0] === CFG.docUrl.split('#')[0]) {
-      if (hash) window.Reader.goAnchor(decodeURIComponent(hash));
+      /* the app keeps where we were, to offer the way back */
+      if (hash) { bridge.jump(); window.Reader.goAnchor(decodeURIComponent(hash)); }
       return;
     }
     bridge.link(abs);

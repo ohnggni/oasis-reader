@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
         com.oasisreader.app.ui.DiskCovers.dir = java.io.File(cacheDir, "covers")
         com.oasisreader.app.meta.MetaApi.cacheDir = java.io.File(cacheDir, "meta")
         com.oasisreader.app.audio.AudioDownloads.migrateLegacy(this)   // plain kept tracks → encrypted (once)
+        com.oasisreader.app.audio.AudioProgressSync.schedule(this)      // listening places that did not go out yet
         setContent {
             OasisTheme {
                 // Surface supplies onBackground as the default text colour (dark mode)
@@ -263,7 +264,10 @@ private fun App() {
             onOpen = { b: BookEntity ->
                 if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) {
                     // an audiobook: its tracks and place from the server, then the player
-                    val already = com.oasisreader.app.audio.AudioPlayback.book?.let { it.serverId to it.id } ==
+                    // playing it right now: straight to the player; paused or not loaded: ask the
+                    // server for its place first (it may have been listened to elsewhere)
+                    val already = com.oasisreader.app.audio.AudioPlayback.playing &&
+                        com.oasisreader.app.audio.AudioPlayback.book?.let { it.serverId to it.id } ==
                         com.oasisreader.app.audio.AudioLibraryLink.parse(b)
                     audioReturn = Route.LIBRARY
                     if (already) route = Route.AUDIO_PLAYER

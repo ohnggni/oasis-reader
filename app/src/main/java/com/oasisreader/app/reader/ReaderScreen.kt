@@ -418,6 +418,16 @@ private fun ReaderBody(
         Toast.makeText(context, "이 책의 글꼴·크기·여백·배경·넘김 설정을 기본값으로 저장했습니다.", Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * Where we were before following a link in the book (a note's "본문으로", a cross reference):
+     * a pill offers the way back until it is used or closed. Chained jumps keep the first place.
+     */
+    var jumpBack by remember { mutableStateOf<Pair<Target, Int>?>(null) }
+    fun rememberJump() {
+        val p = pkg ?: return
+        if (jumpBack == null) jumpBack = Target(curIndex, curFraction) to (p.overall(curIndex, curFraction) * 100).roundToInt()
+    }
+
     fun goChapter(index: Int, start: Float = 0f, anchor: String? = null) {
         val p = pkg ?: return
         if (index !in p.spine.indices) return
@@ -578,7 +588,7 @@ private fun ReaderBody(
             if (!path.startsWith(prefix)) return
             val rel = path.removePrefix(prefix)
             val idx = pkg?.spineIndexOf(rel) ?: -1
-            if (idx >= 0) goChapter(idx, 0f, u.fragment)
+            if (idx >= 0) { rememberJump(); goChapter(idx, 0f, u.fragment) }
             return
         }
         if (u.scheme == "http" || u.scheme == "https" || u.scheme == "mailto") {
@@ -873,6 +883,7 @@ private fun ReaderBody(
                             } else go()
                         },
                         onLink = { url -> openLink(url) },
+                        onJump = { rememberJump() },
                         onReady = { aloudOnReady() },   // a chapter opened while reading aloud
                         onDrag = { phase, x, y, extra ->
                             // a curl dragged with the finger: x, y in page CSS px (scaled to the view)
@@ -1125,6 +1136,33 @@ private fun ReaderBody(
                                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                             }
                         }
+                    }
+                }
+            }
+
+            // after following a link: the way back to where the reading was
+            jumpBack?.let { (from, pct) ->
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                        .padding(bottom = if (showBars) 104.dp else 44.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "↩️ 원래 보던 곳으로 · $pct%",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.clickable { jumpBack = null; goChapter(from.index, from.start) }
+                                .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+                        )
+                        Text(
+                            "✕",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.clickable { jumpBack = null }.padding(start = 6.dp, end = 14.dp, top = 10.dp, bottom = 10.dp)
+                                .semantics { contentDescription = "여기서 계속 읽기" },
+                        )
                     }
                 }
             }
@@ -1452,6 +1490,7 @@ private fun ReaderWebView(
     onOpenImage: (String) -> Unit,
     onEdge: (Int, Float) -> Unit,
     onLink: (String) -> Unit,
+    onJump: () -> Unit = {},
     onTurn: (Boolean, Float) -> Unit,
     onDrag: (Int, Float, Float, Float) -> Unit,
     onReady: () -> Unit = {},
@@ -1479,6 +1518,7 @@ private fun ReaderWebView(
     callbacks.onImage = onOpenImage
     callbacks.onEdge = onEdge
     callbacks.onLink = onLink
+    callbacks.onJump = onJump
     callbacks.onTurn = onTurn
     callbacks.onDrag = onDrag
     callbacks.onReady = onReady
@@ -1530,6 +1570,7 @@ private class Callbacks {
     var onImage: (String) -> Unit = {}
     var onEdge: (Int, Float) -> Unit = { _, _ -> }
     var onLink: (String) -> Unit = {}
+    var onJump: () -> Unit = {}
     var onTurn: (Boolean, Float) -> Unit = { _, _ -> }
     var onDrag: (Int, Float, Float, Float) -> Unit = { _, _, _, _ -> }
     var onReady: () -> Unit = {}
@@ -1547,6 +1588,7 @@ private class JsBridge(private val main: Handler, private val cb: Callbacks) {
     @JavascriptInterface fun openImage(src: String) { main.post { cb.onImage(src) } }
     @JavascriptInterface fun edge(dir: Int, y: Float) { main.post { cb.onEdge(dir, if (y.isNaN()) 0.5f else y) } }
     @JavascriptInterface fun link(url: String) { main.post { cb.onLink(url) } }
+    @JavascriptInterface fun jump() { main.post { cb.onJump() } }
     @JavascriptInterface fun lookup(text: String) { main.post { cb.onLookup(text) } }
     @JavascriptInterface fun turn(dir: Int, y: Float) { main.post { cb.onTurn(dir > 0, y) } }
     @JavascriptInterface fun dragStart(dir: Int, yFrac: Float, w: Float) { main.post { cb.onDrag(0, w, yFrac, dir.toFloat()) } }
