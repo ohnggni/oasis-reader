@@ -104,6 +104,15 @@ class BookOasisWeb private constructor(val server: Server) {
         return runCatching { Http.json.parseToJsonElement(text).jsonObject }.getOrDefault(JsonObject(emptyMap()))
     }
 
+    /** Bytes of a picture (covers need the session too). */
+    suspend fun bytes(pathOrUrl: String): ByteArray = withContext(Dispatchers.IO) {
+        ensureLogin()
+        client.newCall(Request.Builder().url(absolute(pathOrUrl)).build()).execute().use { r ->
+            if (!r.isSuccessful) throw HttpException(r.code, "표지를 받지 못했습니다 (${r.code})")
+            r.body?.bytes() ?: throw IOException("빈 응답")
+        }
+    }
+
     fun absolute(path: String): String = if (path.startsWith("http")) path else base + (if (path.startsWith("/")) path else "/$path")
 
     companion object {

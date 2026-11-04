@@ -112,6 +112,7 @@ fun LibraryScreen(
     onDelete: (BookEntity) -> Unit,
     onRename: (BookEntity, String) -> Unit,
     onPin: (BookEntity, Boolean) -> Unit = { _, _ -> },
+    onAudio: () -> Unit = {},
 ) {
     var filterName by rememberSaveable { mutableStateOf(ShelfFilter.ALL.name) }
     val filter = ShelfFilter.valueOf(filterName)
@@ -157,6 +158,7 @@ fun LibraryScreen(
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     listOf(
                         Triple("☁️", "서버에서 책 찾기", onCatalog),
+                        Triple("🎧", "오디오북", onAudio),
                         Triple("📁", "파일에서 가져오기", onImportFile),
                         Triple("🖍️", "하이라이트", onHighlights),
                         Triple("📊", "독서 통계", onStats),

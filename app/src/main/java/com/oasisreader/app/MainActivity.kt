@@ -38,6 +38,7 @@ import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.comic.ComicScreen
 import com.oasisreader.app.reader.ReaderScreen
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.produceState
 import com.oasisreader.app.stats.StatsCalculator
 import com.oasisreader.app.stats.StatsScreen
@@ -97,6 +98,8 @@ private object Route {
     const val HIGHLIGHTS = "highlights"
     const val READER = "reader:"
     const val DOC = "doc:"               // doc:<asset name without .md>
+    const val AUDIO = "audio"            // bookoasis audiobooks
+    const val AUDIO_PLAYER = "audio_player"
 }
 
 @Composable
@@ -189,6 +192,11 @@ private fun App() {
             val sid = route.removePrefix(Route.SERVER).ifBlank { null }
             key(route) { ServerScreen(serverId = sid, onDone = { route = serverReturn }) }
         }
+        route == Route.AUDIO -> com.oasisreader.app.audio.AudiobookScreen(
+            onBack = { route = Route.LIBRARY },
+            onPlayer = { route = Route.AUDIO_PLAYER },
+        )
+        route == Route.AUDIO_PLAYER -> com.oasisreader.app.audio.AudioPlayerScreen(onBack = { route = Route.AUDIO })
         route == Route.SETTINGS -> SettingsScreen(
             onBack = { route = Route.LIBRARY },
             onServer = { route = Route.SERVERS },
@@ -227,7 +235,7 @@ private fun App() {
                 else -> ReaderScreen(bookId = parts[0], focusHighlight = focus, onBack = { route = Route.LIBRARY })
             }
         }
-        else -> LibraryScreen(
+        else -> Box(Modifier.fillMaxSize()) { LibraryScreen(
             books = books.orEmpty(),
             loaded = books != null,
             importing = importing,
@@ -246,7 +254,14 @@ private fun App() {
             onDelete = { b -> scope.launch { store.delete(b.id) } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
+            onAudio = { route = Route.AUDIO },
         )
+            // an audiobook is loaded: a small player at the bottom of the library
+            com.oasisreader.app.audio.AudioMiniBar(
+                onOpen = { route = Route.AUDIO_PLAYER },
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+            )
+        }
     }
 }
 
