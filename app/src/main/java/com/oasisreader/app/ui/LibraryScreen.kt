@@ -296,22 +296,27 @@ fun LibraryScreen(
                     val isAudio = b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT
                     if (isAudio) {
                         // 오프라인: copy the tracks to the phone, or go back to streaming
-                        val dl = com.oasisreader.app.audio.AudioDownloads.progress[b.id]
-                        when {
-                            dl != null -> TextButton(onClick = { com.oasisreader.app.audio.AudioDownloads.cancel(b.id) }) {
-                                Text("⬇️ 받는 중 ${(dl * 100).roundToInt()}% · 누르면 취소")
-                            }
-                            b.pinned && b.fileBytes > 0 -> TextButton(onClick = {
-                                menuFor = null
-                                scope.launch { com.oasisreader.app.audio.AudioDownloads.remove(ctx, b) }
-                            }) { Text("☁️ 폰에서 지우고 스트리밍으로 듣기") }
-                            else -> TextButton(onClick = {
-                                menuFor = null
-                                com.oasisreader.app.audio.AudioDownloads.start(ctx, b) { err ->
-                                    android.widget.Toast.makeText(ctx, err?.let { "받지 못했습니다: $it" } ?: "「${b.title}」을(를) 폰에 받았습니다. 인터넷 없이 들을 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
-                                }
-                            }) { Text("⬇️ 폰에 받기 (오프라인으로 듣기)") }
+                        val ad = com.oasisreader.app.audio.AudioDownloads
+                        val dl = ad.progress[b.id]
+                        val err = ad.errors[b.id]
+                        fun startDl() {
+                            menuFor = null
+                            ad.enqueue(ctx, b)
+                            android.widget.Toast.makeText(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
                         }
+                        err?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
+                        when {
+                            dl != null -> TextButton(onClick = { ad.cancel(ctx, b.id) }) {
+                                Text("⬇️ 받는 중 ${(dl * 100).roundToInt()}% · 누르면 멈춤")
+                            }
+                            b.pinned && b.fileBytes > 0 -> {}
+                            b.fileBytes > 0 -> TextButton(onClick = { startDl() }) { Text("⬇️ 나머지 트랙도 받기") }
+                            else -> TextButton(onClick = { startDl() }) { Text("⬇️ 폰에 받기 (오프라인으로 듣기)") }
+                        }
+                        if (b.fileBytes > 0) TextButton(onClick = {
+                            menuFor = null
+                            scope.launch { ad.remove(ctx, b) }
+                        }) { Text("☁️ 폰에서 지우고 스트리밍으로 듣기") }
                     } else TextButton(onClick = { menuFor = null; exportFor = b }) { Text("📝 하이라이트 내보내기") }
                     if (b.sourceUrl != null && !isAudio) TextButton(onClick = { menuFor = null; onPin(b, !b.pinned) }) {
                         Text(if (b.pinned) "☁️ 임시로 두기 (공간 부족하면 파일만 지워짐)" else "📌 서재에 보관 (지금은 임시)")

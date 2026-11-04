@@ -1,56 +1,105 @@
 package com.oasisreader.app.audio
 
 import android.content.Context
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.setValue
+import androidx.work.ExistingWorkPolicy
+import androidx.work.WorkManager
 import com.oasisreader.app.data.BookStore
 import com.oasisreader.app.data.Http
-import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.BookEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Request
+import kotlinx.serialization.Serializable
 import java.io.File
 
 /**
- * 오프라인 오디오북: the tracks of a 서재 audiobook kept on the phone, encrypted ([MediaCrypt])
- * in filesDir/media/<id>/<track>.ogr with the track list beside them (audiobook.json), so it
- * plays without the server but nowhere outside this app. filesDir/media/ stays out of every
- * backup and phone move (the key does not move either).
- * A streamed audiobook keeps pinned = false (☁️ on the 서재, like 바로 읽기); a kept one pinned = true.
+ * 오프라인 오디오북: the tracks of a 서재 audiobook kept on the phone, encrypted ([MediaCrypt]).
+ *
+ *   filesDir/media/<id>/audiobook.json   the track list (from bookoasis)
+ *   filesDir/media/<id>/queue.json       tracks still wanted, and the last error
+ *   filesDir/media/<id>/<track>.ogr      a kept track; <track>.part while it comes (resumed by Range)
+ *
+ * Receiving runs in [AudioDownloadWorker] (WorkManager, a foreground service with a notification),
+ * so it goes on with the app closed and after a reboot or a lost connection. The files are the
+ * truth: a track is kept when its .ogr is there, wanted while it is in queue.json.
+ * filesDir/media/ stays out of every backup and phone move (the key does not move either).
+ * A 서재 row is pinned = true once every track is kept (☁️ streamed otherwise, like 바로 읽기).
  * Before 0.1.98 the tracks were plain files in books/<id>/audio/ — [migrateLegacy] moves them.
  */
 object AudioDownloads {
     private const val LEGACY_DIR = "audio"
     private const val MANIFEST = "audiobook.json"
+    private const val QUEUE = "queue.json"
+    const val WORK = "audio-download"
 
-    /** Download progress (0..1) by 서재 book id, while it runs. */
+    /** Whole-book progress (0..1) by 서재 book id, while it is being received. */
     val progress = mutableStateMapOf<String, Float>()
-    private val jobs = HashMap<String, Job>()
+    /** What is being received now: book id → (track id, 0..1 of that track). */
+    val current = mutableStateMapOf<String, Pair<Int, Float>>()
+    /** The last failure by book id (shown until it is tried again). */
+    val errors = mutableStateMapOf<String, String>()
+    /** Bumped whenever the files change, so screens can read them again. */
+    var version by androidx.compose.runtime.mutableIntStateOf(0)
+        internal set
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val lock = Any()
+
+    @Serializable
+    internal data class Queue(val wanted: List<Int> = emptyList(), val since: Long = 0, val error: String? = null)
 
     fun root(context: Context) = File(context.applicationContext.filesDir, "media")
-    private fun dir(context: Context, bookId: String) = File(root(context), bookId)
+    internal fun dir(context: Context, bookId: String) = File(root(context), bookId)
     private fun legacyDir(context: Context, bookId: String) = File(BookStore.get(context.applicationContext).dir(bookId), LEGACY_DIR)
     private fun manifest(context: Context, bookId: String) = File(dir(context, bookId), MANIFEST)
+    internal fun trackFile(context: Context, bookId: String, trackId: Int) = File(dir(context, bookId), "$trackId.${MediaCrypt.EXT}")
+    internal fun partFile(context: Context, bookId: String, trackId: Int) = File(dir(context, bookId), "$trackId.part")
+
+    // ---- the track list ----
+
+    internal fun writeManifest(context: Context, bookId: String, b: AudioBook) {
+        dir(context, bookId).mkdirs()
+        manifest(context, bookId).writeText(Http.json.encodeToString(AudioBook.serializer(), b.copy(tracks = b.tracks.map { it.copy(localPath = null) })))
+    }
+
+    private fun readManifest(context: Context, bookId: String): AudioBook? =
+        runCatching { Http.json.decodeFromString(AudioBook.serializer(), manifest(context, bookId).readText()) }.getOrNull()
+            ?: runCatching { Http.json.decodeFromString(AudioBook.serializer(), File(legacyDir(context, bookId), MANIFEST).readText()) }.getOrNull()
+
+    /** Track ids kept on the phone. */
+    fun keptTracks(context: Context, bookId: String): Set<Int> =
+        dir(context, bookId).listFiles()?.mapNotNull { f ->
+            if (f.name.endsWith("." + MediaCrypt.EXT) && f.length() > MediaCrypt.HEADER) f.name.substringBefore('.').toIntOrNull() else null
+        }?.toSet().orEmpty()
 
     /** Is the whole audiobook on the phone? */
-    fun isKept(context: Context, bookId: String): Boolean =
-        manifest(context, bookId).isFile || File(legacyDir(context, bookId), MANIFEST).isFile
+    fun isKept(context: Context, bookId: String): Boolean {
+        val b = readManifest(context, bookId) ?: return false
+        if (File(legacyDir(context, bookId), MANIFEST).isFile) return true
+        val kept = keptTracks(context, bookId)
+        return b.tracks.isNotEmpty() && b.tracks.all { it.id in kept }
+    }
 
-    /** The book kept on the phone, if it is (tracks point at the files). */
-    fun local(context: Context, bookId: String): AudioBook? = listOf(manifest(context, bookId), File(legacyDir(context, bookId), MANIFEST))
-        .firstNotNullOfOrNull { m ->
-            runCatching {
-                val b = Http.json.decodeFromString(AudioBook.serializer(), m.readText())
-                if (b.tracks.all { t -> t.localPath != null && File(t.localPath).isFile }) b else null
-            }.getOrNull()
+    /** The book as far as it is on the phone (kept tracks point at their files), or null when none is. */
+    fun local(context: Context, bookId: String): AudioBook? {
+        val b = readManifest(context, bookId) ?: return null
+        val legacy = File(legacyDir(context, bookId), MANIFEST).isFile
+        val kept = keptTracks(context, bookId)
+        val tracks = b.tracks.map { t ->
+            when {
+                legacy -> t.takeIf { it.localPath != null && File(it.localPath).isFile } ?: t.copy(localPath = null)
+                t.id in kept -> t.copy(localPath = trackFile(context, bookId, t.id).path)
+                else -> t.copy(localPath = null)
+            }
         }
+        return if (tracks.any { it.localPath != null }) b.copy(tracks = tracks) else null
+    }
 
     /** [b] with the phone's files and cover where there are some (stream otherwise). */
     fun withLocal(context: Context, b: AudioBook): AudioBook {
@@ -64,9 +113,116 @@ object AudioDownloads {
         )
     }
 
+    // ---- the queue ----
+
+    internal fun readQueue(context: Context, bookId: String): Queue = synchronized(lock) {
+        runCatching { Http.json.decodeFromString(Queue.serializer(), File(dir(context, bookId), QUEUE).readText()) }.getOrNull() ?: Queue()
+    }
+
+    internal fun writeQueue(context: Context, bookId: String, q: Queue) = synchronized(lock) {
+        val f = File(dir(context, bookId), QUEUE)
+        if (q.wanted.isEmpty() && q.error == null) f.delete()
+        else { f.parentFile?.mkdirs(); f.writeText(Http.json.encodeToString(Queue.serializer(), q)) }
+    }
+
+    internal fun updateQueue(context: Context, bookId: String, change: (Queue) -> Queue) = synchronized(lock) {
+        writeQueue(context, bookId, change(readQueue(context, bookId)))
+    }
+
+    /** Books with tracks still wanted, oldest request first. */
+    internal fun pendingBooks(context: Context): List<String> =
+        root(context).listFiles()?.filter { File(it, QUEUE).isFile }
+            ?.map { it.name to readQueue(context, it.name) }
+            ?.filter { it.second.wanted.isNotEmpty() }
+            ?.sortedBy { it.second.since }?.map { it.first }.orEmpty()
+
+    /** Tracks of [bookId] waiting to be received. */
+    fun wantedTracks(context: Context, bookId: String): Set<Int> = readQueue(context, bookId).wanted.toSet()
+
+    /**
+     * Receive [trackIds] of a 서재 audiobook (null = all its tracks). The track list comes from
+     * the server in the worker; the work goes on with the app closed (a notification shows it).
+     */
+    fun enqueue(context: Context, row: BookEntity, trackIds: Collection<Int>? = null) {
+        val app = context.applicationContext
+        scope.launch {
+            dir(app, row.id).mkdirs()
+            updateQueue(app, row.id) { q ->
+                val add = trackIds ?: listOf(ALL)
+                Queue(wanted = (q.wanted + add).distinct(), since = if (q.wanted.isEmpty()) System.currentTimeMillis() else q.since, error = null)
+            }
+            errors.remove(row.id)
+            if (progress[row.id] == null) progress[row.id] = 0f
+            version++
+            kick(app)
+        }
+    }
+
+    /** Start (or queue behind the running one) the worker. */
+    internal fun kick(context: Context) {
+        WorkManager.getInstance(context.applicationContext)
+            .enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, AudioDownloadWorker.request())
+    }
+
+    /** Stop receiving [bookId] (what is already kept stays; a half track resumes next time). */
+    fun cancel(context: Context, bookId: String) {
+        val app = context.applicationContext
+        scope.launch {
+            updateQueue(app, bookId) { Queue() }
+            progress.remove(bookId); current.remove(bookId); errors.remove(bookId)
+            version++
+        }
+    }
+
+    /** Stop everything that is being received or waits. */
+    fun cancelAll(context: Context) {
+        val app = context.applicationContext
+        WorkManager.getInstance(app).cancelUniqueWork(WORK)
+        scope.launch {
+            root(app).listFiles()?.forEach { d -> writeQueue(app, d.name, Queue()) }
+            progress.clear(); current.clear(); errors.clear()
+            version++
+        }
+    }
+
+    /** One kept track off the phone (the 서재 row goes back to ☁️ when the book is no longer whole). */
+    suspend fun removeTrack(context: Context, bookId: String, trackId: Int) = withContext(Dispatchers.IO) {
+        val app = context.applicationContext
+        updateQueue(app, bookId) { q -> q.copy(wanted = q.wanted - trackId) }
+        trackFile(app, bookId, trackId).delete()
+        partFile(app, bookId, trackId).delete()
+        refreshRow(app, bookId)
+    }
+
+    /** Back to streaming: the phone's copy goes, the place and the 서재 entry stay. */
+    suspend fun remove(context: Context, row: BookEntity) = withContext(Dispatchers.IO) {
+        val app = context.applicationContext
+        updateQueue(app, row.id) { Queue() }
+        progress.remove(row.id); current.remove(row.id); errors.remove(row.id)
+        // the worker notices the queue is empty and lets go of the files
+        dir(app, row.id).listFiles()?.filter { it.name != MANIFEST }?.forEach { it.delete() }
+        legacyDir(app, row.id).deleteRecursively()
+        refreshRow(app, row.id)
+    }
+
+    /** Bytes kept on the phone for [bookId]. */
+    fun keptBytes(context: Context, bookId: String): Long =
+        (dir(context, bookId).listFiles()?.filter { it.name.endsWith("." + MediaCrypt.EXT) }?.sumOf { it.length() } ?: 0L) +
+            (legacyDir(context, bookId).listFiles()?.sumOf { it.length() } ?: 0L)
+
+    /** The 서재 row after the files changed: pinned when whole, and the bytes on the phone. */
+    internal suspend fun refreshRow(app: Context, bookId: String) {
+        val dao = AppDatabase.get(app).books()
+        dao.get(bookId)?.let { dao.insert(it.copy(pinned = isKept(app, bookId), fileBytes = keptBytes(app, bookId))) }
+        version++
+    }
+
+    /** queue.json: "every track" before the track list is known. */
+    internal const val ALL = -1
+
     /**
      * Plain tracks of 0.1.95–0.1.96 (books/<id>/audio/<track>.audio) → encrypted ones in media/<id>/.
-     * Runs once at start, quietly; a book that is playing is skipped and done next time.
+     * Runs at start, quietly; a book that is playing is skipped and done next time.
      */
     fun migrateLegacy(context: Context) {
         val app = context.applicationContext
@@ -79,90 +235,20 @@ object AudioDownloads {
                     val old = File(d, LEGACY_DIR)
                     val b = Http.json.decodeFromString(AudioBook.serializer(), File(old, MANIFEST).readText())
                     val key = MediaCrypt.key(app)
-                    val folder = dir(app, id).apply { mkdirs() }
-                    val kept = b.tracks.map { t ->
-                        val src = t.localPath?.let(::File)?.takeIf { it.isFile } ?: return@map t
-                        val f = File(folder, "${t.id}.${MediaCrypt.EXT}")
-                        val tmp = File(folder, "${t.id}.part")
-                        tmp.delete()
+                    dir(app, id).mkdirs()
+                    b.tracks.forEach { t ->
+                        val src = t.localPath?.let(::File)?.takeIf { it.isFile } ?: return@forEach
+                        val tmp = partFile(app, id, t.id).apply { delete() }
                         src.inputStream().use { input -> tmp.outputStream().use { out -> MediaCrypt.encrypt(key, MediaCrypt.newNonce(), input, out) } }
-                        tmp.renameTo(f)
-                        t.copy(localPath = f.path)
+                        tmp.renameTo(trackFile(app, id, t.id))
                     }
-                    manifest(app, id).writeText(Http.json.encodeToString(AudioBook.serializer(), b.copy(tracks = kept)))
+                    writeManifest(app, id, b)
                     old.deleteRecursively()
+                    refreshRow(app, id)
                 }
             }
+            // a request left from before the app was closed (the worker also comes back by itself)
+            if (pendingBooks(app).isNotEmpty()) kick(app)
         }
-    }
-
-    fun start(context: Context, row: BookEntity, onDone: (String?) -> Unit) {
-        val app = context.applicationContext
-        if (jobs[row.id]?.isActive == true) return
-        progress[row.id] = 0f
-        jobs[row.id] = scope.launch {
-            val err = runCatching { download(app, row) }.exceptionOrNull()
-            progress.remove(row.id)
-            jobs.remove(row.id)
-            withContext(Dispatchers.Main) {
-                onDone(err?.let { it.message ?: it.javaClass.simpleName })
-            }
-        }
-    }
-
-    fun cancel(bookId: String) { jobs[bookId]?.cancel(); jobs.remove(bookId); progress.remove(bookId) }
-
-    private suspend fun download(app: Context, row: BookEntity) {
-        val (sid, aid) = AudioLibraryLink.parse(row) ?: throw IllegalStateException("오디오북 정보가 없습니다")
-        val server = ServerSettings(app).get(sid) ?: throw IllegalStateException("이 오디오북의 서버 설정이 지워졌습니다")
-        val web = BookOasisWeb.of(server)
-        val d = AudioLibraryLink.detail(web, sid, aid, row.title, null)
-        web.ensureLogin()
-        val folder = dir(app, row.id).apply { mkdirs() }
-        val key = MediaCrypt.key(app)
-        val job = kotlin.coroutines.coroutineContext[Job]
-        val total = d.book.tracks.size.coerceAtLeast(1)
-        val kept = ArrayList<AudioTrack>()
-        d.book.tracks.forEachIndexed { i, t ->
-            job?.ensureActive()
-            val f = File(folder, "${t.id}.${MediaCrypt.EXT}")
-            if (!f.isFile || f.length() <= MediaCrypt.HEADER) {
-                val tmp = File(folder, "${t.id}.part")
-                val url = web.absolute("/api/media/audiobooks/${d.book.id}/tracks/${t.id}/stream")
-                web.client.newCall(Request.Builder().url(url).build()).execute().use { r ->
-                    if (!r.isSuccessful) throw IllegalStateException("트랙 ${i + 1}을(를) 받지 못했습니다 (${r.code})")
-                    val body = r.body ?: throw IllegalStateException("빈 응답")
-                    val len = body.contentLength()
-                    var got = 0L
-                    body.byteStream().use { input ->
-                        tmp.outputStream().use { out ->
-                            MediaCrypt.encrypt(key, MediaCrypt.newNonce(), input, out) { n ->
-                                job?.ensureActive()
-                                got += n
-                                if (len > 0) progress[row.id] = ((i + got.toFloat() / len) / total).coerceIn(0f, 1f)
-                            }
-                        }
-                    }
-                }
-                tmp.renameTo(f)
-            }
-            kept += t.copy(localPath = f.path)
-            progress[row.id] = (i + 1f) / total
-        }
-        val book = d.book.copy(tracks = kept)
-        manifest(app, row.id).writeText(Http.json.encodeToString(AudioBook.serializer(), book))
-        legacyDir(app, row.id).deleteRecursively()
-        val bytes = folder.walk().filter { it.isFile }.sumOf { it.length() }
-        val dao = AppDatabase.get(app).books()
-        dao.get(row.id)?.let { dao.insert(it.copy(pinned = true, fileBytes = bytes)) }
-    }
-
-    /** Back to streaming: the phone's copy goes, the place and the 서재 entry stay. */
-    suspend fun remove(context: Context, row: BookEntity) = withContext(Dispatchers.IO) {
-        cancel(row.id)
-        dir(context, row.id).deleteRecursively()
-        legacyDir(context, row.id).deleteRecursively()
-        val dao = AppDatabase.get(context.applicationContext).books()
-        dao.get(row.id)?.let { dao.insert(it.copy(pinned = false, fileBytes = 0)) }
     }
 }

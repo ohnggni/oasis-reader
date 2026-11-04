@@ -67,6 +67,9 @@ class BookOasisWeb private constructor(val server: Server) {
     /** Makes sure there is a session (logs in once); call before handing [client] to the player. */
     suspend fun ensureLogin() { if (!loggedIn) login() }
 
+    /** The session ran out (401 on a raw [client] call, e.g. a download): log in again. */
+    suspend fun relogin() { loggedIn = false; login() }
+
     private fun url(path: String, params: Map<String, Any?>): String {
         val b = ("$base$path").toHttpUrlOrNull()?.newBuilder() ?: throw IOException("주소가 올바르지 않습니다: $path")
         params.forEach { (k, v) -> if (v != null && v.toString().isNotEmpty()) b.addQueryParameter(k, v.toString()) }

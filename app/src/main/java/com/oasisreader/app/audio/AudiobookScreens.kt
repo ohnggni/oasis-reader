@@ -354,21 +354,24 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             else Text("📚 서재에 있음", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
                         }
                         // 오프라인: the tracks on the phone (puts it on the 서재 first)
-                        val dl = AudioDownloads.progress[AudioLibraryLink.bookId(web.server.id, b.id)]
+                        val rowId = AudioLibraryLink.bookId(web.server.id, b.id)
+                        val dl = AudioDownloads.progress[rowId]
+                        val dlErr = AudioDownloads.errors[rowId]
                         val kept = onShelf?.let { it.pinned && it.fileBytes > 0 } == true
+                        dlErr?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
                         when {
-                            dl != null -> Text("⬇️ 폰에 받는 중 ${(dl * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
+                            dl != null -> TextButton(onClick = { AudioDownloads.cancel(context, rowId) }) { Text("⬇️ 폰에 받는 중 ${(dl * 100).toInt()}% · 누르면 멈춤") }
                             kept -> Text("⬇️ 폰에 받음 (오프라인으로 들을 수 있음)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
                             else -> TextButton(onClick = {
                                 scope.launch {
                                     runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
                                         .onSuccess { row ->
-                                            AudioDownloads.start(context, row) { err ->
-                                                android.widget.Toast.makeText(context, err?.let { "받지 못했습니다: $it" } ?: "폰에 받았습니다. 인터넷 없이 들을 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
-                                            }
+                                            AudioDownloads.enqueue(context, row)
+                                            android.widget.Toast.makeText(context, "받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
                                         }
+                                        .onFailure { android.widget.Toast.makeText(context, "받지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
                                 }
-                            }) { Text("⬇️ 폰에 받기 (오프라인)") }
+                            }) { Text(if ((onShelf?.fileBytes ?: 0) > 0) "⬇️ 나머지 트랙도 받기" else "⬇️ 폰에 받기 (오프라인)") }
                         }
                     }
                 }
