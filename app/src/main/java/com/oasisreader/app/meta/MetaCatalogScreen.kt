@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import com.oasisreader.app.ui.grouped
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -151,6 +152,8 @@ fun MetaCatalogScreen(
     val bookItems = remember { mutableStateListOf<MetaBook>() }
     var page by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
+    var total by remember { mutableStateOf<Int?>(null) }        // all that match (from oasis-meta)
+    var totalBooks by remember { mutableStateOf<Int?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -164,11 +167,11 @@ fun MetaCatalogScreen(
         try {
             if (activeQuery.isNotBlank() && searchBooks) {
                 val r = api.books(libParam, null, activeQuery, "mtime_desc", p, limit = 100, format = fmtParam)
-                if (p == 1) bookItems.clear()
+                if (p == 1) { bookItems.clear(); total = r.total; totalBooks = r.total }
                 bookItems.addAll(r.items); hasMore = r.hasMore
             } else {
                 val r = api.series(libParam, activeQuery.ifBlank { null }, sort.api(sortDesc), p, format = fmtParam)
-                if (p == 1) seriesItems.clear()
+                if (p == 1) { seriesItems.clear(); total = r.total; totalBooks = r.totalBooks }
                 seriesItems.addAll(r.items); hasMore = r.hasMore
             }
             page = p
@@ -375,6 +378,17 @@ fun MetaCatalogScreen(
         }
 
         val err = error ?: libError
+        // how many match: from the server when it says, else what is loaded so far
+        val booksMode = activeQuery.isNotBlank() && searchBooks
+        com.oasisreader.app.ui.CountLine(
+            when {
+                loading && seriesItems.isEmpty() && bookItems.isEmpty() -> null
+                booksMode -> total?.let { "📕 ${it.grouped()}권" } ?: "📕 " + com.oasisreader.app.ui.loadedCount(bookItems.size, hasMore, "권")
+                total != null -> "📚 시리즈 ${total!!.grouped()}개" + (totalBooks?.let { " · ${it.grouped()}권" } ?: "")
+                seriesItems.isNotEmpty() -> "📚 시리즈 " + com.oasisreader.app.ui.loadedCount(seriesItems.size, hasMore)
+                else -> null
+            },
+        )
         when {
             err != null && seriesItems.isEmpty() && bookItems.isEmpty() -> Column(
                 Modifier.fillMaxSize().padding(32.dp),

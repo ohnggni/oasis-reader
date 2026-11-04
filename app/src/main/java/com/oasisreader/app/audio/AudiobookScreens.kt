@@ -150,6 +150,7 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
     val items = remember(server) { mutableStateListOf<AudioItem>() }
     var page by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
+    var total by remember { mutableStateOf<Int?>(null) }   // all that match, when the server says and no app-side filter applies
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf<AudioItem?>(null) }
@@ -182,7 +183,13 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
                     "sort" to sort.api(sortDesc), "page" to next, "limit" to 40,
                 ))
                 val list = o.firstList("items", "series", "data", "list", "books").mapNotNull { it.toItem() }
-                if (next == 1) items.clear()
+                if (next == 1) {
+                    items.clear()
+                    // the server's count holds only when it did all the filtering (one category, no 읽음 filter)
+                    val pg = o["pagination"] as? JsonObject
+                    total = if (libIds.size <= 1 && readFilter.isEmpty())
+                        (o.int("total", "total_count", "totalCount", "count") ?: pg?.int("total", "total_count", "count")) else null
+                }
                 val kept = list.filter(::keep)
                 items.addAll(kept); added += kept.size
                 more = (o["has_more"] as? JsonPrimitive)?.contentOrNull == "true" || (o["has_more"] == null && list.size >= 40)
@@ -229,6 +236,12 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
             },
             query = query, onQuery = { query = it }, onSearch = { active = query.trim() },
             items, hasMore, loading, page, error, web,
+            count = when {
+                loading && items.isEmpty() -> null
+                total != null -> "🎧 ${"%,d".format(total)}권"
+                items.isNotEmpty() || !loading -> "🎧 " + com.oasisreader.app.ui.loadedCount(items.size, hasMore, "권")
+                else -> null
+            },
             load = { p -> scope.launch { load(p) } },
             onOpen = { open = it },
         )
@@ -240,6 +253,7 @@ private fun AudioShelf(
     filters: @Composable () -> Unit,
     query: String, onQuery: (String) -> Unit, onSearch: () -> Unit,
     items: List<AudioItem>, hasMore: Boolean, loading: Boolean, page: Int, error: String?, web: BookOasisWeb,
+    count: String?,
     load: (Int) -> Unit, onOpen: (AudioItem) -> Unit,
 ) {
     Column {
@@ -255,6 +269,7 @@ private fun AudioShelf(
             horizontalArrangement = Arrangement.spacedBy(com.oasisreader.app.ui.MiniChipGap),
             verticalAlignment = Alignment.CenterVertically,
         ) { filters() }
+        com.oasisreader.app.ui.CountLine(count)
         when {
             error != null && items.isEmpty() -> Column(Modifier.padding(24.dp)) {
                 Text("⚠️ $error", color = MaterialTheme.colorScheme.error)

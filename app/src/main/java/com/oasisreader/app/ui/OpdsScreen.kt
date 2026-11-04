@@ -238,6 +238,17 @@ fun OpdsScreen(
                         grid = grid, onGrid = { grid = it; sortPrefs.edit().putBoolean("grid", it).apply() },
                     )
                 }
+                // how many are here: books and folders (the server's count when it gives one)
+                val nBooks = all.count { it.isBook }
+                val nFolders = all.size - nBooks
+                val more = nextUrl != null
+                CountLine(
+                    s.feed.totalResults?.let { "📚 ${"%,d".format(it)}개" }
+                        ?: listOfNotNull(
+                            nFolders.takeIf { it > 0 }?.let { "📂 폴더 " + loadedCount(it, more && nBooks == 0) },
+                            nBooks.takeIf { it > 0 }?.let { "📕 " + loadedCount(it, more, "권") },
+                        ).joinToString(" · ").ifEmpty { null },
+                )
                 if (entries.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("항목이 없습니다", color = MaterialTheme.colorScheme.onSurfaceVariant)

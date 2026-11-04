@@ -66,3 +66,21 @@ fun CheckMark(on: Boolean) {
 
 /** Gap between [MiniChip]s in a row. */
 val MiniChipGap = 6.dp
+
+/** "N권"-style count under a list's filters: how many match in all (or how many are loaded so far). */
+@Composable
+fun CountLine(text: String?, modifier: Modifier = Modifier) {
+    if (text.isNullOrEmpty()) return
+    Text(
+        text,
+        fontSize = 11.5.sp, lineHeight = 14.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
+    )
+}
+
+/** 12345 → "12,345". */
+fun Int.grouped(): String = "%,d".format(this)
+
+/** What to say when only a part is known: "40개 이상" while more pages remain, "12개" otherwise. */
+fun loadedCount(n: Int, more: Boolean, unit: String = "개"): String = if (more) "${n.grouped()}$unit 이상" else "${n.grouped()}$unit"

@@ -60,6 +60,10 @@ data class MetaPage<T>(
     val page: Int = 1,
     val limit: Int = 100,
     @SerialName("has_more") val hasMore: Boolean = false,
+    /** All that match (first page only; oasis-meta 2026-11-04+). For /series: the number of series. */
+    val total: Int? = null,
+    /** /series: the books in them. */
+    @SerialName("total_books") val totalBooks: Int? = null,
 )
 
 @Serializable

@@ -62,6 +62,7 @@ data class OpdsFeed(
     val entries: List<OpdsEntry>,
     val next: String? = null,
     val searchHref: String? = null,       // either a template with {searchTerms} or an OpenSearch description
+    val totalResults: Int? = null,         // opensearch:totalResults, when the server gives it
 )
 
 /**
@@ -185,6 +186,7 @@ class OpdsClient(private val server: Server) {
         var feedTitle = ""
         var next: String? = null
         var search: String? = null
+        var total: Int? = null
         val entries = ArrayList<OpdsEntry>()
 
         // current entry
@@ -198,6 +200,7 @@ class OpdsClient(private val server: Server) {
         while (p.next() != XmlPullParser.END_DOCUMENT) {
             when (p.eventType) {
                 XmlPullParser.START_TAG -> when (p.name) {
+                    "totalResults" -> if (!inEntry) total = runCatching { p.nextText().trim().toInt() }.getOrNull()
                     "entry" -> {
                         inEntry = true
                         id = ""; title = ""; author = null; summary = null; updated = null; published = null
@@ -261,7 +264,7 @@ class OpdsClient(private val server: Server) {
                 }
             }
         }
-        return OpdsFeed(base, feedTitle.ifEmpty { "카탈로그" }, entries, next, search)
+        return OpdsFeed(base, feedTitle.ifEmpty { "카탈로그" }, entries, next, search, total)
     }
 
     // ── OPDS 2.0 (JSON) ──────────────────────────────────────────
