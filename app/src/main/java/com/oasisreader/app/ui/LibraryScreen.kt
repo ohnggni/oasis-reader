@@ -55,6 +55,9 @@ import androidx.compose.ui.unit.dp
 import com.oasisreader.app.data.BookStore
 import com.oasisreader.app.data.db.BookEntity
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 
 enum class ShelfFilter(val label: String) {
     ALL("전체"), READING("읽는 중"), UNREAD("안 읽음"), DONE("다 읽음");
@@ -127,6 +130,7 @@ fun LibraryScreen(
     var confirmDelete by remember { mutableStateOf<BookEntity?>(null) }
     var renaming by remember { mutableStateOf<BookEntity?>(null) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val shelfPrefs = remember { ctx.getSharedPreferences("library", android.content.Context.MODE_PRIVATE) }
     // tile size: smallest tile width in dp (3 across on a phone at the default)
     var tileDp by remember { mutableStateOf(shelfPrefs.getInt("tile_dp", TILE_DEFAULT).let { v -> TILE_STEPS.minBy { kotlin.math.abs(it - v) } }) }
@@ -279,15 +283,36 @@ fun LibraryScreen(
             text = {
                 Column {
                     Text(
-                        listOfNotNull(b.author, "%.1f MB".format(b.fileBytes / 1048576.0), b.sourceUrl?.let { "서버에서 받음" })
+                        (if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT)
+                            listOfNotNull(b.author, if (b.pinned && b.fileBytes > 0) "🎧 폰에 받음 · %.1f MB".format(b.fileBytes / 1048576.0) else "🎧 스트리밍 (폰에 없음)")
+                        else listOfNotNull(b.author, "%.1f MB".format(b.fileBytes / 1048576.0), b.sourceUrl?.let { "서버에서 받음" }))
                             .joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { menuFor = null; infoFor = b }) { Text("ℹ️ 책 정보") }
                     TextButton(onClick = { menuFor = null; renaming = b }) { Text("✏️ 제목 바꾸기") }
-                    TextButton(onClick = { menuFor = null; exportFor = b }) { Text("📝 하이라이트 내보내기") }
-                    if (b.sourceUrl != null) TextButton(onClick = { menuFor = null; onPin(b, !b.pinned) }) {
+                    val isAudio = b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT
+                    if (isAudio) {
+                        // 오프라인: copy the tracks to the phone, or go back to streaming
+                        val dl = com.oasisreader.app.audio.AudioDownloads.progress[b.id]
+                        when {
+                            dl != null -> TextButton(onClick = { com.oasisreader.app.audio.AudioDownloads.cancel(b.id) }) {
+                                Text("⬇️ 받는 중 ${(dl * 100).roundToInt()}% · 누르면 취소")
+                            }
+                            b.pinned && b.fileBytes > 0 -> TextButton(onClick = {
+                                menuFor = null
+                                scope.launch { com.oasisreader.app.audio.AudioDownloads.remove(ctx, b) }
+                            }) { Text("☁️ 폰에서 지우고 스트리밍으로 듣기") }
+                            else -> TextButton(onClick = {
+                                menuFor = null
+                                com.oasisreader.app.audio.AudioDownloads.start(ctx, b) { err ->
+                                    android.widget.Toast.makeText(ctx, err?.let { "받지 못했습니다: $it" } ?: "「${b.title}」을(를) 폰에 받았습니다. 인터넷 없이 들을 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }) { Text("⬇️ 폰에 받기 (오프라인으로 듣기)") }
+                        }
+                    } else TextButton(onClick = { menuFor = null; exportFor = b }) { Text("📝 하이라이트 내보내기") }
+                    if (b.sourceUrl != null && !isAudio) TextButton(onClick = { menuFor = null; onPin(b, !b.pinned) }) {
                         Text(if (b.pinned) "☁️ 임시로 두기 (공간 부족하면 파일만 지워짐)" else "📌 서재에 보관 (지금은 임시)")
                     }
                 }
@@ -375,11 +400,14 @@ private fun progressText(b: BookEntity): String = (if (b.pinned) "" else "☁️
 @Composable
 private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMenu: () -> Unit, compact: Boolean = false, ahead: Float? = null) {
     Column(Modifier.combinedClickable(onClick = onClick, onLongClick = onMenu)) {
-        BookCover(
-            file = if (b.hasCover) store.coverFile(b.id) else null,
-            title = b.title,
-            modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
-        )
+        Box {
+            BookCover(
+                file = if (b.hasCover) store.coverFile(b.id) else null,
+                title = b.title,
+                modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
+            )
+            if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) AudioBadge(b, compact, Modifier.align(Alignment.BottomStart))
+        }
         if (b.lastReadAt != null && b.finishedAt == null) {
             LinearProgressIndicator(
                 progress = { b.progress },
@@ -391,7 +419,7 @@ private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
             Column(Modifier.weight(1f)) {
                 Text(b.title, style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    listOfNotNull(b.author, progressText(b) + aheadText(ahead)).joinToString(" · "),
+                    listOfNotNull(b.author, progressText(b) + aheadText(ahead) + downloadText(b)).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -410,11 +438,14 @@ private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BookCover(
-            file = if (b.hasCover) store.coverFile(b.id) else null,
-            title = b.title,
-            modifier = Modifier.width(52.dp).height(76.dp),
-        )
+        Box {
+            BookCover(
+                file = if (b.hasCover) store.coverFile(b.id) else null,
+                title = b.title,
+                modifier = Modifier.width(52.dp).height(76.dp),
+            )
+            if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) AudioBadge(b, true, Modifier.align(Alignment.BottomStart))
+        }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(b.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -428,7 +459,7 @@ private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
                     LinearProgressIndicator(progress = { b.progress }, modifier = Modifier.width(90.dp).height(3.dp))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(progressText(b) + aheadText(ahead), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(progressText(b) + aheadText(ahead) + downloadText(b), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         MoreButton(onMenu)
@@ -445,4 +476,26 @@ internal fun minutesText(min: Int): String = when {
     min < 60 -> "${min}분"
     min % 60 == 0 -> "${min / 60}시간"
     else -> "${min / 60}시간 ${min % 60}분"
+}
+
+/** A kept audiobook being copied to the phone: " · ⬇ 35%". */
+@Composable
+private fun downloadText(b: BookEntity): String =
+    com.oasisreader.app.audio.AudioDownloads.progress[b.id]?.let { " · ⬇ ${(it * 100).roundToInt()}%" }.orEmpty()
+
+/** On an audiobook's cover: 🎧 and, when it is on the phone, ⬇ (works offline). */
+@Composable
+private fun AudioBadge(b: BookEntity, compact: Boolean, modifier: Modifier = Modifier) {
+    val kept = b.pinned && b.fileBytes > 0
+    Row(
+        modifier.padding(4.dp)
+            .background(Color.Black.copy(alpha = 0.62f), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (compact) (if (kept) "🎧⬇" else "🎧") else (if (kept) "🎧 오디오북 ⬇" else "🎧 오디오북"),
+            color = Color.White, fontSize = if (compact) 10.sp else 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+        )
+    }
 }

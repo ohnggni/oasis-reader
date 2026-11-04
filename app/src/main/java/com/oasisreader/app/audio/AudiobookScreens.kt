@@ -53,6 +53,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -336,6 +337,23 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             }) { Text("📚 서재에 담기") }
                             else Text("📚 서재에 있음", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
                         }
+                        // 오프라인: the tracks on the phone (puts it on the 서재 first)
+                        val dl = AudioDownloads.progress[AudioLibraryLink.bookId(web.server.id, b.id)]
+                        val kept = onShelf?.let { it.pinned && it.fileBytes > 0 } == true
+                        when {
+                            dl != null -> Text("⬇️ 폰에 받는 중 ${(dl * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
+                            kept -> Text("⬇️ 폰에 받음 (오프라인으로 들을 수 있음)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
+                            else -> TextButton(onClick = {
+                                scope.launch {
+                                    runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
+                                        .onSuccess { row ->
+                                            AudioDownloads.start(context, row) { err ->
+                                                android.widget.Toast.makeText(context, err?.let { "받지 못했습니다: $it" } ?: "폰에 받았습니다. 인터넷 없이 들을 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                }
+                            }) { Text("⬇️ 폰에 받기 (오프라인)") }
+                        }
                     }
                 }
             }
@@ -480,8 +498,17 @@ fun AudioMiniBar(onOpen: () -> Unit, modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
         shadowElevation = 4.dp,
     ) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("🎧", fontSize = 16.sp)
+        Row(Modifier.padding(start = 8.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            // a small cover: the 서재 copy when there is one (offline too), else the server's
+            val context = LocalContext.current
+            val local = b.artworkFile?.let { java.io.File(it) }?.takeIf { it.isFile }
+            val coverMod = Modifier.padding(vertical = 6.dp).size(40.dp).clip(RoundedCornerShape(6.dp))
+            val w = AudioPlayback.web
+            when {
+                local != null -> com.oasisreader.app.ui.BookCover(local, b.title, coverMod)
+                w != null && b.coverUrl != null -> RemoteCover(b.coverUrl, b.title, { u -> w.bytes(u) }, coverMod)
+                else -> Text("🎧", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
+            }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                 Text(b.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -491,6 +518,10 @@ fun AudioMiniBar(onOpen: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             IconButton(onClick = { AudioPlayback.toggle() }) { Text(if (AudioPlayback.playing) "⏸" else "▶", fontSize = 20.sp) }
+            // stop and put the player away (the place is saved)
+            IconButton(onClick = { AudioPlayback.close(context) }, modifier = Modifier.semantics { contentDescription = "재생 끝내기" }) {
+                Text("✕", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

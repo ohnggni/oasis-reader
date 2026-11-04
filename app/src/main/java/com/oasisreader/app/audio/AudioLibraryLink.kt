@@ -100,7 +100,8 @@ object AudioLibraryLink {
             format = FORMAT,
             opdsId = tag(b.serverId, b.id),
             hasCover = cover.isFile,
-            pinned = true,                      // nothing to drop: the tracks stay on the server
+            // kept on the phone (오프라인) or streamed (☁️, like 바로 읽기)
+            pinned = AudioDownloads.isKept(app, id),
             progress = maxOf(old?.progress ?: 0f, serverPct),
             finishedAt = old?.finishedAt ?: if (completed) System.currentTimeMillis() else null,
             spineIndex = old?.spineIndex ?: b.tracks.indexOfFirst { it.id == b.startTrackId }.coerceAtLeast(0),
@@ -114,9 +115,10 @@ object AudioLibraryLink {
         if (b.serverId.isEmpty()) return
         val total = b.tracks.sumOf { it.durationSec }
         val before = b.tracks.take(trackIndex).sumOf { it.durationSec }
-        val trackLen = b.tracks.getOrNull(trackIndex)?.durationSec ?: 0.0
         val overall = if (completed) 1f else if (total > 0) ((before + positionSec) / total).toFloat().coerceIn(0f, 1f) else 0f
-        val inTrack = if (trackLen > 0) (positionSec / trackLen).toFloat().coerceIn(0f, 1f) else 0f
+        // audiobook rows keep the seconds into the track here (chapterFraction; the reader never opens them):
+        // track lengths are often unknown until played
+        val inTrack = positionSec.toFloat().coerceAtLeast(0f)
         val dao = AppDatabase.get(context.applicationContext).books()
         val id = bookId(b.serverId, b.id)
         dao.savePosition(id, trackIndex, inTrack, overall, System.currentTimeMillis())
@@ -129,16 +131,21 @@ object AudioLibraryLink {
         val server: Server = ServerSettings(context.applicationContext).get(sid)
             ?: throw IllegalStateException("이 오디오북의 서버 설정이 지워졌습니다")
         val web = BookOasisWeb.of(server)
-        val d = detail(web, sid, aid, b.title, null)
+        val kept = AudioDownloads.local(context, b.id)
+        // kept on the phone: the server only for its newer place (and not for long); offline, the phone's place
+        val d = if (kept == null) detail(web, sid, aid, b.title, null)
+        else kotlinx.coroutines.withTimeoutOrNull(5_000) { runCatching { detail(web, sid, aid, b.title, null) }.getOrNull() }
+            ?: Detail(kept.copy(startTrackId = null, startSeconds = 0.0), null, (b.progress * 100).toDouble(), b.finishedAt != null)
+        if (kept == null || d.book.tracks.isNotEmpty()) runCatching { add(context, web, d.book, d.percent, d.completed) }
         add(context, web, d.book, d.percent, d.completed)
         // the phone's place when it is further along than the server's (e.g. listened offline of the web)
         val local = AppDatabase.get(context.applicationContext).books().get(b.id)
         val serverIdx = d.book.tracks.indexOfFirst { it.id == d.book.startTrackId }
-        val useLocal = local != null && serverIdx >= 0 && local.spineIndex > serverIdx
+        val useLocal = local != null && local.lastReadAt != null && (serverIdx < 0 || local.spineIndex > serverIdx ||
+            (local.spineIndex == serverIdx && local.chapterFraction > d.book.startSeconds + 5))
         withContext(Dispatchers.Main) {
             if (useLocal && local != null) {
-                val t = d.book.tracks.getOrNull(local.spineIndex)
-                AudioPlayback.open(context, web, d.book, local.spineIndex, (t?.durationSec ?: 0.0) * local.chapterFraction)
+                AudioPlayback.open(context, web, d.book, local.spineIndex, local.chapterFraction.toDouble())
             } else AudioPlayback.open(context, web, d.book)
         }
     }

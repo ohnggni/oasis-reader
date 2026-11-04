@@ -29,6 +29,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /** One audiobook (or music album) as the player needs it. */
+@kotlinx.serialization.Serializable
 data class AudioBook(
     val id: Int,
     val title: String,
@@ -39,9 +40,12 @@ data class AudioBook(
     val startSeconds: Double = 0.0,
     val serverId: String = "",      // the catalog it came from (서재 row: ab_<server>_<id>)
     val libraryId: String? = null,
+    val artworkFile: String? = null,   // the 서재 cover on the phone (notification / lock screen, offline too)
 )
 
-data class AudioTrack(val id: Int, val title: String, val durationSec: Double)
+/** [localPath]: the track kept on the phone (오프라인), played instead of the stream. */
+@kotlinx.serialization.Serializable
+data class AudioTrack(val id: Int, val title: String, val durationSec: Double, val localPath: String? = null)
 
 /**
  * The one audiobook player of the app: an ExoPlayer streaming the tracks from bookoasis with the
@@ -85,7 +89,8 @@ object AudioPlayback {
         val app = context.applicationContext
         speed = app.getSharedPreferences("audio", Context.MODE_PRIVATE).getFloat("speed", 1f)
         val p = ExoPlayer.Builder(app)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(w.client)))
+            // files on the phone (오프라인) and the server's stream with the web session
+            .setMediaSourceFactory(DefaultMediaSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(app, OkHttpDataSource.Factory(w.client))))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_SPEECH).build(),
                 /* handleAudioFocus = */ true,
@@ -120,7 +125,8 @@ object AudioPlayback {
     }
 
     /** Opens [b] at the server's place (or at [trackIndex]/[startSec] when given) and plays. */
-    fun open(context: Context, w: BookOasisWeb, b: AudioBook, startIndex: Int? = null, startSec: Double? = null) {
+    fun open(context: Context, w: BookOasisWeb, b0: AudioBook, startIndex: Int? = null, startSec: Double? = null) {
+        val b = AudioDownloads.withLocal(context, b0)
         val p = ensurePlayer(context, w)
         app = context.applicationContext
         error = null
@@ -130,7 +136,7 @@ object AudioPlayback {
             p.setMediaItems(b.tracks.mapIndexed { i, t ->
                 MediaItem.Builder()
                     .setMediaId("${b.id}:${t.id}")
-                    .setUri(w.absolute("/api/media/audiobooks/${b.id}/tracks/${t.id}/stream"))
+                    .setUri(t.localPath?.let { Uri.fromFile(java.io.File(it)) } ?: Uri.parse(w.absolute("/api/media/audiobooks/${b.id}/tracks/${t.id}/stream")))
                     .setMediaMetadata(
                         MediaMetadata.Builder()
                             .setTitle(t.title.ifBlank { "${i + 1}" })
@@ -138,7 +144,10 @@ object AudioPlayback {
                             .setAlbumTitle(b.title)
                             .setAlbumArtist(b.author)
                             .setTrackNumber(i + 1).setTotalTrackCount(b.tracks.size)
-                            .apply { b.coverUrl?.let { setArtworkUri(Uri.parse(it)) } }
+                            .apply {
+                                val art = b.artworkFile?.let { Uri.fromFile(java.io.File(it)) } ?: b.coverUrl?.let { Uri.parse(it) }
+                                art?.let { setArtworkUri(it) }
+                            }
                             .build(),
                     )
                     .build()
