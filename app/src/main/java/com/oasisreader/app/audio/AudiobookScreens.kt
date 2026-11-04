@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -254,36 +255,20 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
     var book by remember(item) { mutableStateOf<AudioBook?>(null) }
     var summary by remember(item) { mutableStateOf<String?>(null) }
     var pct by remember(item) { mutableStateOf(0.0) }
+    var completed by remember(item) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val onShelf by remember(item) {
+        com.oasisreader.app.data.db.AppDatabase.get(context.applicationContext).books()
+            .observe(AudioLibraryLink.bookId(web.server.id, item.id ?: -1))
+    }.collectAsState(initial = null)
     var error by remember(item) { mutableStateOf<String?>(null) }
     LaunchedEffect(item) {
         try {
-            val o = web.get("/api/media/detail", mapOf(
-                "type" to "audiobook", "series" to item.title, "library_id" to (item.libraryId ?: "all"),
-                "representative_book_id" to item.id,
-            ))
-            val meta = o["meta"] as? JsonObject ?: JsonObject(emptyMap())
-            val tracks = o.firstList("books").mapNotNull { t ->
-                val id = t.int("id") ?: return@mapNotNull null
-                AudioTrack(
-                    id,
-                    // file names as titles: without the extension ("01.mp3" → "01")
-                    (t.str("title", "track_code") ?: "${t.int("track_number") ?: ""}")
-                        .replace(Regex("\\.(mp3|m4b|m4a|flac|aac|wav|ogg|opus|wma)$", RegexOption.IGNORE_CASE), ""),
-                    t.dbl("duration") ?: 0.0,
-                )
-            }
-            val id = meta.int("id") ?: item.id ?: throw IllegalStateException("오디오북 번호를 알 수 없습니다")
-            summary = meta.str("summary")?.takeIf { it != "등록된 설명이 없습니다." }
-            pct = meta.dbl("total_progress_pct") ?: 0.0
-            book = AudioBook(
-                id = id,
-                title = meta.str("series_alias", "series_name") ?: item.title,
-                author = meta.str("author") ?: item.author,
-                coverUrl = (meta.str("cover_image") ?: item.cover)?.let(web::absolute),
-                tracks = tracks,
-                startTrackId = meta.int("current_track_id"),
-                startSeconds = meta.dbl("current_time") ?: 0.0,
-            )
+            val d = AudioLibraryLink.detail(web, web.server.id, item.id, item.title, item.libraryId)
+            summary = d.summary
+            pct = d.percent
+            completed = d.completed
+            book = if (d.book.coverUrl == null && item.cover != null) d.book.copy(coverUrl = web.absolute(item.cover)) else d.book
         } catch (e: Exception) { error = e.message ?: e.javaClass.simpleName }
     }
     val b = book
@@ -305,8 +290,18 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             modifier = Modifier.padding(top = 6.dp),
                         )
                         Spacer(Modifier.height(10.dp))
-                        Button(onClick = { AudioPlayback.open(context, web, b); onPlayer() }, enabled = b.tracks.isNotEmpty()) {
-                            Text(if (b.startTrackId != null) "▶ 이어 듣기" else "▶ 처음부터 듣기")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { AudioPlayback.open(context, web, b); onPlayer() }, enabled = b.tracks.isNotEmpty()) {
+                                Text(if (b.startTrackId != null) "▶ 이어 듣기" else "▶ 처음부터 듣기")
+                            }
+                            if (onShelf == null) androidx.compose.material3.OutlinedButton(onClick = {
+                                scope.launch {
+                                    runCatching { AudioLibraryLink.add(context, web, b, pct, completed) }
+                                        .onSuccess { android.widget.Toast.makeText(context, "서재에 담았습니다", android.widget.Toast.LENGTH_SHORT).show() }
+                                        .onFailure { android.widget.Toast.makeText(context, "담지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                                }
+                            }) { Text("📚 서재에 담기") }
+                            else Text("📚 서재에 있음", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
                         }
                     }
                 }

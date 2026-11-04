@@ -37,6 +37,8 @@ data class AudioBook(
     val tracks: List<AudioTrack>,
     val startTrackId: Int? = null,  // listening position kept by the server
     val startSeconds: Double = 0.0,
+    val serverId: String = "",      // the catalog it came from (서재 row: ab_<server>_<id>)
+    val libraryId: String? = null,
 )
 
 data class AudioTrack(val id: Int, val title: String, val durationSec: Double)
@@ -72,6 +74,7 @@ object AudioPlayback {
         private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var app: Context? = null
     private var ticker: Job? = null
     private var lastSaved = 0L
 
@@ -119,6 +122,7 @@ object AudioPlayback {
     /** Opens [b] at the server's place (or at [trackIndex]/[startSec] when given) and plays. */
     fun open(context: Context, w: BookOasisWeb, b: AudioBook, startIndex: Int? = null, startSec: Double? = null) {
         val p = ensurePlayer(context, w)
+        app = context.applicationContext
         error = null
         val same = book?.id == b.id && p.mediaItemCount == b.tracks.size
         book = b
@@ -149,6 +153,10 @@ object AudioPlayback {
         p.play()
         context.startService(Intent(context, AudioService::class.java))
         tick()
+        // listening puts the book on the 서재 (like 바로 읽기 does for books)
+        if (b.serverId.isNotEmpty()) scope.launch {
+            runCatching { AudioLibraryLink.add(context.applicationContext, w, b, 0.0, false) }
+        }
     }
 
     fun toggle() { player?.let { if (it.isPlaying) it.pause() else { if (it.playbackState == Player.STATE_ENDED) it.seekTo(0, 0); it.play() } } }
@@ -214,7 +222,10 @@ object AudioPlayback {
         val total = b.tracks.sumOf { it.durationSec }
         val before = b.tracks.take(p.currentMediaItemIndex).sumOf { it.durationSec }
         val pct = if (total > 0) ((before + sec) / total * 100).coerceIn(0.0, 100.0) else 0.0
+        val idx = p.currentMediaItemIndex
+        val ctx = app
         scope.launch {
+            ctx?.let { c -> runCatching { AudioLibraryLink.savePlace(c, b, idx, sec, completed) } }
             runCatching {
                 w.post("/api/media/audiobooks/${b.id}/progress", buildJsonObject {
                     put("current_track_id", t.id)

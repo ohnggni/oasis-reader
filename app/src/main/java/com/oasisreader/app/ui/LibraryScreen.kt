@@ -365,9 +365,9 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
 /** Another device read further (progress sync): shown after the library's own progress. */
 private fun aheadText(pct: Float?): String = pct?.let { " · ⇄ ${(it * 100).roundToInt()}%" }.orEmpty()
 
-private fun progressText(b: BookEntity): String = (if (b.pinned) "" else "☁️ ") + (when (b.format) { BookStore.FORMAT_COMIC -> "🖼 "; BookStore.FORMAT_PDF -> "📄 "; else -> "" }) + when {
-    b.finishedAt != null -> "다 읽음"
-    b.lastReadAt == null -> "새 책"
+private fun progressText(b: BookEntity): String = (if (b.pinned) "" else "☁️ ") + (when (b.format) { BookStore.FORMAT_COMIC -> "🖼 "; BookStore.FORMAT_PDF -> "📄 "; com.oasisreader.app.audio.AudioLibraryLink.FORMAT -> "🎧 "; else -> "" }) + when {
+    b.finishedAt != null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "다 들음" else "다 읽음"
+    b.lastReadAt == null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "새 오디오북" else "새 책"
     else -> "${(b.progress * 100).roundToInt()}%"
 }
 

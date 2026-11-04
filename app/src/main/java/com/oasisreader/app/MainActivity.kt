@@ -246,7 +246,21 @@ private fun App() {
             loaded = books != null,
             importing = importing,
             store = store,
-            onOpen = { b: BookEntity -> route = Route.READER + b.id },
+            onOpen = { b: BookEntity ->
+                if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) {
+                    // an audiobook: its tracks and place from the server, then the player
+                    val already = com.oasisreader.app.audio.AudioPlayback.book?.let { it.serverId to it.id } ==
+                        com.oasisreader.app.audio.AudioLibraryLink.parse(b)
+                    audioReturn = Route.LIBRARY
+                    if (already) route = Route.AUDIO_PLAYER
+                    else scope.launch {
+                        Toast.makeText(context, "오디오북을 여는 중…", Toast.LENGTH_SHORT).show()
+                        runCatching { com.oasisreader.app.audio.AudioLibraryLink.play(context, b) }
+                            .onSuccess { route = Route.AUDIO_PLAYER }
+                            .onFailure { Toast.makeText(context, "열 수 없습니다: ${it.message}", Toast.LENGTH_LONG).show() }
+                    }
+                } else route = Route.READER + b.id
+            },
             onCatalog = { route = Route.CATALOG },
             onImportFile = {
                 picker.launch(arrayOf(
