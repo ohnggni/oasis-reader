@@ -223,6 +223,7 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
                 com.oasisreader.app.ui.SortChip(
                     options = AudioSort.entries, selected = sort, desc = sortDesc,
                     label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
+                    short = { when (it) { AudioSort.FOLDER -> "폴더"; AudioSort.ADDED -> "추가일"; else -> it.label } },
                     onChange = { o, d -> sort = o; sortDesc = d; prefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply() },
                 )
             },
@@ -251,7 +252,7 @@ private fun AudioShelf(
         )
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(com.oasisreader.app.ui.MiniChipGap),
             verticalAlignment = Alignment.CenterVertically,
         ) { filters() }
         when {
@@ -273,7 +274,7 @@ private fun AudioShelf(
                         it.progress?.takeIf { p -> p > 0 }?.let { p ->
                             LinearProgressIndicator(progress = { (p / 100).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp).height(2.dp))
                         }
-                        Text((if (it.completed) "✓ " else "") + it.title, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                        Text((if (it.completed) "✅ " else "") + it.title, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                         it.author?.let { a -> Text(a, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 }
@@ -447,7 +448,7 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
                     AssistChip(onClick = { sOpen = true }, label = { Text("속도 ${AudioPlayback.speed}배") })
                     DropdownMenu(sOpen, { sOpen = false }) {
                         listOf(0.75f, 1f, 1.1f, 1.25f, 1.5f, 1.75f, 2f).forEach { s ->
-                            DropdownMenuItem(text = { Text((if (s == AudioPlayback.speed) "✓ " else "    ") + "${s}배") }, onClick = { sOpen = false; AudioPlayback.changeSpeed(context, s) })
+                            DropdownMenuItem(text = { Text("${s}배") }, leadingIcon = { com.oasisreader.app.ui.CheckMark(s == AudioPlayback.speed) }, onClick = { sOpen = false; AudioPlayback.changeSpeed(context, s) })
                         }
                     }
                 }
@@ -551,15 +552,14 @@ private enum class AudioSort(val label: String, val kind: com.oasisreader.app.ui
 private fun CategoryChip(libraries: List<AudioLibrary>, selected: Set<Int>, onChange: (Set<Int>) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        androidx.compose.material3.FilterChip(
-            selected = selected.isNotEmpty(), onClick = { open = true },
-            label = {
-                Text(when (selected.size) {
-                    0 -> "카테고리: 전체 ▾"
-                    1 -> "카테고리: ${libraries.firstOrNull { it.id.toIntOrNull() in selected }?.name ?: "1개"} ▾"
-                    else -> "카테고리 ${selected.size}개 ▾"
-                })
+        com.oasisreader.app.ui.MiniChip(
+            "🗂️ " + when (selected.size) {
+                0 -> "전체"
+                1 -> libraries.firstOrNull { it.id.toIntOrNull() in selected }?.name ?: "1개"
+                else -> "${selected.size}개"
             },
+            selected = selected.isNotEmpty(), onClick = { open = true },
+            description = "카테고리",
         )
         DropdownMenu(open, { open = false }) {
             DropdownMenuItem(
@@ -587,13 +587,13 @@ private fun ReadStateChip(value: String, onChange: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val options = listOf("" to "전체", "listening" to "다 듣지 않음", "done" to "다 들음")
     Box {
-        androidx.compose.material3.FilterChip(
+        com.oasisreader.app.ui.MiniChip(
+            "🔖 " + (options.firstOrNull { it.first == value }?.second ?: "전체"),
             selected = value.isNotEmpty(), onClick = { open = true },
-            label = { Text((options.firstOrNull { it.first == value }?.second ?: "전체") + " ▾") },
         )
         DropdownMenu(open, { open = false }) {
             options.forEach { (v, label) ->
-                DropdownMenuItem(text = { Text((if (v == value) "✓ " else "    ") + label) }, onClick = { open = false; onChange(v) })
+                DropdownMenuItem(text = { Text(label) }, leadingIcon = { com.oasisreader.app.ui.CheckMark(v == value) }, onClick = { open = false; onChange(v) })
             }
         }
     }

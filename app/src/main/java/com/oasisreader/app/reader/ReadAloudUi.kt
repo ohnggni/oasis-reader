@@ -83,7 +83,8 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
                 DropdownMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
                     ReadAloud.RATES.forEach { r ->
                         DropdownMenuItem(
-                            text = { Text((if (r == ra.rate) "✓ " else "    ") + ReadAloud.rateLabel(r)) },
+                            text = { Text(ReadAloud.rateLabel(r)) },
+                            leadingIcon = { com.oasisreader.app.ui.CheckMark(r == ra.rate) },
                             onClick = { speedOpen = false; ra.changeRate(r) },
                         )
                     }

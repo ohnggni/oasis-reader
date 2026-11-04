@@ -180,26 +180,24 @@ fun LibraryScreen(
 
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
         ) {
             // tiles or list: automatic by width until chosen here
             val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
             val tiles = gridChoice ?: wide
-            androidx.compose.material3.AssistChip(
+            MiniChip(
+                if (tiles) "🔲" else "📃",
                 onClick = {
                     gridChoice = !tiles
                     shelfPrefs.edit().putString("layout", if (!tiles) "grid" else "list").apply()
                 },
-                label = { Text(if (tiles) "▦ 타일" else "☰ 목록") },
+                description = if (tiles) "타일로 보는 중 (누르면 목록)" else "목록으로 보는 중 (누르면 타일)",
             )
             if (tiles) {
                 // one chip like its neighbours; the size slider floats under it
                 var sizeOpen by remember { mutableStateOf(false) }
                 Box {
-                    androidx.compose.material3.AssistChip(
-                        onClick = { sizeOpen = true },
-                        label = { Text("⤢ 크기") },
-                    )
+                    MiniChip("📐", onClick = { sizeOpen = true }, description = "타일 크기")
                     DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
                         Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text("타일 크기", style = MaterialTheme.typography.labelLarge)
@@ -221,6 +219,7 @@ fun LibraryScreen(
             SortChip(
                 options = ShelfSort.entries, selected = sort, desc = sortDesc,
                 label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
+                short = { when (it) { ShelfSort.RECENT -> "읽은 날"; ShelfSort.ADDED -> "추가일"; else -> it.label } },
                 onChange = { o, d ->
                     sort = o; sortDesc = d
                     shelfPrefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply()
@@ -229,14 +228,16 @@ fun LibraryScreen(
             // 전체 / 읽는 중 / 안 읽음 / 다 읽음 — one drop-down
             var filterOpen by remember { mutableStateOf(false) }
             Box {
-                androidx.compose.material3.AssistChip(
+                MiniChip(
+                    "🔖 ${filter.label} ${books.count { filter.matches(it) }}",
                     onClick = { filterOpen = true },
-                    label = { Text("${filter.label} ${books.count { filter.matches(it) }} ▾") },
+                    selected = filter != ShelfFilter.ALL,
                 )
                 androidx.compose.material3.DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
                     ShelfFilter.entries.forEach { f ->
                         androidx.compose.material3.DropdownMenuItem(
-                            text = { Text((if (f == filter) "✓ " else "    ") + "${f.label} ${books.count { f.matches(it) }}") },
+                            text = { Text("${f.label} ${books.count { f.matches(it) }}") },
+                            leadingIcon = { CheckMark(f == filter) },
                             onClick = { filterOpen = false; filterName = f.name },
                         )
                     }

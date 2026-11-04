@@ -109,16 +109,10 @@ private fun BrandMark(sub: String?, modifier: Modifier = Modifier) {
 fun CatalogViewSwitch(organized: Boolean, onOrganized: () -> Unit, onFolders: () -> Unit) {
     androidx.compose.foundation.layout.Row(
         Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(MiniChipGap),
     ) {
-        androidx.compose.material3.FilterChip(
-            selected = organized, onClick = { if (!organized) onOrganized() },
-            label = { Text("📚 시리즈별 보기") },
-        )
-        androidx.compose.material3.FilterChip(
-            selected = !organized, onClick = { if (organized) onFolders() },
-            label = { Text("📂 폴더별 보기") },
-        )
+        MiniChip("📚 시리즈별", selected = organized, onClick = { if (!organized) onOrganized() })
+        MiniChip("📂 폴더별", selected = !organized, onClick = { if (organized) onFolders() })
     }
 }
 

@@ -480,10 +480,13 @@ private fun SortBar(
     Column {
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
         ) {
             // same switch as in the library
-            androidx.compose.material3.AssistChip(onClick = { onGrid(!grid) }, label = { Text(if (grid) "▦ 표지" else "☰ 목록") })
+            MiniChip(
+                if (grid) "🔲" else "📃", onClick = { onGrid(!grid) },
+                description = if (grid) "표지로 보는 중 (누르면 목록)" else "목록으로 보는 중 (누르면 표지)",
+            )
             SortChip(
                 options = CatalogSort.entries, selected = sort, desc = desc,
                 label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },

@@ -31,7 +31,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -272,7 +271,7 @@ fun MetaCatalogScreen(
         )
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(com.oasisreader.app.ui.MiniChipGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // categories: several at once (none = 전체), picked in a drop-down with check boxes
@@ -294,18 +293,15 @@ fun MetaCatalogScreen(
             var libOpen by remember { mutableStateOf(false) }
             val libs = libraries.orEmpty()
             Box {
-                FilterChip(
+                com.oasisreader.app.ui.MiniChip(
+                    "🗂️ " + when (libIds.size) {
+                        0 -> "전체"
+                        1 -> libs.firstOrNull { it.id in libIds }?.name ?: "1개"
+                        else -> "${libIds.size}개"
+                    },
                     selected = libIds.isNotEmpty(),
                     onClick = { libOpen = true },
-                    label = {
-                        Text(
-                            when (libIds.size) {
-                                0 -> "카테고리: 전체 ▾"
-                                1 -> "카테고리: ${libs.firstOrNull { it.id in libIds }?.name ?: "1개"} ▾"
-                                else -> "카테고리 ${libIds.size}개 ▾"
-                            },
-                        )
-                    },
+                    description = "카테고리",
                 )
                 androidx.compose.material3.DropdownMenu(expanded = libOpen, onDismissRequest = { libOpen = false }) {
                     androidx.compose.material3.DropdownMenuItem(
@@ -329,28 +325,30 @@ fun MetaCatalogScreen(
                 com.oasisreader.app.ui.SortChip(
                     options = SeriesSort.entries, selected = sort, desc = sortDesc,
                     label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
+                    short = { when (it) { SeriesSort.DATE -> "올라온 날"; SeriesSort.ADDED -> "추가일"; else -> it.label } },
                     onChange = { o, d -> sort = o; sortDesc = d; prefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply() },
                 )
             }
         }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(com.oasisreader.app.ui.MiniChipGap),
         ) {
             if (activeQuery.isNotBlank()) {
-                FilterChip(selected = !searchBooks, onClick = { searchBooks = false }, label = { Text("시리즈") })
-                FilterChip(selected = searchBooks, onClick = { searchBooks = true }, label = { Text("권") })
+                com.oasisreader.app.ui.MiniChip("📚 시리즈", selected = !searchBooks, onClick = { searchBooks = false })
+                com.oasisreader.app.ui.MiniChip("📕 권", selected = searchBooks, onClick = { searchBooks = true })
                 Spacer(Modifier.width(8.dp))
             }
             if (!(activeQuery.isNotBlank() && searchBooks)) {
-                androidx.compose.material3.AssistChip(
+                com.oasisreader.app.ui.MiniChip(
+                    if (seriesList) "📃" else "🔲",
                     onClick = { seriesList = !seriesList; prefs.edit().putBoolean("series_list", seriesList).apply() },
-                    label = { Text(if (seriesList) "☰ 목록" else "▦ 타일") },
+                    description = if (seriesList) "목록으로 보는 중 (누르면 타일)" else "타일로 보는 중 (누르면 목록)",
                 )
                 if (!seriesList) {
                     var sizeOpen by remember { mutableStateOf(false) }
                     Box {
-                        androidx.compose.material3.AssistChip(onClick = { sizeOpen = true }, label = { Text("⤢ 크기") })
+                        com.oasisreader.app.ui.MiniChip("📐", onClick = { sizeOpen = true }, description = "타일 크기")
                         androidx.compose.material3.DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
                             Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
                                 Text("타일 크기", style = MaterialTheme.typography.labelLarge)

@@ -173,7 +173,8 @@ fun PanelDropdown(
         androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             items.forEachIndexed { i, label ->
                 androidx.compose.material3.DropdownMenuItem(
-                    text = { Text((if (label == current) "✓ " else "    ") + label) },
+                    text = { Text(label) },
+                    leadingIcon = { CheckMark(label == current) },
                     onClick = { open = false; onPick(i) },
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     modifier = Modifier.height(40.dp),

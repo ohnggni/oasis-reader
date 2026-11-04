@@ -15,7 +15,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -56,6 +55,13 @@ object CatalogFormats {
         1 -> "형식: " + (ALL.firstOrNull { it.key in keys }?.label ?: "1개")
         else -> "형식 ${keys.size}개"
     }
+
+    /** The same, for the small chip: "📄 전체", "📄 EPUB", "📄 2개". */
+    fun chip(keys: Set<String>): String = "📄 " + when (keys.size) {
+        0 -> "전체"
+        1 -> ALL.firstOrNull { it.key in keys }?.label?.substringBefore(" (") ?: "1개"
+        else -> "${keys.size}개"
+    }
 }
 
 /** A saved combination of categories and formats ("만화" = 만화 categories + CBZ·ZIP …). */
@@ -82,7 +88,7 @@ object CatalogPresets {
 fun FormatFilterChip(selected: Set<String>, onChange: (Set<String>) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        FilterChip(selected = selected.isNotEmpty(), onClick = { open = true }, label = { Text(CatalogFormats.label(selected) + " ▾") })
+        com.oasisreader.app.ui.MiniChip(CatalogFormats.chip(selected), selected = selected.isNotEmpty(), onClick = { open = true }, description = CatalogFormats.label(selected))
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text("전체") },
@@ -114,19 +120,21 @@ fun PresetChip(
     var open by remember { mutableStateOf(false) }
     val current = presets.firstOrNull { it.matches(libs, formats) }
     Box {
-        FilterChip(
+        com.oasisreader.app.ui.MiniChip(
+            "⭐ " + (current?.name ?: "프리셋"),
             selected = current != null,
             onClick = { open = true },
-            label = { Text("★ " + (current?.name ?: "프리셋") + " ▾") },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text((if (libs.isEmpty() && formats.isEmpty()) "✓ " else "    ") + "모두 보기") },
+                text = { Text("모두 보기") },
+                leadingIcon = { com.oasisreader.app.ui.CheckMark(libs.isEmpty() && formats.isEmpty()) },
                 onClick = { open = false; onPick(null) },
             )
             presets.forEach { p ->
                 DropdownMenuItem(
-                    text = { Text((if (p === current) "✓ " else "    ") + p.name) },
+                    text = { Text(p.name) },
+                    leadingIcon = { com.oasisreader.app.ui.CheckMark(p === current) },
                     onClick = { open = false; onPick(p) },
                 )
             }
@@ -228,7 +236,7 @@ fun PresetSettings(server: Server, audio: Boolean = false) {
         )
         presets.forEachIndexed { i, p ->
             Column(Modifier.fillMaxWidth().clickable { editing = i }.padding(vertical = 8.dp)) {
-                Text("★ ${p.name}", style = MaterialTheme.typography.bodyLarge)
+                Text("⭐ ${p.name}", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     listOf(
                         if (p.libraries.isEmpty()) "카테고리 전체" else p.libraries.joinToString(", ") { names[it] ?: "#$it" },
