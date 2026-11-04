@@ -84,6 +84,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.window)
+    // 오디오북: streaming player, media session (notification, headset buttons), OkHttp with the web login cookie
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.media3.okhttp)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
 }
