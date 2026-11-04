@@ -40,6 +40,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectTapGestures
 
 /*
  * The pieces of the reading screens' four panels (화면 · 글자/보기 · 쪽/넘김 · 이동), shared by the
@@ -136,7 +137,7 @@ private fun StepButton(glyph: String, label: String, onClick: () -> Unit, enable
             .semantics { contentDescription = label }
             .pointerInput(enabled, repeat) {
                 if (!enabled) return@pointerInput
-                androidx.compose.foundation.gestures.detectTapGestures(onPress = {
+                detectTapGestures(onPress = {
                     latest()
                     val job = if (repeat) scope.launch {
                         kotlinx.coroutines.delay(420)
