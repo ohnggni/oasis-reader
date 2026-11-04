@@ -23,7 +23,7 @@ import java.io.File
  * plays without the server but nowhere outside this app. filesDir/media/ stays out of every
  * backup and phone move (the key does not move either).
  * A streamed audiobook keeps pinned = false (☁️ on the 서재, like 바로 읽기); a kept one pinned = true.
- * Before 0.1.97 the tracks were plain files in books/<id>/audio/ — [migrateLegacy] moves them.
+ * Before 0.1.98 the tracks were plain files in books/<id>/audio/ — [migrateLegacy] moves them.
  */
 object AudioDownloads {
     private const val LEGACY_DIR = "audio"
@@ -65,7 +65,7 @@ object AudioDownloads {
     }
 
     /**
-     * Plain tracks of 0.1.95–0.1.96 (books/<id>/audio/*.audio) → encrypted ones in media/<id>/.
+     * Plain tracks of 0.1.95–0.1.96 (books/<id>/audio/<track>.audio) → encrypted ones in media/<id>/.
      * Runs once at start, quietly; a book that is playing is skipped and done next time.
      */
     fun migrateLegacy(context: Context) {
