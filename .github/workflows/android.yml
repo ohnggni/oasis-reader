@@ -65,11 +65,13 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/OasisReader-0.1.${{ github.run_number }}-debug.apk"
+          V="$(cat VERSION 2>/dev/null || echo 0.1).${{ github.run_number }}"
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/debug/app-debug.apk "out/OasisReader-$V-debug.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OasisReader-0.1.${{ github.run_number }}-debug
+          name: OasisReader-${{ env.APP_VERSION }}-debug
           path: out/*.apk
           retention-days: 30
 
@@ -80,12 +82,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          V="0.1.${{ github.run_number }}"
+          V="${{ env.APP_VERSION }}"
           cp "out/OasisReader-$V-debug.apk" out/OasisReader.apk
           gh release create "v$V" out/OasisReader.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "OasisReader $V" \
+            --title "OG Reader $V" \
             --notes "$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' | head -20)" \
             --latest
 

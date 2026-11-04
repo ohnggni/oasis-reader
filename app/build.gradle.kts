@@ -8,6 +8,8 @@ plugins {
 
 // CI passes -PversionCode=<run number>; local builds default to 1
 val ciVersionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+// release line in /VERSION ("1.0"); the build number follows it: 1.0.<run number>
+val baseVersion = rootProject.file("VERSION").takeIf { it.isFile }?.readText()?.trim()?.ifEmpty { null } ?: "0.1"
 
 // Stable signing key (CI decodes it from secrets). Without it, builds fall back
 // to the default per-machine debug key, which cannot update an installed app.
@@ -24,7 +26,7 @@ android {
         minSdk = 29
         targetSdk = 35
         versionCode = ciVersionCode
-        versionName = "0.1.$ciVersionCode"
+        versionName = "$baseVersion.$ciVersionCode"
     }
 
     signingConfigs {
