@@ -65,8 +65,16 @@ import com.oasisreader.app.ui.RemoteCover
 import com.oasisreader.app.ui.TopBar
 import kotlinx.coroutines.launch
 
-private enum class SeriesSort(val label: String, val api: String) {
-    RECENT("최근 올라온 순", "mtime_desc"), OLDEST("오래된 순", "mtime_asc"), NAME("이름순", "name")
+private enum class SeriesSort(val label: String, val kind: com.oasisreader.app.ui.SortKind, val defaultDesc: Boolean) {
+    DATE("올라온 날짜", com.oasisreader.app.ui.SortKind.DATE, true),
+    ADDED("서버에 추가된 날짜", com.oasisreader.app.ui.SortKind.DATE, true),
+    NAME("이름", com.oasisreader.app.ui.SortKind.TEXT, false);
+
+    fun api(desc: Boolean): String = when (this) {
+        DATE -> if (desc) "mtime_desc" else "mtime_asc"
+        ADDED -> if (desc) "added_desc" else "added_asc"
+        NAME -> if (desc) "name_desc" else "name"
+    }
 }
 
 /** "2022-05-20T01:45:53Z" -> "2022.5.20" in local time */
@@ -118,7 +126,16 @@ fun MetaCatalogScreen(
     val fmtParam = CatalogFormats.param(fmtKeys)
     var presets by remember { mutableStateOf(CatalogPresets.load(app, serverId)) }
     var savingPreset by remember { mutableStateOf(false) }
-    var sort by remember { mutableStateOf(runCatching { SeriesSort.valueOf(prefs.getString("sort", null) ?: "") }.getOrDefault(SeriesSort.RECENT)) }
+    // older versions kept RECENT / OLDEST (date, newest or oldest first)
+    val storedSort = prefs.getString("sort", null)
+    var sort by remember {
+        mutableStateOf(
+            when (storedSort) { "RECENT", "OLDEST" -> SeriesSort.DATE; else -> runCatching { SeriesSort.valueOf(storedSort ?: "") }.getOrDefault(SeriesSort.DATE) },
+        )
+    }
+    var sortDesc by remember {
+        mutableStateOf(if (prefs.contains("sort_desc")) prefs.getBoolean("sort_desc", true) else storedSort != "OLDEST" && sort.defaultDesc)
+    }
     var query by remember { mutableStateOf("") }
     var activeQuery by remember { mutableStateOf("") }
     var searchBooks by remember { mutableStateOf(false) }   // search volumes instead of series
@@ -151,7 +168,7 @@ fun MetaCatalogScreen(
                 if (p == 1) bookItems.clear()
                 bookItems.addAll(r.items); hasMore = r.hasMore
             } else {
-                val r = api.series(libParam, activeQuery.ifBlank { null }, sort.api, p, format = fmtParam)
+                val r = api.series(libParam, activeQuery.ifBlank { null }, sort.api(sortDesc), p, format = fmtParam)
                 if (p == 1) seriesItems.clear()
                 seriesItems.addAll(r.items); hasMore = r.hasMore
             }
@@ -164,7 +181,7 @@ fun MetaCatalogScreen(
         }
     }
 
-    LaunchedEffect(libParam, fmtParam, sort, activeQuery, searchBooks, reload) { loadPage(1) }
+    LaunchedEffect(libParam, fmtParam, sort, sortDesc, activeQuery, searchBooks, reload) { loadPage(1) }
 
     val owned by remember { db.books().observeSourceUrls() }.collectAsState(initial = emptyList())
     val ownedSet = remember(owned) { owned.toSet() }
@@ -309,18 +326,11 @@ fun MetaCatalogScreen(
             }
             FormatFilterChip(fmtKeys) { setFormats(it) }
             if (!(activeQuery.isNotBlank() && searchBooks)) {
-                var sortOpen by remember { mutableStateOf(false) }
-                Box {
-                    androidx.compose.material3.AssistChip(onClick = { sortOpen = true }, label = { Text("↕ ${sort.label} ▾") })
-                    androidx.compose.material3.DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-                        SeriesSort.entries.forEach { o ->
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text((if (o == sort) "✓ " else "    ") + o.label) },
-                                onClick = { sortOpen = false; sort = o; prefs.edit().putString("sort", o.name).apply() },
-                            )
-                        }
-                    }
-                }
+                com.oasisreader.app.ui.SortChip(
+                    options = SeriesSort.entries, selected = sort, desc = sortDesc,
+                    label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
+                    onChange = { o, d -> sort = o; sortDesc = d; prefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply() },
+                )
             }
         }
         Row(

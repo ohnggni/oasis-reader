@@ -108,7 +108,18 @@ fun OpdsScreen(
     var detail by remember { mutableStateOf<OpdsEntry?>(null) }
     val sortPrefs = remember { app.getSharedPreferences("catalog", android.content.Context.MODE_PRIVATE) }
     var sort by remember {
-        mutableStateOf(runCatching { CatalogSort.valueOf(sortPrefs.getString("sort", null) ?: "") }.getOrDefault(CatalogSort.SERVER))
+        mutableStateOf(
+            when (val v = sortPrefs.getString("sort", null)) {
+                "NEWEST", "OLDEST" -> CatalogSort.DATE      // older versions: one entry per direction
+                else -> runCatching { CatalogSort.valueOf(v ?: "") }.getOrDefault(CatalogSort.SERVER)
+            },
+        )
+    }
+    var sortDesc by remember {
+        mutableStateOf(
+            if (sortPrefs.contains("sort_desc")) sortPrefs.getBoolean("sort_desc", false)
+            else sortPrefs.getString("sort", null) == "NEWEST",
+        )
     }
     var loadingAll by remember { mutableStateOf<Int?>(null) }   // entries loaded so far while fetching every page
     var sortCapped by remember { mutableStateOf(false) }
@@ -133,8 +144,8 @@ fun OpdsScreen(
     }
 
     // a client-side sort needs the whole list: fetch the remaining pages (bounded)
-    LaunchedEffect(sort, nextUrl, state) {
-        if (sort == CatalogSort.SERVER || state !is FeedState.Ready || loadingMore || sortCapped) return@LaunchedEffect
+    LaunchedEffect(sort, sortDesc, nextUrl, state) {
+        if ((sort == CatalogSort.SERVER && !sortDesc) || state !is FeedState.Ready || loadingMore || sortCapped) return@LaunchedEffect
         var next = nextUrl ?: return@LaunchedEffect
         val ready = state as FeedState.Ready
         var pages = 0
@@ -218,12 +229,12 @@ fun OpdsScreen(
                 val all = s.feed.entries + extra
                 // some servers stamp every entry with the request time: then dates say nothing
                 val datesUseful = remember(all.size, s) { datesMeaningful(all) }
-                val effSort = if (!datesUseful && (sort == CatalogSort.NEWEST || sort == CatalogSort.OLDEST)) CatalogSort.SERVER else sort
-                val entries = remember(all.size, s, effSort) { sortEntries(all, effSort) }
+                val effSort = if (!datesUseful && sort == CatalogSort.DATE) CatalogSort.SERVER else sort
+                val entries = remember(all.size, s, effSort, sortDesc) { sortEntries(all, effSort, sortDesc) }
                 if (all.size > 1) {
                     SortBar(
-                        sort = effSort, loading = loadingAll, datesUseful = datesUseful,
-                        onSort = { sort = it; sortPrefs.edit().putString("sort", it.name).apply() },
+                        sort = effSort, desc = sortDesc, loading = loadingAll, datesUseful = datesUseful,
+                        onSort = { o, d -> sort = o; sortDesc = d; sortPrefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply() },
                         grid = grid, onGrid = { grid = it; sortPrefs.edit().putBoolean("grid", it).apply() },
                     )
                 }
@@ -275,7 +286,7 @@ fun OpdsScreen(
                             entry = e,
                             client = client,
                             owned = e.id in ownedSet,
-                            showDate = effSort == CatalogSort.NEWEST || effSort == CatalogSort.OLDEST,
+                            showDate = effSort == CatalogSort.DATE,
                             progress = progress[e.id],
                             onClick = {
                                 if (e.navHref != null && !e.isBook) open(e.navHref, e.title) else detail = e
@@ -404,8 +415,11 @@ private fun EntryRow(
     }
 }
 
-enum class CatalogSort(val label: String) {
-    SERVER("기본순"), NEWEST("최근 추가"), OLDEST("오래된 순"), TITLE("제목"), AUTHOR("저자")
+enum class CatalogSort(val label: String, val kind: SortKind, val defaultDesc: Boolean) {
+    SERVER("서버 순서", SortKind.ORDER, false),
+    DATE("날짜", SortKind.DATE, true),
+    TITLE("제목", SortKind.TEXT, false),
+    AUTHOR("저자", SortKind.TEXT, false),
 }
 
 private const val MAX_SORT_PAGES = 40
@@ -439,26 +453,28 @@ private fun shortDate(s: String): String? = epoch(s)?.let {
  * Folders and books are sorted the same way (bookoasis keeps each book in its own folder),
  * folders first. Missing dates go last; folders have no author, so they fall back to the title.
  */
-private fun sortEntries(all: List<OpdsEntry>, sort: CatalogSort): List<OpdsEntry> {
-    if (sort == CatalogSort.SERVER) return all
+private fun sortEntries(all: List<OpdsEntry>, sort: CatalogSort, desc: Boolean): List<OpdsEntry> {
+    val (books, folders) = all.partition { it.isBook }
+    if (sort == CatalogSort.SERVER) return if (desc) folders.reversed() + books.reversed() else all
     val byTitle = Comparator<OpdsEntry> { a, b -> collator.compare(a.title, b.title) }
-    val cmp: Comparator<OpdsEntry> = when (sort) {
-        CatalogSort.NEWEST -> compareBy<OpdsEntry> { epoch(it.updated) == null }.thenByDescending { epoch(it.updated) ?: 0L }.then(byTitle)
-        CatalogSort.OLDEST -> compareBy<OpdsEntry> { epoch(it.updated) == null }.thenBy { epoch(it.updated) ?: 0L }.then(byTitle)
-        CatalogSort.TITLE -> byTitle
-        CatalogSort.AUTHOR -> Comparator<OpdsEntry> { a, b ->
+    val asc: Comparator<OpdsEntry> = when (sort) {
+        CatalogSort.DATE -> compareBy<OpdsEntry> { epoch(it.updated) ?: 0L }.then(byTitle)
+        CatalogSort.AUTHOR -> Comparator { a, b ->
             val c = collator.compare(a.author ?: "\uFFFF", b.author ?: "\uFFFF")
             if (c != 0) c else collator.compare(a.title, b.title)
         }
-        CatalogSort.SERVER -> byTitle
+        else -> byTitle
     }
-    val (books, folders) = all.partition { it.isBook }
-    return folders.sortedWith(cmp) + books.sortedWith(cmp)
+    val cmp = if (desc) asc.reversed() else asc
+    // entries without a date go last either way
+    fun sorted(l: List<OpdsEntry>) = if (sort != CatalogSort.DATE) l.sortedWith(cmp)
+        else l.partition { epoch(it.updated) != null }.let { (dated, rest) -> dated.sortedWith(cmp) + rest.sortedWith(byTitle) }
+    return sorted(folders) + sorted(books)
 }
 
 @Composable
 private fun SortBar(
-    sort: CatalogSort, loading: Int?, datesUseful: Boolean, onSort: (CatalogSort) -> Unit,
+    sort: CatalogSort, desc: Boolean, loading: Int?, datesUseful: Boolean, onSort: (CatalogSort, Boolean) -> Unit,
     grid: Boolean, onGrid: (Boolean) -> Unit,
 ) {
     Column {
@@ -468,19 +484,16 @@ private fun SortBar(
         ) {
             // same switch as in the library
             androidx.compose.material3.AssistChip(onClick = { onGrid(!grid) }, label = { Text(if (grid) "▦ 표지" else "☰ 목록") })
-            CatalogSort.entries.forEach { o ->
-                val dateSort = o == CatalogSort.NEWEST || o == CatalogSort.OLDEST
-                FilterChip(
-                    selected = sort == o,
-                    enabled = datesUseful || !dateSort,
-                    onClick = { onSort(o) },
-                    label = { Text(o.label) },
-                )
-            }
+            SortChip(
+                options = CatalogSort.entries, selected = sort, desc = desc,
+                label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
+                onChange = onSort,
+                enabled = { datesUseful || it != CatalogSort.DATE },
+            )
         }
         if (!datesUseful) {
             Text(
-                "이 서버는 항목마다 실제 추가 날짜를 주지 않아서(모두 지금 시각) 날짜순 정렬을 쓸 수 없습니다.",
+                "이 목록에는 항목별 날짜가 없어 날짜 정렬은 쓸 수 없습니다.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),

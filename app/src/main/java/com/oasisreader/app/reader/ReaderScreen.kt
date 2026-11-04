@@ -1268,6 +1268,14 @@ private fun ReaderSeekBar(
                 )
                 Text("${(v * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = chrome)
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+            // − + : 1% of the book back / on (no repeat: each one opens the place)
+            com.oasisreader.app.ui.StepButtons(
+                onMinus = { val t = (v - 0.01f).coerceIn(0f, 1f); drag = t; onDrag(); onSeek(t) },
+                onPlus = { val t = (v + 0.01f).coerceIn(0f, 1f); drag = t; onDrag(); onSeek(t) },
+                repeat = false,
+            )
+            Spacer(Modifier.width(8.dp))
             Slider(
                 value = v,
                 onValueChange = { drag = it; onDrag() },
@@ -1287,16 +1295,17 @@ private fun ReaderSeekBar(
                         thumbTrackGapSize = 0.dp,
                     )
                 },
-                modifier = Modifier.fillMaxWidth().height(28.dp),
+                modifier = Modifier.weight(1f).height(28.dp),
             )
+            }
         }
     }
 }
 
-/** Title of the toc entry that covers spine item [index] (the last one at or before it). */
 /** The notification's ✕ ends reading aloud in the reader that started it. */
 private var aloudClose: (() -> Unit)? = null
 
+/** Title of the toc entry that covers spine item [index] (the last one at or before it). */
 private fun chapterTitleFor(p: EpubPackage, index: Int): String =
     com.oasisreader.app.data.HighlightExport.chapterTitle(p, index)
 
@@ -1634,6 +1643,7 @@ internal fun BrightnessPanel(value: Float, onChange: (Float) -> Unit) {
             value = if (auto) 0.5f else value, range = 0.02f..1f,
             onChange = { onChange(it.coerceIn(0.02f, 1f)) },
             modifier = Modifier.weight(1f).alpha(if (auto) 0.45f else 1f),
+            step = 0.05f,
         )
         Spacer(Modifier.width(8.dp))
         com.oasisreader.app.ui.PanelDropdown(if (auto) "자동" else "직접", listOf("자동", "직접"), { onChange(if (it == 0) -1f else 0.5f) })
@@ -1653,6 +1663,7 @@ internal fun SizePanel(
             steps = ReaderPrefs.MAX_FONT - ReaderPrefs.MIN_FONT - 1,
             onChange = { onChange(it.roundToInt()) },
             modifier = Modifier.weight(1f),
+            step = 1f,
         )
         Text("${value}px", style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 40.dp), textAlign = TextAlign.End)
     }
@@ -1661,6 +1672,7 @@ internal fun SizePanel(
             value = lineHeight.toFloat(), range = 14f..24f, steps = 9,
             onChange = { onLineHeight(it.roundToInt()) },
             modifier = Modifier.weight(1f),
+            step = 1f,
         )
         Text(String.format("%.1f", lineHeight / 10f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 40.dp), textAlign = TextAlign.End)
     }
@@ -1732,6 +1744,7 @@ internal fun MarginPanel(top: Int, bottom: Int, left: Int, right: Int, onChange:
             value = v.toFloat(), range = range.first.toFloat()..range.last.toFloat(),
             onChange = { set((it / 4f).roundToInt() * 4) },
             modifier = Modifier.weight(1f),
+            step = 4f,
         )
         Text(if (v == 0) "기본" else if (v > 0) "+$v" else "$v", style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 36.dp), textAlign = TextAlign.End)
         if (top != 0 || bottom != 0 || left != 0 || right != 0) {

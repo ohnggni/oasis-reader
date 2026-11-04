@@ -36,6 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.launch
 
 /*
  * The pieces of the reading screens' four panels (화면 · 글자/보기 · 쪽/넘김 · 이동), shared by the
@@ -71,31 +75,81 @@ fun PanelRow(label: String, content: @Composable androidx.compose.foundation.lay
     }
 }
 
-/** Slim slider: 3dp track, small dot (the stock one is far too tall for a reading panel). */
+/**
+ * Slim slider: 3dp track, small dot (the stock one is far too tall for a reading panel).
+ * With [step], small − + buttons sit before it (one place for both thumbs is easier than the two ends).
+ */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ThinSlider(
     value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit,
-    modifier: Modifier = Modifier, steps: Int = 0, enabled: Boolean = true,
+    modifier: Modifier = Modifier, steps: Int = 0, enabled: Boolean = true, step: Float = 0f,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val rest = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-    androidx.compose.material3.Slider(
-        value = value, onValueChange = onChange, valueRange = range, steps = steps, enabled = enabled,
-        thumb = { Box(Modifier.size(14.dp).background(if (enabled) accent else rest, CircleShape)) },
-        track = { st ->
-            androidx.compose.material3.SliderDefaults.Track(
-                sliderState = st, modifier = Modifier.height(3.dp), enabled = enabled,
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    activeTrackColor = accent, inactiveTrackColor = rest,
-                    activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent,
-                    disabledActiveTrackColor = rest, disabledInactiveTrackColor = rest,
-                ),
-                drawStopIndicator = null, thumbTrackGapSize = 0.dp,
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (step > 0f) {
+            StepButtons(
+                onMinus = { onChange((value - step).coerceIn(range.start, range.endInclusive)) },
+                onPlus = { onChange((value + step).coerceIn(range.start, range.endInclusive)) },
+                enabled = enabled,
             )
-        },
-        modifier = modifier.height(28.dp),
-    )
+            androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+        }
+        androidx.compose.material3.Slider(
+            value = value, onValueChange = onChange, valueRange = range, steps = steps, enabled = enabled,
+            thumb = { Box(Modifier.size(14.dp).background(if (enabled) accent else rest, CircleShape)) },
+            track = { st ->
+                androidx.compose.material3.SliderDefaults.Track(
+                    sliderState = st, modifier = Modifier.height(3.dp), enabled = enabled,
+                    colors = androidx.compose.material3.SliderDefaults.colors(
+                        activeTrackColor = accent, inactiveTrackColor = rest,
+                        activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent,
+                        disabledActiveTrackColor = rest, disabledInactiveTrackColor = rest,
+                    ),
+                    drawStopIndicator = null, thumbTrackGapSize = 0.dp,
+                )
+            },
+            modifier = Modifier.weight(1f).height(28.dp),
+        )
+    }
+}
+
+/** − and + side by side, small and round like the slider's dot. Held down, they repeat ([repeat]). */
+@Composable
+fun StepButtons(onMinus: () -> Unit, onPlus: () -> Unit, enabled: Boolean = true, repeat: Boolean = true) {
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+        StepButton("−", "줄이기", onMinus, enabled, repeat)
+        StepButton("+", "늘리기", onPlus, enabled, repeat)
+    }
+}
+
+@Composable
+private fun StepButton(glyph: String, label: String, onClick: () -> Unit, enabled: Boolean, repeat: Boolean) {
+    val latest by androidx.compose.runtime.rememberUpdatedState(onClick)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val accent = MaterialTheme.colorScheme.primary
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Box(
+        Modifier.size(24.dp).clip(CircleShape)
+            .border(0.8.dp, line, CircleShape)
+            .semantics { contentDescription = label }
+            .pointerInput(enabled, repeat) {
+                if (!enabled) return@pointerInput
+                androidx.compose.foundation.gestures.detectTapGestures(onPress = {
+                    latest()
+                    val job = if (repeat) scope.launch {
+                        kotlinx.coroutines.delay(420)
+                        while (true) { latest(); kotlinx.coroutines.delay(90) }
+                    } else null
+                    tryAwaitRelease()
+                    job?.cancel()
+                })
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(glyph, fontSize = 15.sp, lineHeight = 15.sp, color = if (enabled) accent else line)
+    }
 }
 
 /** A choice from a list, shown as one small "value ▾" button that opens a drop-down. */

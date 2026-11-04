@@ -67,23 +67,30 @@ enum class ShelfFilter(val label: String) {
     }
 }
 
-enum class ShelfSort(val label: String) {
-    RECENT("최근 읽은 순"), ADDED("추가한 순"), TITLE("제목"), AUTHOR("저자"), PROGRESS("진행률");
+enum class ShelfSort(val label: String, val kind: SortKind, val defaultDesc: Boolean) {
+    RECENT("읽은 날짜", SortKind.DATE, true),
+    ADDED("추가한 날짜", SortKind.DATE, true),
+    TITLE("제목", SortKind.TEXT, false),
+    AUTHOR("저자", SortKind.TEXT, false),
+    PROGRESS("진행률", SortKind.AMOUNT, true);
 }
 
 private val shelfCollator: java.text.Collator = java.text.Collator.getInstance(java.util.Locale.KOREAN)
 
-private fun sortShelf(list: List<BookEntity>, sort: ShelfSort): List<BookEntity> = when (sort) {
-    ShelfSort.RECENT -> list.sortedByDescending { it.lastReadAt ?: it.addedAt }
-    ShelfSort.ADDED -> list.sortedByDescending { it.addedAt }
-    ShelfSort.TITLE -> list.sortedWith { a, b -> shelfCollator.compare(a.title, b.title) }
-    ShelfSort.AUTHOR -> list.sortedWith { a, b ->
-        val c = shelfCollator.compare(a.author ?: "\uFFFF", b.author ?: "\uFFFF")
-        if (c != 0) c else shelfCollator.compare(a.title, b.title)
+/** Ascending order for each criterion; [desc] turns it around. */
+private fun sortShelf(list: List<BookEntity>, sort: ShelfSort, desc: Boolean): List<BookEntity> {
+    val byTitle = Comparator<BookEntity> { a, b -> shelfCollator.compare(a.title, b.title) }
+    val asc: Comparator<BookEntity> = when (sort) {
+        ShelfSort.RECENT -> compareBy<BookEntity> { it.lastReadAt ?: it.addedAt }
+        ShelfSort.ADDED -> compareBy { it.addedAt }
+        ShelfSort.TITLE -> byTitle
+        ShelfSort.AUTHOR -> Comparator { a, b ->
+            val c = shelfCollator.compare(a.author ?: "\uFFFF", b.author ?: "\uFFFF")
+            if (c != 0) c else shelfCollator.compare(a.title, b.title)
+        }
+        ShelfSort.PROGRESS -> compareBy<BookEntity> { if (it.finishedAt != null) 2f else it.progress }.then(byTitle)
     }
-    ShelfSort.PROGRESS -> list.sortedWith(
-        compareBy<BookEntity> { it.finishedAt != null }.thenByDescending { it.progress }.thenBy { it.title }
-    )
+    return list.sortedWith(if (desc) asc.reversed() else asc)
 }
 
 /**
@@ -130,8 +137,8 @@ fun LibraryScreen(
     var sort by remember {
         mutableStateOf(runCatching { ShelfSort.valueOf(shelfPrefs.getString("sort", null) ?: "") }.getOrDefault(ShelfSort.RECENT))
     }
-    var sortOpen by remember { mutableStateOf(false) }
-    val shown = remember(books, filter, sort) { sortShelf(books.filter { filter.matches(it) }, sort) }
+    var sortDesc by remember { mutableStateOf(if (shelfPrefs.contains("sort_desc")) shelfPrefs.getBoolean("sort_desc", true) else sort.defaultDesc) }
+    val shown = remember(books, filter, sort, sortDesc) { sortShelf(books.filter { filter.matches(it) }, sort, sortDesc) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // header line: how many books, and today's reading time (all books)
@@ -207,20 +214,14 @@ fun LibraryScreen(
                     }
                 }
             }
-            Box {
-                androidx.compose.material3.AssistChip(
-                    onClick = { sortOpen = true },
-                    label = { Text("↕ ${sort.label}") },
-                )
-                androidx.compose.material3.DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-                    ShelfSort.entries.forEach { o ->
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text((if (o == sort) "✓ " else "    ") + o.label) },
-                            onClick = { sortOpen = false; sort = o; shelfPrefs.edit().putString("sort", o.name).apply() },
-                        )
-                    }
-                }
-            }
+            SortChip(
+                options = ShelfSort.entries, selected = sort, desc = sortDesc,
+                label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
+                onChange = { o, d ->
+                    sort = o; sortDesc = d
+                    shelfPrefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply()
+                },
+            )
             // 전체 / 읽는 중 / 안 읽음 / 다 읽음 — one drop-down
             var filterOpen by remember { mutableStateOf(false) }
             Box {

@@ -82,7 +82,7 @@ oasis-meta는 같은 서버의 DB를 읽기 전용으로 조회해 그런 정보
 | `library_id` | 라이브러리 필터, 콤마로 여러 개 (`3,7,12`) | 전체 |
 | `q` | 시리즈명 검색 (공백으로 나눈 단어 AND, 최대 10개) | — |
 | `format` | 파일 형식 필터, 콤마 구분 (`cbz,zip`). `library_id`와 함께 적용(AND) | 전체 |
-| `sort` | `mtime_desc` `mtime_asc` `added_desc` `added_asc` `name` | `mtime_desc` |
+| `sort` | `mtime_desc` `mtime_asc` `added_desc` `added_asc` `name` `name_desc` | `mtime_desc` |
 | `page` / `limit` | 1부터 / 1~500 | 1 / 100 |
 
 ```json
