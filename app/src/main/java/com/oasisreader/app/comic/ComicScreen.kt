@@ -20,6 +20,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Arrangement
@@ -756,8 +758,8 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
         // a settings panel is open: a tap (or swipe) on the page only closes it — the page stays
         if (panel != com.oasisreader.app.ui.ReadPanel.NONE) Box(
             Modifier.fillMaxSize().pointerInput(Unit) {
-                androidx.compose.foundation.gestures.awaitEachGesture {
-                    androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false).consume()
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false).consume()
                     do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
                     panel = com.oasisreader.app.ui.ReadPanel.NONE
                     barsShownAt = System.currentTimeMillis()
