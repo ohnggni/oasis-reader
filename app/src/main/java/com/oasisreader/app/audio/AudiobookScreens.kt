@@ -346,11 +346,11 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             val pad = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                             Button(onClick = {
-                                // the phone's place when it is further along (listened offline, not sent yet)
+                                // the phone's place or the server's: the one saved last (AudioProgressSync.preferPhone)
                                 val local = onShelf
                                 val serverIdx = b.tracks.indexOfFirst { it.id == b.startTrackId }
                                 val useLocal = local != null && local.lastReadAt != null && local.spineIndex in b.tracks.indices &&
-                                    (serverIdx < 0 || local.spineIndex > serverIdx || (local.spineIndex == serverIdx && local.chapterFraction > b.startSeconds + 5))
+                                    AudioProgressSync.preferPhone(context, web.server.id, b.id, b.startTrackId, serverIdx, b.startSeconds, local.spineIndex, local.chapterFraction.toDouble())
                                 if (useLocal && local != null && AudioPlayback.book?.id != b.id) AudioPlayback.open(context, web, b, local.spineIndex, local.chapterFraction.toDouble())
                                 else AudioPlayback.open(context, web, b)
                                 onPlayer()

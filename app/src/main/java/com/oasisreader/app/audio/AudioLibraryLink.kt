@@ -138,11 +138,13 @@ object AudioLibraryLink {
             ?: Detail(kept.copy(startTrackId = null, startSeconds = 0.0), null, (b.progress * 100).toDouble(), b.finishedAt != null)
         if (kept == null || d.book.tracks.isNotEmpty()) runCatching { add(context, web, d.book, d.percent, d.completed) }
         add(context, web, d.book, d.percent, d.completed)
-        // the phone's place when it is further along than the server's (e.g. listened offline of the web)
+        // the phone's place or the server's: the one saved last (AudioProgressSync.preferPhone)
         val local = AppDatabase.get(context.applicationContext).books().get(b.id)
         val serverIdx = d.book.tracks.indexOfFirst { it.id == d.book.startTrackId }
-        val useLocal = local != null && local.lastReadAt != null && (serverIdx < 0 || local.spineIndex > serverIdx ||
-            (local.spineIndex == serverIdx && local.chapterFraction > d.book.startSeconds + 5))
+        val useLocal = local != null && local.lastReadAt != null && local.spineIndex in d.book.tracks.indices &&
+            AudioProgressSync.preferPhone(
+                context, sid, d.book.id, d.book.startTrackId, serverIdx, d.book.startSeconds, local.spineIndex, local.chapterFraction.toDouble(),
+            )
         withContext(Dispatchers.Main) {
             if (useLocal && local != null) {
                 AudioPlayback.open(context, web, d.book, local.spineIndex, local.chapterFraction.toDouble())

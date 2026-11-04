@@ -162,12 +162,13 @@ object AudioPlayback {
         } else if (startIndex != null) {
             p.seekTo(startIndex, ((startSec ?: 0.0) * 1000).toLong())
         } else if (!p.isPlaying) {
-            // the same book is still loaded (paused): go to the server's place when it is further
-            // along — it was listened to on the web or another phone meanwhile
+            // the same book is still loaded (paused): go to the server's place when it was saved
+            // elsewhere after ours (the web or another phone) — AudioProgressSync.preferPhone
             val idx = b.tracks.indexOfFirst { it.id == b.startTrackId }
             val here = p.currentMediaItemIndex
             val hereSec = p.currentPosition / 1000.0
-            if (idx >= 0 && (idx > here || (idx == here && b.startSeconds > hereSec + 5))) {
+            val c = context.applicationContext
+            if (idx >= 0 && !AudioProgressSync.preferPhone(c, b.serverId, b.id, b.startTrackId, idx, b.startSeconds, here, hereSec)) {
                 p.seekTo(idx, (b.startSeconds * 1000).toLong().coerceAtLeast(0))
             }
         }
@@ -271,7 +272,10 @@ object AudioPlayback {
                     if (completed) put("is_completed", 1)
                 })
             }.onSuccess {
-                ctx?.let { c -> AudioProgressSync.sent(c, b.serverId, b.id); AudioProgressSync.schedule(c) }
+                ctx?.let { c ->
+                    AudioProgressSync.markSent(c, b.serverId, b.id, t.id, sec)
+                    AudioProgressSync.sent(c, b.serverId, b.id); AudioProgressSync.schedule(c)
+                }
             }.onFailure {
                 // offline (a book on the phone) or the server was away: send it later
                 if (b.serverId.isNotEmpty()) ctx?.let { c ->
