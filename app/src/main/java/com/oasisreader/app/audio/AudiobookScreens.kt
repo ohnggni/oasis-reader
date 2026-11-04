@@ -2,6 +2,7 @@ package com.oasisreader.app.audio
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,19 +89,24 @@ private fun JsonObject.firstList(vararg prefer: String): List<JsonObject> {
     return arr.orEmpty().mapNotNull { it as? JsonObject }
 }
 
-private data class AudioItem(val id: Int?, val title: String, val author: String?, val libraryId: String?, val cover: String?, val progress: Double?)
+private data class AudioItem(
+    val id: Int?, val title: String, val author: String?, val libraryId: String?, val cover: String?, val progress: Double?,
+    val completed: Boolean = false,
+)
 private data class AudioLibrary(val id: String, val name: String)
 
 private fun JsonElement.toItem(): AudioItem? {
     val o = this as? JsonObject ?: return null
-    val title = o.str("series_alias", "series_name", "title", "name") ?: return null
+    val title = o.str("display_name", "series_alias", "series_name", "title", "name") ?: return null
     return AudioItem(
         id = o.int("representative_book_id", "audiobook_id", "book_id", "id", "first_book_id"),
         title = title,
         author = o.str("author", "artist"),
-        libraryId = o.str("library_id"),
+        // the list carries the category in series_key ("<library>:<hash>")
+        libraryId = o.str("library_id") ?: o.str("series_key")?.substringBefore(':')?.takeIf { k -> k.all(Char::isDigit) },
         cover = o.str("cover_image", "cover", "cover_url", "thumbnail"),
         progress = o.dbl("total_progress_pct", "progress_pct", "progress"),
+        completed = (o.int("is_completed") ?: 0) != 0,
     )
 }
 
@@ -126,10 +132,20 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
     val prefs = remember { context.getSharedPreferences("audio", android.content.Context.MODE_PRIVATE) }
 
     var libraries by remember(server) { mutableStateOf<List<AudioLibrary>>(emptyList()) }
-    var libId by remember(server) { mutableStateOf(prefs.getString("library_${server.id}", null)) }
+    // categories: several at once (bookoasis takes one, or all: several are picked from "all" in its order)
+    var libIds by remember(server) {
+        mutableStateOf(
+            prefs.getStringSet("libs_${server.id}", null)?.mapNotNull { it.toIntOrNull() }?.toSet()
+                ?: setOfNotNull(prefs.getString("library_${server.id}", null)?.toIntOrNull()),
+        )
+    }
+    var readFilter by remember(server) { mutableStateOf(prefs.getString("read_${server.id}", "") ?: "") }   // "" | "listening" | "done"
+    var sort by remember { mutableStateOf(runCatching { AudioSort.valueOf(prefs.getString("sort", null) ?: "") }.getOrDefault(AudioSort.NAME)) }
+    var sortDesc by remember { mutableStateOf(prefs.getBoolean("sort_desc", false)) }
+    var presets by remember(server) { mutableStateOf(com.oasisreader.app.meta.CatalogPresets.load(context, server.id)) }
+    var savingPreset by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var active by remember { mutableStateOf("") }
-    var sortDesc by remember { mutableStateOf(prefs.getBoolean("sort_desc", false)) }
     val items = remember(server) { mutableStateListOf<AudioItem>() }
     var page by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
@@ -147,23 +163,37 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
             }
             .onFailure { error = it.message }
     }
+    fun keep(it: AudioItem): Boolean =
+        (libIds.size <= 1 || it.libraryId?.toIntOrNull() in libIds) &&
+            when (readFilter) { "done" -> it.completed; "listening" -> !it.completed; else -> true }
+    /** One more page; with several categories or a filter, pages are read on until a few match. */
     suspend fun load(p: Int) {
         loading = true; error = null
         try {
-            val o = web.get("/api/media/list", mapOf(
-                "type" to "audiobook", "library_id" to libId, "search" to active.ifBlank { null },
-                "sort" to if (sortDesc) "desc" else "asc", "page" to p, "limit" to 40,
-            ))
-            val list = o.firstList("items", "series", "data", "list", "books").mapNotNull { it.toItem() }
-            if (p == 1) items.clear()
-            items.addAll(list)
-            hasMore = (o["has_more"] as? JsonPrimitive)?.contentOrNull == "true" || (o["has_more"] == null && list.size >= 40)
-            page = p
+            var next = p
+            var added = 0
+            var more: Boolean
+            do {
+                val o = web.get("/api/media/list", mapOf(
+                    "type" to "audiobook",
+                    "library_id" to (libIds.singleOrNull()?.toString() ?: "all"),
+                    "search" to active.ifBlank { null },
+                    "sort" to sort.api(sortDesc), "page" to next, "limit" to 40,
+                ))
+                val list = o.firstList("items", "series", "data", "list", "books").mapNotNull { it.toItem() }
+                if (next == 1) items.clear()
+                val kept = list.filter(::keep)
+                items.addAll(kept); added += kept.size
+                more = (o["has_more"] as? JsonPrimitive)?.contentOrNull == "true" || (o["has_more"] == null && list.size >= 40)
+                page = next
+                next++
+            } while (more && added < 24 && next - p < 15)
+            hasMore = more
         } catch (e: Exception) {
             error = e.message ?: e.javaClass.simpleName
         } finally { loading = false }
     }
-    LaunchedEffect(server, libId, active, sortDesc) { load(1) }
+    LaunchedEffect(server, libIds, readFilter, active, sort, sortDesc) { load(1) }
 
     BackHandler { if (open != null) open = null else onBack() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -173,10 +203,29 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
         }
         val o = open
         if (o != null) AudiobookDetail(web, o, onPlayer) else AudioShelf(
-            libraries, libId,
-            { id -> libId = id; prefs.edit().apply { if (id == null) remove("library_${server.id}") else putString("library_${server.id}", id) }.apply() },
-            query, { query = it }, { active = query.trim() },
-            sortDesc, { sortDesc = !sortDesc; prefs.edit().putBoolean("sort_desc", sortDesc).apply() },
+            filters = {
+                fun setLibs(v: Set<Int>) { libIds = v; prefs.edit().putStringSet("libs_${server.id}", v.map { it.toString() }.toSet()).apply() }
+                com.oasisreader.app.meta.PresetChip(
+                    presets = presets, libs = libIds, formats = emptySet(),
+                    onPick = { p -> setLibs(p?.libraries?.toSet() ?: emptySet()) },
+                    onSaveCurrent = { savingPreset = true },
+                )
+                if (savingPreset) com.oasisreader.app.meta.PresetDialog(
+                    initial = com.oasisreader.app.meta.CatalogPreset("", libIds.sorted()),
+                    libraries = null,
+                    onSave = { p -> presets = presets + p; com.oasisreader.app.meta.CatalogPresets.save(context, server.id, presets); savingPreset = false },
+                    onDelete = null,
+                    onDismiss = { savingPreset = false },
+                )
+                CategoryChip(libraries, libIds) { setLibs(it) }
+                ReadStateChip(readFilter) { readFilter = it; prefs.edit().putString("read_${server.id}", it).apply() }
+                com.oasisreader.app.ui.SortChip(
+                    options = AudioSort.entries, selected = sort, desc = sortDesc,
+                    label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
+                    onChange = { o, d -> sort = o; sortDesc = d; prefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply() },
+                )
+            },
+            query = query, onQuery = { query = it }, onSearch = { active = query.trim() },
             items, hasMore, loading, page, error, web,
             load = { p -> scope.launch { load(p) } },
             onOpen = { open = it },
@@ -186,9 +235,8 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
 
 @Composable
 private fun AudioShelf(
-    libraries: List<AudioLibrary>, libId: String?, onLib: (String?) -> Unit,
+    filters: @Composable () -> Unit,
     query: String, onQuery: (String) -> Unit, onSearch: () -> Unit,
-    sortDesc: Boolean, onSort: () -> Unit,
     items: List<AudioItem>, hasMore: Boolean, loading: Boolean, page: Int, error: String?, web: BookOasisWeb,
     load: (Int) -> Unit, onOpen: (AudioItem) -> Unit,
 ) {
@@ -200,26 +248,11 @@ private fun AudioShelf(
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         )
-        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            var lOpen by remember { mutableStateOf(false) }
-            Box {
-                AssistChip(onClick = { lOpen = true }, label = { Text("카테고리: ${libraries.firstOrNull { it.id == libId }?.name ?: "전체"} ▾") })
-                DropdownMenu(lOpen, { lOpen = false }) {
-                    DropdownMenuItem(text = { Text((if (libId == null) "✓ " else "    ") + "전체") }, onClick = {
-                        lOpen = false; onLib(null)
-                    })
-                    libraries.forEach { l ->
-                        DropdownMenuItem(text = { Text((if (l.id == libId) "✓ " else "    ") + l.name) }, onClick = {
-                            lOpen = false; onLib(l.id)
-                        })
-                    }
-                }
-            }
-            AssistChip(
-                onClick = onSort,
-                label = { Text(if (sortDesc) "↕ 이름 ↓" else "↕ 이름 ↑") },
-            )
-        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { filters() }
         when {
             error != null && items.isEmpty() -> Column(Modifier.padding(24.dp)) {
                 Text("⚠️ $error", color = MaterialTheme.colorScheme.error)
@@ -239,7 +272,7 @@ private fun AudioShelf(
                         it.progress?.takeIf { p -> p > 0 }?.let { p ->
                             LinearProgressIndicator(progress = { (p / 100).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp).height(2.dp))
                         }
-                        Text(it.title, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                        Text((if (it.completed) "✓ " else "") + it.title, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                         it.author?.let { a -> Text(a, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 }
@@ -467,4 +500,70 @@ internal fun hms(sec: Double): String {
     val s = sec.toLong().coerceAtLeast(0)
     val h = s / 3600; val m = (s % 3600) / 60; val r = s % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, r) else "%d:%02d".format(m, r)
+}
+
+/** Sorts bookoasis offers for its lists (repositories/series_list_options.py). */
+private enum class AudioSort(val label: String, val kind: com.oasisreader.app.ui.SortKind, val defaultDesc: Boolean) {
+    NAME("이름", com.oasisreader.app.ui.SortKind.TEXT, false),
+    FOLDER("폴더 이름", com.oasisreader.app.ui.SortKind.TEXT, false),
+    ADDED("추가한 날짜", com.oasisreader.app.ui.SortKind.DATE, true);
+
+    fun api(desc: Boolean) = when (this) {
+        NAME -> if (desc) "desc" else "asc"
+        FOLDER -> if (desc) "folder_desc" else "folder_asc"
+        ADDED -> if (desc) "date_desc" else "date_asc"
+    }
+}
+
+/** Categories with check boxes (none = 전체), like the book catalog. */
+@Composable
+private fun CategoryChip(libraries: List<AudioLibrary>, selected: Set<Int>, onChange: (Set<Int>) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        androidx.compose.material3.FilterChip(
+            selected = selected.isNotEmpty(), onClick = { open = true },
+            label = {
+                Text(when (selected.size) {
+                    0 -> "카테고리: 전체 ▾"
+                    1 -> "카테고리: ${libraries.firstOrNull { it.id.toIntOrNull() in selected }?.name ?: "1개"} ▾"
+                    else -> "카테고리 ${selected.size}개 ▾"
+                })
+            },
+        )
+        DropdownMenu(open, { open = false }) {
+            DropdownMenuItem(
+                text = { Text("전체") },
+                leadingIcon = { androidx.compose.material3.Checkbox(checked = selected.isEmpty(), onCheckedChange = null) },
+                onClick = { onChange(emptySet()) },
+            )
+            HorizontalDivider()
+            libraries.forEach { l ->
+                val id = l.id.toIntOrNull() ?: return@forEach
+                DropdownMenuItem(
+                    text = { Text(l.name) },
+                    leadingIcon = { androidx.compose.material3.Checkbox(checked = id in selected, onCheckedChange = null) },
+                    onClick = { onChange(if (id in selected) selected - id else selected + id) },
+                )
+            }
+            DropdownMenuItem(text = { Text("완료", color = MaterialTheme.colorScheme.primary) }, onClick = { open = false })
+        }
+    }
+}
+
+/** 전체 / 듣는 중·안 들음 / 다 들음 (bookoasis marks a book done when all of it was heard). */
+@Composable
+private fun ReadStateChip(value: String, onChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val options = listOf("" to "전체", "listening" to "다 듣지 않음", "done" to "다 들음")
+    Box {
+        androidx.compose.material3.FilterChip(
+            selected = value.isNotEmpty(), onClick = { open = true },
+            label = { Text((options.firstOrNull { it.first == value }?.second ?: "전체") + " ▾") },
+        )
+        DropdownMenu(open, { open = false }) {
+            options.forEach { (v, label) ->
+                DropdownMenuItem(text = { Text((if (v == value) "✓ " else "    ") + label) }, onClick = { open = false; onChange(v) })
+            }
+        }
+    }
 }

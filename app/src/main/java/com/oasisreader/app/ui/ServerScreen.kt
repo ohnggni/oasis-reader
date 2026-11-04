@@ -160,9 +160,9 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),
             )
             // presets of the organized catalog: for a saved server with a meta API
-            if (!audio && initial.id.isNotEmpty() && initial.metaUrl.isNotBlank()) {
+            if (initial.id.isNotEmpty() && (initial.isAudiobook || (!audio && initial.metaUrl.isNotBlank()))) {
                 Spacer(Modifier.height(20.dp))
-                com.oasisreader.app.meta.PresetSettings(initial)
+                com.oasisreader.app.meta.PresetSettings(initial, audio = initial.isAudiobook)
             }
             Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

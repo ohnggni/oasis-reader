@@ -145,6 +145,7 @@ fun PresetDialog(
     initial: CatalogPreset,
     libraries: List<MetaLibrary>?,       // null: only the name is edited
     onSave: (CatalogPreset) -> Unit,
+    withFormats: Boolean = true,         // audiobooks: categories only
     onDelete: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
@@ -163,9 +164,9 @@ fun PresetDialog(
                 if (libraries != null) {
                     Text("카테고리 (안 고르면 전체)", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                     libraries.forEach { l -> CheckRow(l.name, l.id in libs) { libs = if (l.id in libs) libs - l.id else libs + l.id } }
-                    Text("형식 (안 고르면 전체)", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-                    CatalogFormats.ALL.forEach { f -> CheckRow(f.label, f.key in fmts) { fmts = if (f.key in fmts) fmts - f.key else fmts + f.key } }
-                    Text(
+                    if (withFormats) Text("형식 (안 고르면 전체)", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    if (withFormats) CatalogFormats.ALL.forEach { f -> CheckRow(f.label, f.key in fmts) { fmts = if (f.key in fmts) fmts - f.key else fmts + f.key } }
+                    if (withFormats) Text(
                         "카테고리와 형식은 함께 적용됩니다 (둘 다 맞는 것만).",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -196,14 +197,24 @@ private fun CheckRow(label: String, checked: Boolean, onToggle: () -> Unit) {
 
 /** Server settings: the catalog's presets (needs the meta API for the category names). */
 @Composable
-fun PresetSettings(server: Server) {
+fun PresetSettings(server: Server, audio: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var presets by remember(server.id) { mutableStateOf(CatalogPresets.load(context, server.id)) }
     var libraries by remember(server.id) { mutableStateOf<List<MetaLibrary>?>(null) }
     var libError by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Int?>(null) }   // index, or -1 for a new one
     LaunchedEffect(server) {
-        libraries = try { MetaApi(server).libraries() } catch (e: Exception) { libError = e.message; null }
+        libraries = try {
+            if (audio) {
+                // bookoasis audiobook categories (web API)
+                val o = com.oasisreader.app.audio.BookOasisWeb.of(server).get("/api/media/libraries", mapOf("type" to "audiobook"))
+                (o["libraries"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
+                    val obj = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                    val id = (obj["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: return@mapNotNull null
+                    MetaLibrary(id, (obj["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "#$id")
+                }
+            } else MetaApi(server).libraries()
+        } catch (e: Exception) { libError = e.message; null }
     }
     fun store(list: List<CatalogPreset>) { presets = list; CatalogPresets.save(context, server.id, list) }
     val names = libraries.orEmpty().associate { it.id to it.name }
@@ -211,7 +222,8 @@ fun PresetSettings(server: Server) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("보기 프리셋", style = MaterialTheme.typography.titleSmall)
         Text(
-            "정리된 카탈로그(시리즈별 보기)에서 카테고리와 파일 형식의 조합을 한 번에 고릅니다. 예: 만화 = 만화 카테고리들 + CBZ·ZIP",
+            if (audio) "오디오북 목록에서 카테고리 조합을 한 번에 고릅니다. 예: 소설 = 소설 관련 카테고리들"
+            else "정리된 카탈로그(시리즈별 보기)에서 카테고리와 파일 형식의 조합을 한 번에 고릅니다. 예: 만화 = 만화 카테고리들 + CBZ·ZIP",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         presets.forEachIndexed { i, p ->
@@ -220,15 +232,15 @@ fun PresetSettings(server: Server) {
                 Text(
                     listOf(
                         if (p.libraries.isEmpty()) "카테고리 전체" else p.libraries.joinToString(", ") { names[it] ?: "#$it" },
-                        CatalogFormats.label(p.formats.toSet()),
-                    ).joinToString(" · "),
+                        if (audio) null else CatalogFormats.label(p.formats.toSet()),
+                    ).filterNotNull().joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         when {
             libraries != null -> OutlinedButton(onClick = { editing = -1 }) { Text("➕ 프리셋 추가") }
-            libError != null -> Text("메타 API에 연결하지 못해 카테고리를 불러올 수 없습니다: $libError", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            libError != null -> Text((if (audio) "북오아시스에 연결하지 못해" else "메타 API에 연결하지 못해") + " 카테고리를 불러올 수 없습니다: $libError", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             else -> Text("카테고리를 불러오는 중…", style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -238,6 +250,7 @@ fun PresetSettings(server: Server) {
             libraries = libraries.orEmpty(),
             onSave = { p -> store(if (i in presets.indices) presets.toMutableList().also { it[i] = p } else presets + p); editing = null },
             onDelete = if (i in presets.indices) ({ store(presets.filterIndexed { k, _ -> k != i }); editing = null }) else null,
+            withFormats = !audio,
             onDismiss = { editing = null },
         )
     }
