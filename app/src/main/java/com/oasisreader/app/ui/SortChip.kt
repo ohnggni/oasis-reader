@@ -39,6 +39,7 @@ fun <T> SortChip(
     onChange: (T, Boolean) -> Unit,
     enabled: (T) -> Boolean = { true },
     short: (T) -> String = label,
+    extra: (@Composable (close: () -> Unit) -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -66,6 +67,7 @@ fun <T> SortChip(
                 leadingIcon = { CheckMark(desc) },
                 onClick = { open = false; onChange(selected, true) },
             )
+            extra?.let { HorizontalDivider(); it { open = false } }
         }
     }
 }

@@ -166,7 +166,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             )
 
             Section("서버 부가 기능")
-            Item("📄", "메타 API(oasis-meta) 안내", "정리된 카탈로그를 쓰기 위한 서버 쪽 준비. 복사·공유할 수 있습니다", enabled = true) { onDoc(DOC_META) }
+            Item("📄", "메타 API(oasis-meta) 안내", "설치하면 되는 것(시리즈별 보기·줄거리·필터)과 설치 안내 링크", enabled = true) { onDoc(DOC_META) }
 
             Section("정보")
             Item("ℹ️", "OG Reader ${BuildConfig.VERSION_NAME}", "EPUB · 만화 · PDF 리더 · 개발 JSLee", enabled = true) { onDoc(DOC_ABOUT) }

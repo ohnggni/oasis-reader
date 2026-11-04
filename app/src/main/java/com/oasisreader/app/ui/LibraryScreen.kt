@@ -73,18 +73,39 @@ enum class ShelfFilter(val label: String) {
     }
 }
 
+/** What a 서재 book is: shown first in its text line, filtered by the 🏷️ chip, sorted by 종류. */
+enum class ShelfKind(val emoji: String, val label: String) {
+    BOOK("📖", "책"), COMIC("🖼️", "만화"), PDF("📄", "PDF"), AUDIO("🎧", "오디오북");
+
+    companion object {
+        fun of(b: BookEntity) = when (b.format) {
+            BookStore.FORMAT_COMIC -> COMIC
+            BookStore.FORMAT_PDF -> PDF
+            com.oasisreader.app.audio.AudioLibraryLink.FORMAT -> AUDIO
+            else -> BOOK
+        }
+
+        /** The user's order for 종류 sorting (prefs "kind_order", names joined by commas). */
+        fun order(saved: String?): List<ShelfKind> {
+            val named = saved?.split(',')?.mapNotNull { n -> entries.firstOrNull { it.name == n } }.orEmpty()
+            return (named + entries).distinct()
+        }
+    }
+}
+
 enum class ShelfSort(val label: String, val kind: SortKind, val defaultDesc: Boolean) {
     RECENT("읽은 날짜", SortKind.DATE, true),
     ADDED("추가한 날짜", SortKind.DATE, true),
     TITLE("제목", SortKind.TEXT, false),
     AUTHOR("저자", SortKind.TEXT, false),
-    PROGRESS("진행률", SortKind.AMOUNT, true);
+    PROGRESS("진행률", SortKind.AMOUNT, true),
+    KIND("종류", SortKind.ORDER, false);
 }
 
 private val shelfCollator: java.text.Collator = java.text.Collator.getInstance(java.util.Locale.KOREAN)
 
 /** Ascending order for each criterion; [desc] turns it around. */
-private fun sortShelf(list: List<BookEntity>, sort: ShelfSort, desc: Boolean): List<BookEntity> {
+private fun sortShelf(list: List<BookEntity>, sort: ShelfSort, desc: Boolean, kinds: List<ShelfKind> = ShelfKind.entries): List<BookEntity> {
     val byTitle = Comparator<BookEntity> { a, b -> shelfCollator.compare(a.title, b.title) }
     val asc: Comparator<BookEntity> = when (sort) {
         ShelfSort.RECENT -> compareBy<BookEntity> { it.lastReadAt ?: it.addedAt }
@@ -95,6 +116,12 @@ private fun sortShelf(list: List<BookEntity>, sort: ShelfSort, desc: Boolean): L
             if (c != 0) c else shelfCollator.compare(a.title, b.title)
         }
         ShelfSort.PROGRESS -> compareBy<BookEntity> { if (it.finishedAt != null) 2f else it.progress }.then(byTitle)
+        // the user's kind order; inside a kind, the most recently read first
+        ShelfSort.KIND -> compareBy<BookEntity> { kinds.indexOf(ShelfKind.of(it)) }
+    }
+    if (sort == ShelfSort.KIND) {
+        val recent = compareByDescending<BookEntity> { it.lastReadAt ?: it.addedAt }
+        return list.sortedWith((if (desc) asc.reversed() else asc).then(recent))
     }
     return list.sortedWith(if (desc) asc.reversed() else asc)
 }
@@ -162,7 +189,14 @@ fun LibraryScreen(
     var newCol by remember { mutableStateOf(false) }
     var editCols by remember { mutableStateOf(false) }
     var pickColFor by remember { mutableStateOf<BookEntity?>(null) }
-    val shown = remember(base, filter, sort, sortDesc) { sortShelf(base.filter { filter.matches(it) }, sort, sortDesc) }
+    // 종류: one kind or all (🏷️ chip), and the order for 종류 sorting
+    var kindName by remember { mutableStateOf(shelfPrefs.getString("kind", null)) }
+    val kind = kindName?.let { n -> ShelfKind.entries.firstOrNull { it.name == n } }
+    fun setKind(k: ShelfKind?) { kindName = k?.name; shelfPrefs.edit().putString("kind", k?.name).apply() }
+    var kindOrder by remember { mutableStateOf(ShelfKind.order(shelfPrefs.getString("kind_order", null))) }
+    var editKindOrder by remember { mutableStateOf(false) }
+    val kindBase = remember(base, kind) { if (kind == null) base else base.filter { ShelfKind.of(it) == kind } }
+    val shown = remember(kindBase, filter, sort, sortDesc, kindOrder) { sortShelf(kindBase.filter { filter.matches(it) }, sort, sortDesc, kindOrder) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // header line: how many books, and today's reading time (all books)
@@ -241,6 +275,12 @@ fun LibraryScreen(
                 options = ShelfSort.entries, selected = sort, desc = sortDesc,
                 label = { it.label }, kind = { it.kind }, defaultDesc = { it.defaultDesc },
                 short = { when (it) { ShelfSort.RECENT -> "읽은 날"; ShelfSort.ADDED -> "추가일"; else -> it.label } },
+                extra = { close ->
+                    DropdownMenuItem(
+                        text = { Text("↕️ 종류 순서 정하기…", color = MaterialTheme.colorScheme.primary) },
+                        onClick = { close(); editKindOrder = true },
+                    )
+                },
                 onChange = { o, d ->
                     sort = o; sortDesc = d
                     shelfPrefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply()
@@ -250,18 +290,40 @@ fun LibraryScreen(
                 collections, colCounts, activeCol, books.size,
                 onSelect = { setCol(it) }, onNew = { newCol = true }, onEdit = { editCols = true },
             )
+            // 종류: 📖 책 · 🖼️ 만화 · 📄 PDF · 🎧 오디오북
+            var kindOpen by remember { mutableStateOf(false) }
+            Box {
+                MiniChip(
+                    if (kind == null) "🏷️ 종류" else "${kind.emoji} ${kind.label}",
+                    onClick = { kindOpen = true }, selected = kind != null, description = "종류",
+                )
+                androidx.compose.material3.DropdownMenu(expanded = kindOpen, onDismissRequest = { kindOpen = false }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("전체 ${base.size}") }, leadingIcon = { CheckMark(kind == null) },
+                        onClick = { kindOpen = false; setKind(null) },
+                    )
+                    kindOrder.forEach { k ->
+                        val n = base.count { ShelfKind.of(it) == k }
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("${k.emoji} ${k.label} $n") }, leadingIcon = { CheckMark(kind == k) },
+                            enabled = n > 0 || kind == k,
+                            onClick = { kindOpen = false; setKind(k) },
+                        )
+                    }
+                }
+            }
             // 전체 / 읽는 중 / 안 읽음 / 다 읽음 — one drop-down
             var filterOpen by remember { mutableStateOf(false) }
             Box {
                 MiniChip(
-                    "🔖 ${filter.label} ${base.count { filter.matches(it) }}",
+                    "🔖 ${filter.label} ${kindBase.count { filter.matches(it) }}",
                     onClick = { filterOpen = true },
                     selected = filter != ShelfFilter.ALL,
                 )
                 androidx.compose.material3.DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
                     ShelfFilter.entries.forEach { f ->
                         androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("${f.label} ${base.count { f.matches(it) }}") },
+                            text = { Text("${f.label} ${kindBase.count { f.matches(it) }}") },
                             leadingIcon = { CheckMark(f == filter) },
                             onClick = { filterOpen = false; filterName = f.name },
                         )
@@ -313,6 +375,11 @@ fun LibraryScreen(
         scope.launch { setCol(ShelfCollections.create(colDb, name).id) }
     }
     if (editCols) CollectionEditDialog(collections, colCounts) { editCols = false }
+    if (editKindOrder) KindOrderDialog(kindOrder, onDismiss = { editKindOrder = false }) { order ->
+        kindOrder = order
+        shelfPrefs.edit().putString("kind_order", order.joinToString(",") { it.name }).apply()
+        if (sort != ShelfSort.KIND) { sort = ShelfSort.KIND; sortDesc = false; shelfPrefs.edit().putString("sort", sort.name).putBoolean("sort_desc", false).apply() }
+    }
     pickColFor?.let { b -> CollectionPickDialog(b, collections, links) { pickColFor = null } }
     exportFor?.let { b -> HighlightExportDialog(b.id) { exportFor = null } }
 
@@ -440,7 +507,7 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
 /** Another device read further (progress sync): shown after the library's own progress. */
 private fun aheadText(pct: Float?): String = pct?.let { " · ⇄ ${(it * 100).roundToInt()}%" }.orEmpty()
 
-private fun progressText(b: BookEntity): String = when {
+private fun progressText(b: BookEntity): String = ShelfKind.of(b).emoji + " " + when {
     b.finishedAt != null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "다 들음" else "다 읽음"
     b.lastReadAt == null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "새 오디오북" else "새 책"
     else -> "${(b.progress * 100).roundToInt()}%"
@@ -529,42 +596,64 @@ internal fun minutesText(min: Int): String = when {
 }
 
 /**
- * Marks on a cover, readable on any cover colour (a dark disc with a light rim):
- * top-left what it is (📖 책 · 🖼 만화 · 📄 PDF · 🎧 오디오북), bottom-right whether it is on
- * the phone (⬇️) or on the server only (☁️); while it comes, a ring shows how far.
+ * On a cover's bottom-right: ⬇ on a green disc = kept on the phone (서재에 보관, works offline),
+ * ☁ on a dark disc = on the server only, or only kept for now in the cache (바로 읽기 / 임시).
+ * Both have a white rim, so they read on any cover colour; the kind is in the text line.
+ * While an audiobook comes, a ring around the mark shows how far.
  */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.CoverMarks(b: BookEntity, store: BookStore, small: Boolean) {
     val audio = b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT
-    val kind = when (b.format) {
-        com.oasisreader.app.audio.AudioLibraryLink.FORMAT -> "🎧" to "오디오북"
-        BookStore.FORMAT_COMIC -> "🖼️" to "만화"
-        BookStore.FORMAT_PDF -> "📄" to "PDF"
-        else -> "📖" to "책"
-    }
     val dl = if (audio) com.oasisreader.app.audio.AudioDownloads.progress[b.id] else null
-    val onPhone = if (audio) b.pinned && b.fileBytes > 0
+    val kept = b.pinned && if (audio) b.fileBytes > 0
         else remember(b.id, b.pinned, b.lastReadAt, b.fileBytes) { store.originalOf(b.id) != null || store.contentDir(b.id).isDirectory }
-    val size = if (small) 18.dp else 22.dp
-    Mark(kind.first, kind.second, size, Modifier.align(Alignment.TopStart))
-    Box(Modifier.align(Alignment.BottomEnd).padding(3.dp), contentAlignment = Alignment.Center) {
-        Mark(if (onPhone) "⬇️" else "☁️", if (onPhone) "폰에 있음" else "서버에만 있음 (열면 받음)", size, Modifier, pad = 0.dp)
+    val size = if (small) 24.dp else 28.dp
+    Box(Modifier.align(Alignment.BottomEnd).padding(4.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(size)
+                .background(if (kept) Color(0xFF1E8E4E) else Color(0xFF37474F).copy(alpha = 0.88f), androidx.compose.foundation.shape.CircleShape)
+                .border(1.5.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+                .semantics { contentDescription = if (kept) "폰에 받음" else "서버에만 있음 또는 임시 보관" },
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(
+                androidx.compose.ui.res.painterResource(if (kept) com.oasisreader.app.R.drawable.ic_mark_phone else com.oasisreader.app.R.drawable.ic_mark_cloud),
+                contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.62f),
+            )
+        }
         if (dl != null) androidx.compose.material3.CircularProgressIndicator(
-            progress = { dl }, strokeWidth = 2.dp, color = Color(0xFF7CD992), trackColor = Color.Transparent,
-            modifier = Modifier.size(size + 4.dp),
+            progress = { dl }, strokeWidth = 2.5.dp, color = Color(0xFF7CD992), trackColor = Color.White.copy(alpha = 0.35f),
+            modifier = Modifier.size(size + 6.dp),
         )
     }
 }
 
+/** 종류 순서: the order the 종류 sort uses (▲▼ to move). */
 @Composable
-private fun Mark(emoji: String, label: String, size: androidx.compose.ui.unit.Dp, modifier: Modifier, pad: androidx.compose.ui.unit.Dp = 3.dp) {
-    Box(
-        modifier.padding(pad).size(size)
-            .background(Color.Black.copy(alpha = 0.55f), androidx.compose.foundation.shape.CircleShape)
-            .border(0.8.dp, Color.White.copy(alpha = 0.75f), androidx.compose.foundation.shape.CircleShape)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(emoji, fontSize = (size.value * 0.52f).sp, lineHeight = (size.value * 0.6f).sp)
+private fun KindOrderDialog(initial: List<ShelfKind>, onDismiss: () -> Unit, onSave: (List<ShelfKind>) -> Unit) {
+    var order by remember { mutableStateOf(initial) }
+    fun move(i: Int, d: Int) {
+        val j = i + d
+        if (j !in order.indices) return
+        order = order.toMutableList().also { val t = it[i]; it[i] = it[j]; it[j] = t }
     }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("↕️ 종류 순서") },
+        text = {
+            Column {
+                Text("정렬을 \"종류\"로 하면 이 순서로 묶어 보여 줍니다. 같은 종류 안에서는 최근에 읽은 책부터.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                order.forEachIndexed { i, k ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${i + 1}. ${k.emoji} ${k.label}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { move(i, -1) }, enabled = i > 0) { Text("🔼") }
+                        TextButton(onClick = { move(i, 1) }, enabled = i < order.size - 1) { Text("🔽") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(order); onDismiss() }) { Text("저장") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
 }

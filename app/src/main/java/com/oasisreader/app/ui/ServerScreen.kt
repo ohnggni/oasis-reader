@@ -154,7 +154,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
             if (!audio) Text(
-                "북오아시스 서버용 부가 기능입니다. 서버 옆에 띄운 oasis-meta 주소를 넣습니다 (없으면 비워 두세요 · 만드는 법은 설정 › 메타 API 안내). 있으면 시리즈·표지·정리된 제목·실제 날짜·줄거리로 된 목록을 보여 줍니다. 같은 아이디/비밀번호를 씁니다.",
+                "북오아시스 서버용 부가 기능입니다. 서버 옆에 띄운 oasis-meta 주소를 넣습니다 (없으면 비워 두세요 · 설치 안내는 설정 › 메타 API 안내). 있으면 시리즈·표지·정리된 제목·실제 날짜·줄거리로 된 목록을 보여 줍니다. 같은 아이디/비밀번호를 씁니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),
