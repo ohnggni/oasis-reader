@@ -341,14 +341,14 @@ fun MetaCatalogScreen(
             }
             if (!(activeQuery.isNotBlank() && searchBooks)) {
                 com.oasisreader.app.ui.MiniChip(
-                    if (seriesList) "📃" else "🔲",
+                    if (seriesList) "📃 목록" else "🔲 타일", plain = true,
                     onClick = { seriesList = !seriesList; prefs.edit().putBoolean("series_list", seriesList).apply() },
                     description = if (seriesList) "목록으로 보는 중 (누르면 타일)" else "타일로 보는 중 (누르면 목록)",
                 )
                 if (!seriesList) {
                     var sizeOpen by remember { mutableStateOf(false) }
                     Box {
-                        com.oasisreader.app.ui.MiniChip("📐", onClick = { sizeOpen = true }, description = "타일 크기")
+                        com.oasisreader.app.ui.MiniChip("📐 크기", onClick = { sizeOpen = true }, description = "타일 크기", plain = true)
                         androidx.compose.material3.DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
                             Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
                                 Text("타일 크기", style = MaterialTheme.typography.labelLarge)

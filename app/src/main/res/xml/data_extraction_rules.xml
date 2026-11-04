@@ -3,7 +3,8 @@
   Android 12+ backups.
   cloud-backup: Google keeps ~25MB per app, so book files and fonts stay out
   (they can be downloaded again); the database and settings go in.
-  device-transfer (phone to phone, e.g. Smart Switch): everything, books included.
+  device-transfer (phone to phone, e.g. Smart Switch): everything, books included,
+  except media/ (audiobooks kept on the phone, encrypted with this phone's key).
   secure_store holds values encrypted with a key that never leaves the phone,
   so it is useless elsewhere and is always skipped.
 -->
@@ -11,9 +12,11 @@
     <cloud-backup>
         <exclude domain="file" path="books/" />
         <exclude domain="file" path="fonts/" />
+        <exclude domain="file" path="media/" />
         <exclude domain="sharedpref" path="secure_store.xml" />
     </cloud-backup>
     <device-transfer>
+        <exclude domain="file" path="media/" />
         <exclude domain="sharedpref" path="secure_store.xml" />
     </device-transfer>
 </data-extraction-rules>

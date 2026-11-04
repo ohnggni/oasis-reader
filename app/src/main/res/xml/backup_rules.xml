@@ -3,5 +3,6 @@
 <full-backup-content>
     <exclude domain="file" path="books/" />
     <exclude domain="file" path="fonts/" />
+    <exclude domain="file" path="media/" />
     <exclude domain="sharedpref" path="secure_store.xml" />
 </full-backup-content>

@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
         com.oasisreader.app.data.FontManager(this)   // loads the user's own fonts
         com.oasisreader.app.ui.DiskCovers.dir = java.io.File(cacheDir, "covers")
         com.oasisreader.app.meta.MetaApi.cacheDir = java.io.File(cacheDir, "meta")
+        com.oasisreader.app.audio.AudioDownloads.migrateLegacy(this)   // plain kept tracks → encrypted (once)
         setContent {
             OasisTheme {
                 // Surface supplies onBackground as the default text colour (dark mode)

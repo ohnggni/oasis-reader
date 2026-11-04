@@ -484,7 +484,7 @@ private fun SortBar(
         ) {
             // same switch as in the library
             MiniChip(
-                if (grid) "🔲" else "📃", onClick = { onGrid(!grid) },
+                if (grid) "🔲 표지" else "📃 목록", onClick = { onGrid(!grid) }, plain = true,
                 description = if (grid) "표지로 보는 중 (누르면 목록)" else "목록으로 보는 중 (누르면 표지)",
             )
             SortChip(

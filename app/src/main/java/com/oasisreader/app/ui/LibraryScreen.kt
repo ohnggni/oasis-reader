@@ -186,7 +186,7 @@ fun LibraryScreen(
             val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
             val tiles = gridChoice ?: wide
             MiniChip(
-                if (tiles) "🔲" else "📃",
+                if (tiles) "🔲 타일" else "📃 목록", plain = true,
                 onClick = {
                     gridChoice = !tiles
                     shelfPrefs.edit().putString("layout", if (!tiles) "grid" else "list").apply()
@@ -197,7 +197,7 @@ fun LibraryScreen(
                 // one chip like its neighbours; the size slider floats under it
                 var sizeOpen by remember { mutableStateOf(false) }
                 Box {
-                    MiniChip("📐", onClick = { sizeOpen = true }, description = "타일 크기")
+                    MiniChip("📐 크기", onClick = { sizeOpen = true }, description = "타일 크기", plain = true)
                     DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
                         Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text("타일 크기", style = MaterialTheme.typography.labelLarge)

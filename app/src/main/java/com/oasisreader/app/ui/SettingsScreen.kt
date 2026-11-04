@@ -153,8 +153,8 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             }
 
             Section("백업 · 기기 변경 (실험적 기능)")
-            Item("💾", "백업 내보내기 (책 파일 포함)", "책·위치·하이라이트·통계·설정을 zip 하나로 저장합니다", enabled = busy == null) { startExport(true) }
-            Item("📄", "백업 내보내기 (책 파일 빼고)", "가볍게. 책은 새 폰에서 서버에서 다시 받습니다", enabled = busy == null) { startExport(false) }
+            Item("💾", "백업 내보내기 (직접 넣은 책 파일 포함)", "책·위치·하이라이트·통계·설정을 zip 하나로 저장합니다. 서버에서 받은 책과 오디오북은 파일이 빠지고 새 폰에서 서버에서 다시 받습니다", enabled = busy == null) { startExport(true) }
+            Item("📄", "백업 내보내기 (책 파일 빼고)", "가볍게. 책 파일은 하나도 넣지 않습니다", enabled = busy == null) { startExport(false) }
             Item("♻️", "백업에서 복원", "지금 서재를 백업 내용으로 바꿉니다", enabled = busy == null) {
                 importer.launch(arrayOf("application/zip", "application/octet-stream"))
             }

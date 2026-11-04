@@ -89,8 +89,8 @@ object AudioPlayback {
         val app = context.applicationContext
         speed = app.getSharedPreferences("audio", Context.MODE_PRIVATE).getFloat("speed", 1f)
         val p = ExoPlayer.Builder(app)
-            // files on the phone (오프라인) and the server's stream with the web session
-            .setMediaSourceFactory(DefaultMediaSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(app, OkHttpDataSource.Factory(w.client))))
+            // files on the phone (오프라인, encrypted) and the server's stream with the web session
+            .setMediaSourceFactory(DefaultMediaSourceFactory(MediaDataSourceFactory(app, androidx.media3.datasource.DefaultDataSource.Factory(app, OkHttpDataSource.Factory(w.client)))))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_SPEECH).build(),
                 /* handleAudioFocus = */ true,

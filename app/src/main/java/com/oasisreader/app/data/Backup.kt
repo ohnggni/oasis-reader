@@ -41,6 +41,9 @@ object Backup {
         val dbFile = context.getDatabasePath("oasis.db")
         val store = BookStore.get(context)
         val bookDirs = store.root.listFiles()?.filter { it.isDirectory && !it.name.endsWith(".tmp") }.orEmpty()
+        // book files only for books the user added from the phone; books from a server are
+        // received again from it (and do not leave the app as plain files)
+        val ownFiles = if (includeBooks) db.books().all().filter { it.sourceUrl == null && it.opdsId == null }.map { it.id }.toSet() else emptySet()
         val manifest = BackupManifest(
             createdAt = System.currentTimeMillis(),
             books = bookDirs.size,
@@ -70,7 +73,7 @@ object Backup {
                 put("books/${d.name}/book.json", File(d, "book.json"))
                 put("books/${d.name}/comic.json", File(d, "comic.json"))
                 put("books/${d.name}/cover.jpg", File(d, "cover.jpg"))
-                if (includeBooks) {
+                if (d.name in ownFiles) {
                     BookStore.ORIGINALS.forEach { n -> put("books/${d.name}/$n", File(d, n)) }
                 }
             }

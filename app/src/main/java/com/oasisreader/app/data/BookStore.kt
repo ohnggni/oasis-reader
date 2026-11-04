@@ -222,6 +222,7 @@ class BookStore(private val context: Context) {
         synchronized(packageCache) { packageCache.remove(id) }
         synchronized(comicCache) { comicCache.remove(id) }
         dir(id).deleteRecursively()
+        File(context.filesDir, "media/$id").deleteRecursively()   // an audiobook kept on the phone
     }
 
     /** Bytes the book's files take (original + unpacked content). */

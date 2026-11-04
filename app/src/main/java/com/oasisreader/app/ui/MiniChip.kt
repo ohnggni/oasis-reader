@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.sp
  * The small chip of the filter rows (서재, 서버 목록, 정리된 카탈로그, 오디오북): emoji + a few
  * words, tight padding, so a whole row fits a regular phone without sideways scrolling.
  * Material chips are 32dp tall with 16dp padding; this one is ~28dp with 8dp.
- * [description] names an emoji-only chip for TalkBack.
+ * [plain]: no outline — a quiet switch (보기 방식·타일 크기) beside the filters.
+ * [description] names the chip for TalkBack.
  */
 @Composable
 fun MiniChip(
@@ -33,6 +34,7 @@ fun MiniChip(
     selected: Boolean = false,
     enabled: Boolean = true,
     description: String? = null,
+    plain: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
     Surface(
@@ -40,11 +42,11 @@ fun MiniChip(
         enabled = enabled,
         shape = RoundedCornerShape(8.dp),
         color = if (selected) cs.secondaryContainer else Color.Transparent,
-        contentColor = if (selected) cs.onSecondaryContainer else cs.onSurface,
-        border = if (selected) null else BorderStroke(0.8.dp, cs.outlineVariant),
+        contentColor = if (selected) cs.onSecondaryContainer else if (plain) cs.primary else cs.onSurface,
+        border = if (selected || plain) null else BorderStroke(0.8.dp, cs.outlineVariant),
         modifier = modifier.heightIn(min = 28.dp).let { m -> if (description != null) m.semantics { contentDescription = description } else m },
     ) {
-        Box(Modifier.padding(horizontal = 8.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.padding(horizontal = if (plain) 4.dp else 8.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {
             Text(
                 text,
                 fontSize = 12.5.sp, lineHeight = 16.sp,
