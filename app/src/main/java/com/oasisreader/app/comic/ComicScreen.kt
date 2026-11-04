@@ -514,6 +514,8 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                     // page-turner remotes / keyboards; ←/→ follow the screen in a right-to-left book
                     com.oasisreader.app.ui.PageTurnKeys { dir, horizontal ->
                         if (zoom > 1.01f) return@PageTurnKeys
+                        // with a settings panel open, the first press only closes it
+                        if (panel != com.oasisreader.app.ui.ReadPanel.NONE) { panel = com.oasisreader.app.ui.ReadPanel.NONE; return@PageTurnKeys }
                         lastActive = System.currentTimeMillis()
                         val d = if (horizontal && rtl) -dir else dir
                         turnTo(pager.currentPage + d)
@@ -751,6 +753,17 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
             }
         }
 
+        // a settings panel is open: a tap (or swipe) on the page only closes it — the page stays
+        if (panel != com.oasisreader.app.ui.ReadPanel.NONE) Box(
+            Modifier.fillMaxSize().pointerInput(Unit) {
+                androidx.compose.foundation.gestures.awaitEachGesture {
+                    androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false).consume()
+                    do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
+                    panel = com.oasisreader.app.ui.ReadPanel.NONE
+                    barsShownAt = System.currentTimeMillis()
+                }
+            },
+        )
         if (barsVisible) {
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(barColor))
         }

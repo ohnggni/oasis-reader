@@ -1,5 +1,8 @@
 package com.oasisreader.app.reader
 
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.input.pointer.pointerInput
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
@@ -733,7 +736,8 @@ private fun ReaderBody(
     // page-turner remotes / keyboards: the same turn as a tap on the page edge
     com.oasisreader.app.ui.PageTurnKeys(enabled = state is LoadState.Ready) { dir, _ ->
         lastActive = System.currentTimeMillis()
-        if (panel != Panel.NONE) panel = Panel.NONE
+        // with a settings panel open, the first press only closes it
+        if (panel != Panel.NONE) { panel = Panel.NONE; return@PageTurnKeys }
         webView?.evaluateJavascript(if (dir > 0) "Reader.next()" else "Reader.prev()", null)
     }
 
@@ -958,6 +962,18 @@ private fun ReaderBody(
                     )
                 }
             }
+
+            // a settings panel is open: a tap (or swipe) on the page only closes it — the page stays
+            if (panel != Panel.NONE) Box(
+                Modifier.fillMaxSize().pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false).consume()
+                        do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
+                        panel = Panel.NONE
+                        barsShownAt = System.currentTimeMillis()
+                    }
+                },
+            )
 
             // the running head (chapter title) is drawn inside the page, so it turns with it
             com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
