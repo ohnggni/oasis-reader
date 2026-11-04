@@ -103,25 +103,20 @@ private fun JsonElement.toItem(): AudioItem? {
     )
 }
 
-/** The bookoasis servers that can have audiobooks (an account is needed for the web login). */
-fun audioServers(context: android.content.Context): List<Server> =
-    ServerSettings(context.applicationContext).all().filter { it.username.isNotBlank() }
-
 /**
  * 오디오북: the audiobook shelves of bookoasis (its own web API, not OPDS), a book's tracks,
  * and the player. [onPlayer] opens the full player.
  */
 @Composable
-fun AudiobookScreen(onBack: () -> Unit, onPlayer: () -> Unit) {
+fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
-    val servers = remember { audioServers(context) }
-    var serverIdx by remember { mutableIntStateOf(0) }
-    val server = servers.getOrNull(serverIdx)
-    if (server == null) {
+    val server = remember(serverId) { ServerSettings(context.applicationContext).get(serverId) }
+    if (server == null || server.username.isBlank()) {
         BackHandler(onBack = onBack)
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             TopBar("오디오북", onBack = onBack)
-            Text("아이디·비밀번호가 있는 서버가 없습니다. 설정 › 서버에서 북오아시스 계정을 넣어 주세요.", modifier = Modifier.padding(24.dp))
+            Text("북오아시스 계정(아이디·비밀번호)이 필요합니다. 서버 설정에서 넣어 주세요.", modifier = Modifier.padding(24.dp))
+            TextButton(onClick = onOpenSettings, modifier = Modifier.padding(horizontal = 16.dp)) { Text("서버 설정") }
         }
         return
     }
@@ -171,12 +166,13 @@ fun AudiobookScreen(onBack: () -> Unit, onPlayer: () -> Unit) {
 
     BackHandler { if (open != null) open = null else onBack() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("오디오북", onBack = { if (open != null) open = null else onBack() }) {
+        TopBar(server.name.ifBlank { "오디오북" }, onBack = { if (open != null) open = null else onBack() }) {
+            com.oasisreader.app.ui.EmojiButton("⚙️", "서버 설정", onOpenSettings)
             if (AudioPlayback.book != null) com.oasisreader.app.ui.EmojiButton("🎧", "재생 중", onPlayer)
         }
         val o = open
         if (o != null) AudiobookDetail(web, o, onPlayer) else AudioShelf(
-            servers, server, { serverIdx = it }, libraries, libId,
+            libraries, libId,
             { id -> libId = id; prefs.edit().apply { if (id == null) remove("library_${server.id}") else putString("library_${server.id}", id) }.apply() },
             query, { query = it }, { active = query.trim() },
             sortDesc, { sortDesc = !sortDesc; prefs.edit().putBoolean("sort_desc", sortDesc).apply() },
@@ -189,7 +185,6 @@ fun AudiobookScreen(onBack: () -> Unit, onPlayer: () -> Unit) {
 
 @Composable
 private fun AudioShelf(
-    servers: List<Server>, server: Server, onServer: (Int) -> Unit,
     libraries: List<AudioLibrary>, libId: String?, onLib: (String?) -> Unit,
     query: String, onQuery: (String) -> Unit, onSearch: () -> Unit,
     sortDesc: Boolean, onSort: () -> Unit,
@@ -205,15 +200,6 @@ private fun AudioShelf(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         )
         Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (servers.size > 1) {
-                var sOpen by remember { mutableStateOf(false) }
-                Box {
-                    AssistChip(onClick = { sOpen = true }, label = { Text("☁️ ${server.name} ▾") })
-                    DropdownMenu(sOpen, { sOpen = false }) {
-                        servers.forEachIndexed { i, s -> DropdownMenuItem(text = { Text(s.name) }, onClick = { sOpen = false; onServer(i) }) }
-                    }
-                }
-            }
             var lOpen by remember { mutableStateOf(false) }
             Box {
                 AssistChip(onClick = { lOpen = true }, label = { Text("카테고리: ${libraries.firstOrNull { it.id == libId }?.name ?: "전체"} ▾") })
@@ -278,7 +264,13 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
             val meta = o["meta"] as? JsonObject ?: JsonObject(emptyMap())
             val tracks = o.firstList("books").mapNotNull { t ->
                 val id = t.int("id") ?: return@mapNotNull null
-                AudioTrack(id, t.str("title", "track_code") ?: "${t.int("track_number") ?: ""}", t.dbl("duration") ?: 0.0)
+                AudioTrack(
+                    id,
+                    // file names as titles: without the extension ("01.mp3" → "01")
+                    (t.str("title", "track_code") ?: "${t.int("track_number") ?: ""}")
+                        .replace(Regex("\\.(mp3|m4b|m4a|flac|aac|wav|ogg|opus|wma)$", RegexOption.IGNORE_CASE), ""),
+                    t.dbl("duration") ?: 0.0,
+                )
             }
             val id = meta.int("id") ?: item.id ?: throw IllegalStateException("오디오북 번호를 알 수 없습니다")
             summary = meta.str("summary")?.takeIf { it != "등록된 설명이 없습니다." }

@@ -13,10 +13,14 @@ data class Server(
     val username: String,
     val password: String,
     val metaUrl: String = "",   // oasis-meta sidecar (series names, clean titles, real dates); "" = none
-    val metaDb: String = "general",   // bookoasis database behind this catalog: "general" | "adult"
+    val metaDb: String = "general",   // bookoasis database behind this catalog: "general" | "adult" | "audiobook"
 ) {
+    /** A bookoasis audiobook library (its web API, not OPDS). */
+    val isAudiobook get() = metaDb == ServerSettings.AUDIOBOOK
+
     /** Address set; a login needs both parts (or neither, for a public catalog). */
-    val isComplete get() = url.isNotBlank() && (username.isBlank() == password.isBlank())
+    val isComplete get() = url.isNotBlank() && (username.isBlank() == password.isBlank()) &&
+        (metaDb != ServerSettings.AUDIOBOOK || username.isNotBlank())   // audiobooks: the web login needs an account
     val host: String? get() = url.toHttpUrlOrNull()?.host
 }
 
@@ -73,7 +77,7 @@ class ServerSettings(context: Context) {
      */
     fun forUrl(url: String): Server? {
         val host = url.toHttpUrlOrNull()?.host ?: return null
-        val same = all().filter { it.host == host }
+        val same = all().filter { it.host == host && !it.isAudiobook }
         if (same.size <= 1) return same.firstOrNull()
         val db = Regex("""/download/([a-z]+)/""").find(url)?.groupValues?.get(1)
         return same.firstOrNull { it.metaDb == db } ?: same.first()
@@ -101,5 +105,6 @@ class ServerSettings(context: Context) {
 
     companion object {
         const val DEFAULT_ID = "bookoasis"
+        const val AUDIOBOOK = "audiobook"
     }
 }

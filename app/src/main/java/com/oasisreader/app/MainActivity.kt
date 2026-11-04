@@ -112,6 +112,7 @@ private fun App() {
 
     var route by rememberSaveable { mutableStateOf(Route.LIBRARY) }
     var serverReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
+    var audioReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }   // where the full player goes back to
     var importing by remember { mutableStateOf(false) }
 
     val books by remember { db.books().observeAll() }.collectAsState(initial = null)
@@ -166,7 +167,16 @@ private fun App() {
             val sid = route.removePrefix(if (raw) Route.OPDS_OF else Route.CATALOG_OF)
             val many = remember(sid) { ServerSettings(app).all().size > 1 }
             val hasMeta = remember(sid, route) { ServerSettings(app).get(sid)?.metaUrl?.isNotBlank() == true }
-            if (!raw && hasMeta) key(sid) {
+            val isAudio = remember(sid, route) { ServerSettings(app).get(sid)?.isAudiobook == true }
+            if (isAudio) key(sid) {
+                // a bookoasis audiobook library: list → tracks → player
+                com.oasisreader.app.audio.AudiobookScreen(
+                    serverId = sid,
+                    onBack = { route = if (many) Route.CATALOG else Route.LIBRARY },
+                    onPlayer = { audioReturn = route; route = Route.AUDIO_PLAYER },
+                    onOpenSettings = { openServer(route, sid) },
+                )
+            } else if (!raw && hasMeta) key(sid) {
                 MetaCatalogScreen(
                     serverId = sid,
                     onBack = { route = if (many) Route.CATALOG else Route.LIBRARY },
@@ -192,11 +202,7 @@ private fun App() {
             val sid = route.removePrefix(Route.SERVER).ifBlank { null }
             key(route) { ServerScreen(serverId = sid, onDone = { route = serverReturn }) }
         }
-        route == Route.AUDIO -> com.oasisreader.app.audio.AudiobookScreen(
-            onBack = { route = Route.LIBRARY },
-            onPlayer = { route = Route.AUDIO_PLAYER },
-        )
-        route == Route.AUDIO_PLAYER -> com.oasisreader.app.audio.AudioPlayerScreen(onBack = { route = Route.AUDIO })
+        route == Route.AUDIO_PLAYER -> com.oasisreader.app.audio.AudioPlayerScreen(onBack = { route = audioReturn })
         route == Route.SETTINGS -> SettingsScreen(
             onBack = { route = Route.LIBRARY },
             onServer = { route = Route.SERVERS },
@@ -254,11 +260,10 @@ private fun App() {
             onDelete = { b -> scope.launch { store.delete(b.id) } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
-            onAudio = { route = Route.AUDIO },
         )
             // an audiobook is loaded: a small player at the bottom of the library
             com.oasisreader.app.audio.AudioMiniBar(
-                onOpen = { route = Route.AUDIO_PLAYER },
+                onOpen = { audioReturn = Route.LIBRARY; route = Route.AUDIO_PLAYER },
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
             )
         }

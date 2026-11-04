@@ -60,10 +60,13 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    fun current() = Server(initial.id, name.trim(), url.trim().trimEnd('/'), user.trim(), pass, meta.trim().trimEnd('/'), metaDb)
+    fun current() = Server(
+        initial.id, name.trim(), url.trim().trimEnd('/'), user.trim(), pass,
+        if (metaDb == com.oasisreader.app.data.ServerSettings.AUDIOBOOK) "" else meta.trim().trimEnd('/'), metaDb,
+    )
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar(if (initial.id.isEmpty()) "OPDS 서버 추가" else "OPDS 서버 설정", onBack = onDone) {
+        TopBar(if (initial.id.isEmpty()) "서버 추가" else "서버 설정", onBack = onDone) {
             if (initial.id.isNotEmpty()) EmojiButton("🗑️", "서버 삭제") { confirmDelete = true }
         }
         Column(
@@ -86,10 +89,35 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 label = { Text("이름 (예: 집 서버)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(10.dp))
+            // what this entry opens: a book catalog (general / adult DB of bookoasis) or bookoasis audiobooks
+            val audio = metaDb == com.oasisreader.app.data.ServerSettings.AUDIOBOOK
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("종류", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp))
+                listOf("general" to "일반", "adult" to "성인", com.oasisreader.app.data.ServerSettings.AUDIOBOOK to "오디오북").forEach { (v, label) ->
+                    androidx.compose.material3.FilterChip(
+                        selected = metaDb == v,
+                        onClick = { metaDb = v; status = null },
+                        label = { Text(label) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+            }
+            Text(
+                when (metaDb) {
+                    com.oasisreader.app.data.ServerSettings.AUDIOBOOK ->
+                        "북오아시스의 오디오북 라이브러리입니다. 북오아시스 주소(OPDS 주소를 넣어도 됩니다)와 계정을 넣으세요. 목록에서 바로 듣고, 들은 위치는 북오아시스와 맞춰집니다."
+                    "adult" -> "북오아시스 성인 DB 카탈로그입니다 (관리자 계정만 볼 수 있습니다)."
+                    else -> "보통의 OPDS 카탈로그입니다. 북오아시스라면 일반 DB 카탈로그입니다."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp, start = 4.dp),
+            )
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = url, onValueChange = { url = it; status = null },
-                label = { Text("OPDS 주소") }, singleLine = true,
+                label = { Text(if (audio) "북오아시스 주소" else "OPDS 주소") }, singleLine = true,
                 placeholder = { Text("https://book.example.com/opds") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),
@@ -97,6 +125,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
             val plain = url.trim().startsWith("http://", ignoreCase = true)
             Text(
                 if (plain) "⚠️ http:// 는 암호화되지 않습니다. 아이디·비밀번호와 책이 그대로 오가니 집 안 네트워크(예: 192.168.x.x)에서만 쓰세요."
+                else if (audio) "예: https://book.example.com"
                 else "서버의 OPDS 카탈로그 주소입니다. 보통 서버 주소 뒤에 /opds 를 붙입니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (plain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -116,40 +145,22 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
+            if (!audio) Spacer(Modifier.height(12.dp))
+            if (!audio) OutlinedTextField(
                 value = meta, onValueChange = { meta = it; status = null },
                 label = { Text("메타 API 주소 (선택)") }, singleLine = true,
                 placeholder = { Text("https://meta.example.com") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text(
+            if (!audio) Text(
                 "북오아시스 서버용 부가 기능입니다. 서버 옆에 띄운 oasis-meta 주소를 넣습니다 (없으면 비워 두세요 · 만드는 법은 설정 › 메타 API 안내). 있으면 시리즈·표지·정리된 제목·실제 날짜·줄거리로 된 목록을 보여 줍니다. 같은 아이디/비밀번호를 씁니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),
             )
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("메타 DB", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp))
-                listOf("general" to "일반", "adult" to "성인").forEach { (v, label) ->
-                    androidx.compose.material3.FilterChip(
-                        selected = metaDb == v,
-                        onClick = { metaDb = v; status = null },
-                        label = { Text(label) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-            }
-            Text(
-                "북오아시스 성인 DB 카탈로그면 \"성인\"을 고르세요 (관리자 계정만 볼 수 있습니다).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp),
-            )
             // presets of the organized catalog: for a saved server with a meta API
-            if (initial.id.isNotEmpty() && initial.metaUrl.isNotBlank()) {
+            if (!audio && initial.id.isNotEmpty() && initial.metaUrl.isNotBlank()) {
                 Spacer(Modifier.height(20.dp))
                 com.oasisreader.app.meta.PresetSettings(initial)
             }
@@ -160,7 +171,13 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                     onClick = {
                         busy = true; status = "확인하는 중…"
                         scope.launch {
-                            status = try {
+                            status = if (audio) try {
+                                val o = com.oasisreader.app.audio.BookOasisWeb.of(current()).get("/api/media/libraries", mapOf("type" to "audiobook"))
+                                val n = (o["libraries"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0
+                                "✅ 북오아시스에 로그인했습니다 · 오디오북 카테고리 ${n}개"
+                            } catch (e: Exception) {
+                                "⚠️ ${e.message ?: e.javaClass.simpleName}"
+                            } else try {
                                 val feed = OpdsClient(current()).fetch(current().url)
                                 val metaLine = if (current().metaUrl.isBlank()) "" else try {
                                     val libs = com.oasisreader.app.meta.MetaApi(current()).libraries()
@@ -229,12 +246,15 @@ fun ServerListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, onOpen: ((St
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("☁️", style = MaterialTheme.typography.titleMedium)
+                    Text(if (s.isAudiobook) "🎧" else "☁️", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(s.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            listOfNotNull(s.username.ifBlank { null }, s.url).joinToString(" · "),
+                            listOfNotNull(
+                                when { s.isAudiobook -> "🎧 오디오북"; s.metaDb == "adult" -> "성인"; else -> null },
+                                s.username.ifBlank { null }, s.url,
+                            ).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
