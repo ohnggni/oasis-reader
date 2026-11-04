@@ -128,7 +128,32 @@ object AudioPlayback {
     }
 
     /** Opens [b] at the server's place (or at [trackIndex]/[startSec] when given) and plays. */
-    fun open(context: Context, w: BookOasisWeb, b0: AudioBook, startIndex: Int? = null, startSec: Double? = null) {
+    /** Two places to choose from (see AudioProgressSync.decide): shown by [PlaceChoiceDialog]. */
+    data class PlaceChoice(val title: String, val serverIdx: Int, val serverSec: Double, val phoneIdx: Int, val phoneSec: Double)
+    var placeChoice by mutableStateOf<PlaceChoice?>(null)
+
+    /** The listener picked a place: go there and play. */
+    fun choosePlace(useServer: Boolean) {
+        val c = placeChoice ?: return
+        placeChoice = null
+        val p = player ?: return
+        if (useServer) p.seekTo(c.serverIdx, (c.serverSec * 1000).toLong().coerceAtLeast(0))
+        else p.seekTo(c.phoneIdx, (c.phoneSec * 1000).toLong().coerceAtLeast(0))
+        p.play()
+    }
+
+    /**
+     * Opens [b] at the phone's place, paused, and asks which place to go on from (the server's
+     * place looks like a player that started over elsewhere).
+     */
+    fun openAsking(context: Context, w: BookOasisWeb, b: AudioBook, phoneIdx: Int, phoneSec: Double) {
+        val serverIdx = b.tracks.indexOfFirst { it.id == b.startTrackId }
+        open(context, w, b, phoneIdx, phoneSec, autoPlay = false)
+        placeChoice = PlaceChoice(b.title, serverIdx, b.startSeconds, phoneIdx, phoneSec)
+    }
+
+    fun open(context: Context, w: BookOasisWeb, b0: AudioBook, startIndex: Int? = null, startSec: Double? = null, autoPlay: Boolean = true) {
+        var play = autoPlay
         val b = AudioDownloads.withLocal(context, b0)
         val p = ensurePlayer(context, w)
         app = context.applicationContext
@@ -163,16 +188,18 @@ object AudioPlayback {
             p.seekTo(startIndex, ((startSec ?: 0.0) * 1000).toLong())
         } else if (!p.isPlaying) {
             // the same book is still loaded (paused): go to the server's place when it was saved
-            // elsewhere after ours (the web or another phone) — AudioProgressSync.preferPhone
+            // elsewhere after ours (the web or another phone) — AudioProgressSync.decide
             val idx = b.tracks.indexOfFirst { it.id == b.startTrackId }
             val here = p.currentMediaItemIndex
             val hereSec = p.currentPosition / 1000.0
             val c = context.applicationContext
-            if (idx >= 0 && !AudioProgressSync.preferPhone(c, b.serverId, b.id, b.startTrackId, idx, b.startSeconds, here, hereSec)) {
-                p.seekTo(idx, (b.startSeconds * 1000).toLong().coerceAtLeast(0))
+            when (if (idx >= 0) AudioProgressSync.decide(c, b.serverId, b.id, b.startTrackId, idx, b.startSeconds, here, hereSec) else AudioProgressSync.Place.PHONE) {
+                AudioProgressSync.Place.SERVER -> p.seekTo(idx, (b.startSeconds * 1000).toLong().coerceAtLeast(0))
+                AudioProgressSync.Place.ASK -> { play = false; placeChoice = PlaceChoice(b.title, idx, b.startSeconds, here, hereSec) }
+                AudioProgressSync.Place.PHONE -> {}
             }
         }
-        p.play()
+        if (play) p.play()
         context.startService(Intent(context, AudioService::class.java))
         tick()
         // listening puts the book on the 서재 (like 바로 읽기 does for books)

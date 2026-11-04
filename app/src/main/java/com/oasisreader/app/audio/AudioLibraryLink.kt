@@ -125,6 +125,22 @@ object AudioLibraryLink {
         if (completed) dao.setFinished(id, System.currentTimeMillis())
     }
 
+    /**
+     * Plays [b] from the right place: the phone's ([local], the 서재 row) or the server's, by
+     * AudioProgressSync.decide — or opens it paused and asks when that cannot be told.
+     */
+    fun resume(context: Context, web: BookOasisWeb, b: AudioBook, local: BookEntity?) {
+        val phone = local?.takeIf { it.lastReadAt != null && it.spineIndex in b.tracks.indices }
+        if (phone == null || AudioPlayback.book?.id == b.id) { AudioPlayback.open(context, web, b); return }
+        val serverIdx = b.tracks.indexOfFirst { it.id == b.startTrackId }
+        val sec = phone.chapterFraction.toDouble()
+        when (AudioProgressSync.decide(context, b.serverId.ifEmpty { web.server.id }, b.id, b.startTrackId, serverIdx, b.startSeconds, phone.spineIndex, sec)) {
+            AudioProgressSync.Place.PHONE -> AudioPlayback.open(context, web, b, phone.spineIndex, sec)
+            AudioProgressSync.Place.SERVER -> AudioPlayback.open(context, web, b)
+            AudioProgressSync.Place.ASK -> AudioPlayback.openAsking(context, web, b, phone.spineIndex, sec)
+        }
+    }
+
     /** Opens a 서재 row: the server's tracks and place, then plays. Throws when the server cannot be reached. */
     suspend fun play(context: Context, b: BookEntity) {
         val (sid, aid) = parse(b) ?: throw IllegalStateException("오디오북 정보가 없습니다")
@@ -138,17 +154,7 @@ object AudioLibraryLink {
             ?: Detail(kept.copy(startTrackId = null, startSeconds = 0.0), null, (b.progress * 100).toDouble(), b.finishedAt != null)
         if (kept == null || d.book.tracks.isNotEmpty()) runCatching { add(context, web, d.book, d.percent, d.completed) }
         add(context, web, d.book, d.percent, d.completed)
-        // the phone's place or the server's: the one saved last (AudioProgressSync.preferPhone)
         val local = AppDatabase.get(context.applicationContext).books().get(b.id)
-        val serverIdx = d.book.tracks.indexOfFirst { it.id == d.book.startTrackId }
-        val useLocal = local != null && local.lastReadAt != null && local.spineIndex in d.book.tracks.indices &&
-            AudioProgressSync.preferPhone(
-                context, sid, d.book.id, d.book.startTrackId, serverIdx, d.book.startSeconds, local.spineIndex, local.chapterFraction.toDouble(),
-            )
-        withContext(Dispatchers.Main) {
-            if (useLocal && local != null) {
-                AudioPlayback.open(context, web, d.book, local.spineIndex, local.chapterFraction.toDouble())
-            } else AudioPlayback.open(context, web, d.book)
-        }
+        withContext(Dispatchers.Main) { resume(context, web, d.book, local) }
     }
 }

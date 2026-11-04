@@ -80,7 +80,11 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.material3.Surface(
                     color = MaterialTheme.colorScheme.background,
                     modifier = Modifier.fillMaxSize(),
-                ) { App() }
+                ) {
+                    App()
+                    // 오디오북: the phone's place or the server's, when that cannot be told
+                    com.oasisreader.app.audio.PlaceChoiceDialog()
+                }
             }
         }
     }

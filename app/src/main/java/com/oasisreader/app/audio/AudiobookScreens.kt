@@ -346,13 +346,7 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             val pad = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                             Button(onClick = {
-                                // the phone's place or the server's: the one saved last (AudioProgressSync.preferPhone)
-                                val local = onShelf
-                                val serverIdx = b.tracks.indexOfFirst { it.id == b.startTrackId }
-                                val useLocal = local != null && local.lastReadAt != null && local.spineIndex in b.tracks.indices &&
-                                    AudioProgressSync.preferPhone(context, web.server.id, b.id, b.startTrackId, serverIdx, b.startSeconds, local.spineIndex, local.chapterFraction.toDouble())
-                                if (useLocal && local != null && AudioPlayback.book?.id != b.id) AudioPlayback.open(context, web, b, local.spineIndex, local.chapterFraction.toDouble())
-                                else AudioPlayback.open(context, web, b)
+                                AudioLibraryLink.resume(context, web, b, onShelf)
                                 onPlayer()
                             }, enabled = b.tracks.isNotEmpty(), contentPadding = pad) {
                                 Text(if (b.startTrackId != null) "▶ 이어 듣기" else "▶ 처음부터", maxLines = 1, softWrap = false)
@@ -646,4 +640,35 @@ private fun ReadStateChip(value: String, onChange: (String) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Which place to go on from, when the server's place looks like a player that started over
+ * elsewhere (AudioProgressSync.decide → ASK). Shown over any screen; the book waits, paused.
+ */
+@Composable
+fun PlaceChoiceDialog() {
+    val c = AudioPlayback.placeChoice ?: return
+    val b = AudioPlayback.book
+    fun where(idx: Int, sec: Double): String {
+        val t = b?.tracks?.getOrNull(idx)?.title?.takeIf { it.isNotBlank() }
+        return "${idx + 1}번 트랙 ${hms(sec)}" + (t?.let { " · $it" } ?: "")
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { AudioPlayback.placeChoice = null },
+        title = { Text("어디서부터 들을까요?") },
+        text = {
+            Column {
+                Text(
+                    "북오아시스에 저장된 위치가 책의 맨 앞으로 바뀌어 있습니다. 웹이나 다른 기기에서 처음부터 재생된 것 같습니다.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text("📱 이 폰: ${where(c.phoneIdx, c.phoneSec)}", style = MaterialTheme.typography.bodyMedium)
+                Text("☁️ 북오아시스: ${where(c.serverIdx, c.serverSec)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            }
+        },
+        confirmButton = { TextButton(onClick = { AudioPlayback.choosePlace(useServer = false) }) { Text("이 폰 위치") } },
+        dismissButton = { TextButton(onClick = { AudioPlayback.choosePlace(useServer = true) }) { Text("북오아시스 위치") } },
+    )
 }

@@ -61,21 +61,31 @@ object AudioProgressSync {
         return t != serverTrackId || kotlin.math.abs(sec - serverSeconds) > 3
     }
 
+    enum class Place { PHONE, SERVER, ASK }
+
     /**
-     * Start from the phone's place (true) or the server's (false)? See the rule above.
+     * Start from the phone's place or the server's? See the rule above. One exception: the server
+     * was changed elsewhere but now sits at the very start of the book (first track, first few
+     * minutes) while the phone is well past it — a player that started over by mistake looks just
+     * like that (it happened after a bookoasis update), so the listener is asked ([Place.ASK]).
      * [serverIdx] < 0 means the server has no place (or could not be reached).
      */
-    fun preferPhone(
+    fun decide(
         c: Context, serverId: String, audiobookId: Int, serverTrackId: Int?, serverIdx: Int, serverSeconds: Double,
         phoneIdx: Int, phoneSeconds: Double,
-    ): Boolean {
-        if (serverIdx < 0) return true
+    ): Place {
+        if (serverIdx < 0) return Place.PHONE
+        val phoneFurther = phoneIdx > serverIdx || (phoneIdx == serverIdx && phoneSeconds > serverSeconds + 5)
         return when (changedElsewhere(c, serverId, audiobookId, serverTrackId, serverSeconds)) {
-            true -> false
-            false -> true
-            null -> phoneIdx > serverIdx || (phoneIdx == serverIdx && phoneSeconds > serverSeconds + 5)
+            true -> if (serverIdx == 0 && serverSeconds < START_SECONDS && (phoneIdx > 0 || phoneSeconds > serverSeconds + 120)) Place.ASK else Place.SERVER
+            false -> Place.PHONE
+            null -> if (phoneFurther) Place.PHONE else Place.SERVER
         }
     }
+
+    /** "The very start": the first track's first five minutes. */
+    private const val START_SECONDS = 300.0
+
     private fun key(p: Pending) = "${p.serverId}|${p.audiobookId}"
 
     fun all(c: Context): List<Pending> = prefs(c).all.values.mapNotNull { v ->
@@ -114,11 +124,13 @@ object AudioProgressSync {
             try {
                 val d = AudioLibraryLink.detail(web, p.serverId, p.audiobookId, p.title, null)
                 val serverIdx = d.book.tracks.indexOfFirst { it.id == d.book.startTrackId }
-                // saved elsewhere after us: that one stands, ours is dropped
-                val serverWins = !p.completed && !preferPhone(
+                // saved elsewhere after us: that one stands, ours is dropped. A server back at the very
+                // start is left for the listener to settle when the book is opened (keep ours, no retry)
+                val place = if (p.completed) Place.PHONE else decide(
                     app, p.serverId, p.audiobookId, d.book.startTrackId, serverIdx, d.book.startSeconds, p.trackIndex, p.seconds,
                 )
-                if (!serverWins) web.post("/api/media/audiobooks/${p.audiobookId}/progress", buildJsonObject {
+                if (place == Place.ASK) return@forEach
+                if (place == Place.PHONE) web.post("/api/media/audiobooks/${p.audiobookId}/progress", buildJsonObject {
                     put("current_track_id", p.trackId)
                     put("current_time", p.seconds)
                     put("playback_rate", p.rate)
