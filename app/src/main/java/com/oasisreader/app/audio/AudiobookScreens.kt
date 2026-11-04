@@ -343,9 +343,10 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             modifier = Modifier.padding(top = 6.dp),
                         )
                         Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { AudioPlayback.open(context, web, b); onPlayer() }, enabled = b.tracks.isNotEmpty()) {
-                                Text(if (b.startTrackId != null) "▶ 이어 듣기" else "▶ 처음부터 듣기")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val pad = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                            Button(onClick = { AudioPlayback.open(context, web, b); onPlayer() }, enabled = b.tracks.isNotEmpty(), contentPadding = pad) {
+                                Text(if (b.startTrackId != null) "▶ 이어 듣기" else "▶ 처음부터", maxLines = 1, softWrap = false)
                             }
                             if (onShelf == null) androidx.compose.material3.OutlinedButton(onClick = {
                                 scope.launch {
@@ -353,8 +354,8 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                                         .onSuccess { android.widget.Toast.makeText(context, "서재에 담았습니다", android.widget.Toast.LENGTH_SHORT).show() }
                                         .onFailure { android.widget.Toast.makeText(context, "담지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
                                 }
-                            }) { Text("📚 서재에 담기") }
-                            else Text("📚 서재에 있음", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
+                            }, contentPadding = pad) { Text("📚 서재+", maxLines = 1, softWrap = false) }
+                            else Text("📚 서재에 있음", maxLines = 1, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
                         }
                         // 오프라인: the tracks on the phone (puts it on the 서재 first)
                         val dl = AudioDownloads.progress[rowId]
@@ -468,9 +469,13 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Big("⏮", "이전 트랙", 22) { AudioPlayback.previous() }
                 Big("↺15", "15초 뒤로", 16) { AudioPlayback.seekBy(-15_000) }
-                Surface(shape = RoundedCornerShape(36.dp), color = MaterialTheme.colorScheme.primary) {
-                    IconButton(onClick = { AudioPlayback.toggle() }, modifier = Modifier.size(64.dp).semantics { contentDescription = if (AudioPlayback.playing) "일시정지" else "재생" }) {
-                        Text(if (AudioPlayback.playing) "⏸" else "▶", fontSize = 26.sp, color = MaterialTheme.colorScheme.onPrimary)
+                // ⏯: a plain high-contrast disc (dark on light, light on dark) with a drawn icon
+                Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.onSurface, shadowElevation = 2.dp) {
+                    IconButton(onClick = { AudioPlayback.toggle() }, modifier = Modifier.size(68.dp).semantics { contentDescription = if (AudioPlayback.playing) "일시정지" else "재생" }) {
+                        androidx.compose.material3.Icon(
+                            androidx.compose.ui.res.painterResource(if (AudioPlayback.playing) com.oasisreader.app.R.drawable.ic_ra_pause else com.oasisreader.app.R.drawable.ic_ra_play),
+                            contentDescription = null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(34.dp),
+                        )
                     }
                 }
                 Big("30↻", "30초 앞으로", 16) { AudioPlayback.seekBy(30_000) }

@@ -85,7 +85,7 @@ private fun BrandMark(sub: String?, modifier: Modifier = Modifier) {
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
         androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(com.oasisreader.app.R.drawable.logo_brand),
+            painter = androidx.compose.ui.res.painterResource(if (isAppDark()) com.oasisreader.app.R.drawable.logo_brand_dark else com.oasisreader.app.R.drawable.logo_brand),
             contentDescription = null,
             modifier = Modifier.size(width = 172.59.dp, height = 21.77.dp),
         )
