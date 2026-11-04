@@ -204,8 +204,11 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         private const val DONE_ID = 7400
         private const val MAX_RETRIES = 30
 
-        fun request(): OneTimeWorkRequest = OneTimeWorkRequestBuilder<AudioDownloadWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+        /** 받기 관리 › "와이파이에서만 받기". */
+        fun wifiOnly(context: Context) = context.getSharedPreferences("audio", Context.MODE_PRIVATE).getBoolean("wifi_only", false)
+
+        fun request(context: Context): OneTimeWorkRequest = OneTimeWorkRequestBuilder<AudioDownloadWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(if (wifiOnly(context)) NetworkType.UNMETERED else NetworkType.CONNECTED).build())
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()

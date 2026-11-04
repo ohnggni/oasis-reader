@@ -169,7 +169,20 @@ object AudioDownloads {
     /** Start (or queue behind the running one) the worker. */
     internal fun kick(context: Context) {
         WorkManager.getInstance(context.applicationContext)
-            .enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, AudioDownloadWorker.request())
+            .enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, AudioDownloadWorker.request(context))
+    }
+
+    /** Wi-Fi only on or off: the waiting work starts again under the new rule (half tracks resume). */
+    fun setWifiOnly(context: Context, on: Boolean) {
+        val app = context.applicationContext
+        app.getSharedPreferences("audio", Context.MODE_PRIVATE).edit().putBoolean("wifi_only", on).apply()
+        scope.launch {
+            if (pendingBooks(app).isNotEmpty()) {
+                current.clear()
+                WorkManager.getInstance(app).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, AudioDownloadWorker.request(app))
+            }
+            version++
+        }
     }
 
     /** Stop receiving [bookId] (what is already kept stays; a half track resumes next time). */

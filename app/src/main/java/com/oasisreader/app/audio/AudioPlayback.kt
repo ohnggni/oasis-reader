@@ -81,6 +81,9 @@ object AudioPlayback {
     private var app: Context? = null
     private var ticker: Job? = null
     private var lastSaved = 0L
+    // listening time for the 독서 통계 (real seconds, whatever the speed), written with each save
+    private var listenedMs = 0L
+    private var lastTickAt = 0L
 
     private fun ensurePlayer(context: Context, w: BookOasisWeb): ExoPlayer {
         val existing = player
@@ -213,8 +216,11 @@ object AudioPlayback {
                 trackIndex = pl.currentMediaItemIndex
                 positionMs = pl.currentPosition
                 if (pl.duration > 0) durationMs = pl.duration
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (pl.isPlaying && lastTickAt > 0) listenedMs += (now - lastTickAt).coerceIn(0, 2_000)
+                lastTickAt = now
                 if (pl.isPlaying && System.currentTimeMillis() - lastSaved > 15_000) save()
-                if (!pl.isPlaying) break
+                if (!pl.isPlaying) { lastTickAt = 0; break }
                 delay(500)
             }
         }
@@ -233,8 +239,19 @@ object AudioPlayback {
         val pct = if (total > 0) ((before + sec) / total * 100).coerceIn(0.0, 100.0) else 0.0
         val idx = p.currentMediaItemIndex
         val ctx = app
+        val heard = listenedMs / 1000
+        listenedMs -= heard * 1000
         scope.launch {
             ctx?.let { c -> runCatching { AudioLibraryLink.savePlace(c, b, idx, sec, completed) } }
+            if (heard > 0 && b.serverId.isNotEmpty()) ctx?.let { c ->
+                runCatching {
+                    val dao = com.oasisreader.app.data.db.AppDatabase.get(c).readingTime()
+                    val day = java.time.LocalDate.now().toString()
+                    val id = AudioLibraryLink.bookId(b.serverId, b.id)
+                    val cur = dao.get(day, id)?.seconds ?: 0L
+                    dao.upsert(com.oasisreader.app.data.db.ReadingTimeEntity(day, id, cur + heard))
+                }
+            }
             runCatching {
                 w.post("/api/media/audiobooks/${b.id}/progress", buildJsonObject {
                     put("current_track_id", t.id)

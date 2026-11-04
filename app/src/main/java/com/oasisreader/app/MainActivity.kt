@@ -231,7 +231,18 @@ private fun App() {
                     StatsCalculator.compute(b, t, h)
                 }.flowOn(Dispatchers.Default)
             }.collectAsState(initial = StatsUi())
-            StatsScreen(ui = ui, onBack = { route = Route.LIBRARY }, onOpenBook = { id -> route = Route.READER + id })
+            StatsScreen(ui = ui, onBack = { route = Route.LIBRARY }, onOpenBook = { id ->
+                scope.launch {
+                    val b = db.books().get(id)
+                    if (b?.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) {
+                        // an audiobook in the stats: play it (the reader cannot open it)
+                        audioReturn = Route.STATS
+                        runCatching { com.oasisreader.app.audio.AudioLibraryLink.play(context, b) }
+                            .onSuccess { route = Route.AUDIO_PLAYER }
+                            .onFailure { Toast.makeText(context, "열 수 없습니다: ${it.message}", Toast.LENGTH_LONG).show() }
+                    } else route = Route.READER + id
+                }
+            })
         }
         route.startsWith(Route.READER) -> {
             // reader:<bookId>[:<spineIndex>:<highlightId>]

@@ -147,7 +147,22 @@ fun LibraryScreen(
         mutableStateOf(runCatching { ShelfSort.valueOf(shelfPrefs.getString("sort", null) ?: "") }.getOrDefault(ShelfSort.RECENT))
     }
     var sortDesc by remember { mutableStateOf(if (shelfPrefs.contains("sort_desc")) shelfPrefs.getBoolean("sort_desc", true) else sort.defaultDesc) }
-    val shown = remember(books, filter, sort, sortDesc) { sortShelf(books.filter { filter.matches(it) }, sort, sortDesc) }
+    // 컬렉션: the user's own shelves (none chosen = the whole 서재)
+    val colDb = remember { com.oasisreader.app.data.db.AppDatabase.get(ctx) }
+    val collections by remember { colDb.collections().observeAll() }.collectAsState(initial = emptyList())
+    val links by remember { colDb.collections().observeLinks() }.collectAsState(initial = emptyList())
+    var colId by remember { mutableStateOf(shelfPrefs.getString("collection", null)) }
+    fun setCol(id: String?) { colId = id; shelfPrefs.edit().putString("collection", id).apply() }
+    val bookIds = remember(books) { books.map { it.id }.toSet() }
+    val colCounts = remember(links, bookIds) { links.filter { it.bookId in bookIds }.groupingBy { it.collectionId }.eachCount() }
+    val activeCol = colId?.takeIf { id -> collections.any { it.id == id } }
+    val base = remember(books, links, activeCol) {
+        if (activeCol == null) books else links.filter { it.collectionId == activeCol }.map { it.bookId }.toSet().let { on -> books.filter { it.id in on } }
+    }
+    var newCol by remember { mutableStateOf(false) }
+    var editCols by remember { mutableStateOf(false) }
+    var pickColFor by remember { mutableStateOf<BookEntity?>(null) }
+    val shown = remember(base, filter, sort, sortDesc) { sortShelf(base.filter { filter.matches(it) }, sort, sortDesc) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // header line: how many books, and today's reading time (all books)
@@ -231,18 +246,22 @@ fun LibraryScreen(
                     shelfPrefs.edit().putString("sort", o.name).putBoolean("sort_desc", d).apply()
                 },
             )
+            CollectionChip(
+                collections, colCounts, activeCol, books.size,
+                onSelect = { setCol(it) }, onNew = { newCol = true }, onEdit = { editCols = true },
+            )
             // 전체 / 읽는 중 / 안 읽음 / 다 읽음 — one drop-down
             var filterOpen by remember { mutableStateOf(false) }
             Box {
                 MiniChip(
-                    "🔖 ${filter.label} ${books.count { filter.matches(it) }}",
+                    "🔖 ${filter.label} ${base.count { filter.matches(it) }}",
                     onClick = { filterOpen = true },
                     selected = filter != ShelfFilter.ALL,
                 )
                 androidx.compose.material3.DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
                     ShelfFilter.entries.forEach { f ->
                         androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("${f.label} ${books.count { f.matches(it) }}") },
+                            text = { Text("${f.label} ${base.count { f.matches(it) }}") },
                             leadingIcon = { CheckMark(f == filter) },
                             onClick = { filterOpen = false; filterName = f.name },
                         )
@@ -253,6 +272,14 @@ fun LibraryScreen(
 
         if (loaded && books.isEmpty()) {
             EmptyShelf(onCatalog, onImportFile)
+            return@Column
+        }
+        if (loaded && activeCol != null && base.isEmpty()) {
+            Text(
+                "이 컬렉션은 비어 있습니다.\n서재 전체에서 책을 길게 눌러 \"📚 컬렉션에 넣기\"를 고르세요.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(24.dp),
+            )
             return@Column
         }
 
@@ -281,6 +308,12 @@ fun LibraryScreen(
     }
 
     infoFor?.let { b -> BookInfoDialog(b, store) { infoFor = null } }
+    if (newCol) CollectionNameDialog("새 컬렉션", onDismiss = { newCol = false }) { name ->
+        newCol = false
+        scope.launch { setCol(ShelfCollections.create(colDb, name).id) }
+    }
+    if (editCols) CollectionEditDialog(collections, colCounts) { editCols = false }
+    pickColFor?.let { b -> CollectionPickDialog(b, collections, links) { pickColFor = null } }
     exportFor?.let { b -> HighlightExportDialog(b.id) { exportFor = null } }
 
     menuFor?.let { b ->
@@ -298,6 +331,10 @@ fun LibraryScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { menuFor = null; infoFor = b }) { Text("ℹ️ 책 정보") }
+                    TextButton(onClick = { menuFor = null; pickColFor = b }) {
+                        val n = links.count { it.bookId == b.id }
+                        Text("📚 컬렉션에 넣기" + if (n > 0) " (${n}곳에 있음)" else "")
+                    }
                     TextButton(onClick = { menuFor = null; renaming = b }) { Text("✏️ 제목 바꾸기") }
                     val isAudio = b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT
                     if (isAudio) {

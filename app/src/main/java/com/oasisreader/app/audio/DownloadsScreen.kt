@@ -171,6 +171,20 @@ fun DownloadsScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
+                var wifi by remember { mutableStateOf(AudioDownloadWorker.wifiOnly(context)) }
+                Row(
+                    Modifier.fillMaxWidth().clickable { wifi = !wifi; AudioDownloads.setWifiOnly(context, wifi) }.padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("📶 와이파이에서만 받기", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (wifi) "모바일 데이터에서는 기다렸다가 와이파이에 연결되면 받습니다" else "모바일 데이터로도 받습니다",
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    androidx.compose.material3.Switch(checked = wifi, onCheckedChange = { wifi = it; AudioDownloads.setWifiOnly(context, it) })
+                }
                 if (!notifOk && Build.VERSION.SDK_INT >= 33) Row(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
                         .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
@@ -224,7 +238,7 @@ private fun BookCard(row: BookEntity, st: BookDl, onAll: () -> Unit, onRemove: (
                 val bytes = AudioDownloads.keptBytes(context, row.id)
                 val status = when {
                     st.running -> "⬇️ 받는 중 ${((overall ?: 0f) * 100).toInt()}%"
-                    st.pending -> "⏳ 받기 대기 (연결되면 시작)"
+                    st.pending -> if (AudioDownloadWorker.wifiOnly(context)) "⏳ 받기 대기 (와이파이 연결되면 시작)" else "⏳ 받기 대기 (연결되면 시작)"
                     st.error != null -> "⚠️ ${st.error}"
                     st.tracks > 0 && st.kept >= st.tracks -> "✅ 다 받음"
                     st.kept > 0 -> "◐ 일부 받음"

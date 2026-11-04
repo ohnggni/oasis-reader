@@ -170,6 +170,56 @@ interface BookmarkDao {
     suspend fun deleteForBook(bookId: String)
 }
 
+/** A shelf of the user's own (컬렉션): "출퇴근용", "아이들과 함께" … */
+@Entity(tableName = "collections")
+data class CollectionEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val createdAt: Long,
+    val sort: Int,
+)
+
+/** A book on a 컬렉션 (a book can be on several). */
+@Entity(tableName = "book_collections", primaryKeys = ["collectionId", "bookId"], indices = [Index("bookId")])
+data class BookCollectionEntity(
+    val collectionId: String,
+    val bookId: String,
+    val addedAt: Long,
+)
+
+@Dao
+interface CollectionDao {
+    @Query("SELECT * FROM collections ORDER BY sort, createdAt")
+    fun observeAll(): Flow<List<CollectionEntity>>
+
+    @Query("SELECT * FROM book_collections")
+    fun observeLinks(): Flow<List<BookCollectionEntity>>
+
+    @Query("SELECT COALESCE(MAX(sort), 0) FROM collections")
+    suspend fun maxSort(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(c: CollectionEntity)
+
+    @Query("UPDATE collections SET name = :name WHERE id = :id")
+    suspend fun rename(id: String, name: String)
+
+    @Query("DELETE FROM collections WHERE id = :id")
+    suspend fun deleteCollection(id: String)
+
+    @Query("DELETE FROM book_collections WHERE collectionId = :id")
+    suspend fun unlinkCollection(id: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun link(l: BookCollectionEntity)
+
+    @Query("DELETE FROM book_collections WHERE collectionId = :collectionId AND bookId = :bookId")
+    suspend fun unlink(collectionId: String, bookId: String)
+
+    @Query("DELETE FROM book_collections WHERE bookId = :bookId")
+    suspend fun unlinkBook(bookId: String)
+}
+
 @Dao
 interface ReadingTimeDao {
     @Query("SELECT * FROM reading_time WHERE day = :day AND bookId = :bookId")
@@ -189,8 +239,8 @@ interface ReadingTimeDao {
 }
 
 @Database(
-    entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class],
-    version = 5,
+    entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class, CollectionEntity::class, BookCollectionEntity::class],
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -198,6 +248,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun highlights(): HighlightDao
     abstract fun readingTime(): ReadingTimeDao
     abstract fun bookmarks(): BookmarkDao
+    abstract fun collections(): CollectionDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -205,7 +256,7 @@ abstract class AppDatabase : RoomDatabase() {
         // NOTE: once real data exists, schema changes need real Migrations — never a destructive fallback.
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "oasis.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build().also { instance = it }
         }
 
@@ -243,5 +294,14 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `bookmarks` (`id` TEXT NOT NULL, `bookId` TEXT NOT NULL, `spineIndex` INTEGER NOT NULL, `fraction` REAL NOT NULL, `snippet` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookmarks_bookId` ON `bookmarks` (`bookId`)")
+    }
+}
+
+/** v6: 컬렉션 (the user's own shelves). */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `collections` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `sort` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `book_collections` (`collectionId` TEXT NOT NULL, `bookId` TEXT NOT NULL, `addedAt` INTEGER NOT NULL, PRIMARY KEY(`collectionId`, `bookId`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_book_collections_bookId` ON `book_collections` (`bookId`)")
     }
 }

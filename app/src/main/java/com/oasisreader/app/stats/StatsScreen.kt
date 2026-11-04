@@ -63,7 +63,7 @@ fun StatsScreen(ui: StatsUi, onBack: () -> Unit, onOpenBook: (String) -> Unit) {
         Column(Modifier.widthIn(max = 760.dp).fillMaxWidth()) {
             if (ui.isEmpty) {
                 Text(
-                    "아직 쌓인 기록이 없습니다.\n책을 읽거나 끝까지 읽으면 여기에 모입니다.",
+                    "아직 쌓인 기록이 없습니다.\n책을 읽거나 오디오북을 듣거나 끝까지 읽으면 여기에 모입니다.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 16.dp),
@@ -72,14 +72,14 @@ fun StatsScreen(ui: StatsUi, onBack: () -> Unit, onOpenBook: (String) -> Unit) {
 
             // ── summary cards ──
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatCard("📖 오늘", fmtMinutes(ui.todayMinutes), Modifier.weight(1f))
+                StatCard("📖 오늘", fmtMinutes(ui.todayMinutes), Modifier.weight(1f), sub = ui.todayListenMinutes.takeIf { it > 0 }?.let { "🎧 ${fmtMinutes(it)}" })
                 StatCard("🔥 연속", "${ui.streakDays}일", Modifier.weight(1f))
                 StatCard("🗓 이번 달", "${ui.monthReads}권", Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatCard("📚 올해", "${ui.yearReads}권", Modifier.weight(1f))
-                StatCard("⏱ 총 독서", fmtMinutes(ui.totalMinutes), Modifier.weight(1f))
+                StatCard("⏱ 총 독서", fmtMinutes(ui.totalMinutes), Modifier.weight(1f), sub = ui.totalListenMinutes.takeIf { it > 0 }?.let { "🎧 들은 시간 ${fmtMinutes(it)}" })
                 StatCard("🖍 하이라이트", "${ui.highlightsTotal}", Modifier.weight(1f), sub = "이번 달 ${ui.highlightsMonth}")
             }
             Text(
@@ -110,7 +110,7 @@ fun StatsScreen(ui: StatsUi, onBack: () -> Unit, onOpenBook: (String) -> Unit) {
             }
 
             // ── books ──
-            SectionTitle("책별 독서 시간")
+            SectionTitle("책별 독서 시간 (🎧 들은 시간 포함)")
             val list = if (showAllBooks) ui.books else ui.books.take(8)
             val maxMin = (list.maxOfOrNull { it.minutes } ?: 0).coerceAtLeast(1)
             if (list.isEmpty()) {
@@ -255,7 +255,7 @@ private fun BookRow(b: BookStat, maxMin: Int, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                (if (b.finished) "✅ " else "") + b.title,
+                (if (b.finished) "✅ " else "") + (if (b.audio) "🎧 " else "") + b.title,
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
