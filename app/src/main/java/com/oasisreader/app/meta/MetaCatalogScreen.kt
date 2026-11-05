@@ -200,16 +200,16 @@ fun MetaCatalogScreen(
     }
 
     /** 서재에 담기 / 보관: keep for good (a cached book with its file still here is just marked). */
-    fun keep(b: MetaBook, quiet: Boolean = false, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null) {
+    fun keep(b: MetaBook, quiet: Boolean = false, collectionId: String? = null) {
         val href = api.downloadUrl(b) ?: return
         if (href in ownedSet) scope.launch {
             val book = db.books().findBySource(null, href) ?: return@launch
             if (store.hasFiles(book.id)) {
                 db.books().setPinned(book.id, true)
                 if (!quiet) android.widget.Toast.makeText(context, "서재에 보관합니다: ${book.title}", android.widget.Toast.LENGTH_SHORT).show()
-                onDone?.invoke(book)
-            } else Downloads.startUrl(app, server, api.key(b), href, b.name, onDone = onDone)
-        } else Downloads.startUrl(app, server, api.key(b), href, b.name, onDone = onDone)
+                collectionId?.let { com.oasisreader.app.ui.ShelfCollections.set(db, it, book.id, true) }
+            } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId)
+        } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId)
     }
 
     /**
@@ -219,15 +219,12 @@ fun MetaCatalogScreen(
     fun keepSeries(list: List<MetaBook>, collection: String?) {
         scope.launch {
             val col = collection?.let { com.oasisreader.app.ui.ShelfCollections.findOrCreate(db, it) }
-            fun link(book: com.oasisreader.app.data.db.BookEntity) {
-                if (col != null) scope.launch { com.oasisreader.app.ui.ShelfCollections.set(db, col.id, book.id, true) }
-            }
             var n = 0
             list.forEach { b ->
                 val href = api.downloadUrl(b) ?: return@forEach
                 if (!b.readable) return@forEach
-                if (href !in pinnedSet) { keep(b, quiet = true) { link(it) }; n++ }
-                else db.books().findBySource(null, href)?.let { link(it) }
+                if (href !in pinnedSet) { keep(b, quiet = true, collectionId = col?.id); n++ }
+                else if (col != null) db.books().findBySource(null, href)?.let { com.oasisreader.app.ui.ShelfCollections.set(db, col.id, it.id, true) }
             }
             android.widget.Toast.makeText(
                 context,
@@ -602,17 +599,12 @@ private fun BookRow(
             Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier.size(48.dp).clickable(enabled = b.readable && progress == null, onClick = onAction),
-            contentAlignment = Alignment.Center,
-        ) {
-            when {
-                owned -> Text("📖", style = MaterialTheme.typography.titleMedium)
-                progress != null -> if (progress < 0f) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                                    else CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                b.readable -> Text("⬇️", style = MaterialTheme.typography.titleMedium)
-                else -> Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when {
+            owned -> Box(Modifier.size(48.dp).clickable(onClick = onAction), contentAlignment = Alignment.Center) {
+                Text("📖", style = MaterialTheme.typography.titleMedium)
             }
+            b.readable -> com.oasisreader.app.ui.DownloadControl(api.key(b), progress, onAction, size = 44.dp)
+            else -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }

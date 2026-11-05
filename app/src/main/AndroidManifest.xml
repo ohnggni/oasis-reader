@@ -77,6 +77,10 @@
             android:name=".audio.AudioDownloadWorker$CancelReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".data.BookQueue$PauseReceiver"
+            android:exported="false" />
+
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"

@@ -1,5 +1,8 @@
 package com.oasisreader.app.ui
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.draw.alpha
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -168,9 +172,95 @@ fun OpdsScreen(
     fun back() { if (stack.size > 1) popTo(stack.size - 2) else onBack() }
     BackHandler(onBack = ::back)
 
+    // ⭐ 즐겨찾기 and the last folder seen (OpdsFavorites): the whole path is kept
+    var favorites by remember(serverId) { mutableStateOf(OpdsFavorites.all(app, serverId)) }
+    var lastPlace by remember(serverId) { mutableStateOf(OpdsFavorites.last(app, serverId)) }
+    var editFavorites by remember { mutableStateOf(false) }
+    fun goTo(p: OpdsFavorites.Place) {
+        if (p.urls.isEmpty()) return
+        stack.clear(); stack.addAll(p.urls); labels.clear(); labels.addAll(p.labels)
+    }
+    LaunchedEffect(current) {
+        if (stack.size > 1 && labels.lastOrNull()?.startsWith("검색:") != true) OpdsFavorites.setLast(app, serverId, stack.toList(), labels.toList())
+    }
+    val isFav = favorites.any { it.urls.lastOrNull() == current }
+
+    // ⬇️ 이 폴더 모두 담기 → 컬렉션으로 묶을지 묻기
+    var askFolder by remember { mutableStateOf<Pair<String, List<OpdsEntry>>?>(null) }
+    var gatheringAll by remember { mutableStateOf(false) }
+    fun keepFolder(name: String, list: List<OpdsEntry>, collection: Boolean) {
+        scope.launch {
+            val col = if (collection) ShelfCollections.findOrCreate(db, name) else null
+            var n = 0
+            list.forEach { e ->
+                val already = db.books().findBySource(e.id, null)
+                if (already != null) {
+                    if (!already.pinned) db.books().setPinned(already.id, true)
+                    col?.let { ShelfCollections.set(db, it.id, already.id, true) }
+                } else {
+                    n++
+                    Downloads.start(app, server, e, collectionId = col?.id)
+                }
+            }
+            android.widget.Toast.makeText(
+                context, (if (n > 0) "${n}권을 받습니다" else "모두 서재에 있습니다") + (col?.let { " · 📚 ${it.name}에 묶습니다" } ?: ""),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+    /** Every book of this folder (all its pages), then ask about the 컬렉션. */
+    fun downloadFolder(ready: FeedState.Ready) {
+        if (gatheringAll) return
+        gatheringAll = true
+        scope.launch {
+            try {
+                var next = nextUrl
+                var pages = 0
+                while (next != null && pages < MAX_SORT_PAGES) {
+                    val f = client.fetch(next)
+                    extra.addAll(f.entries); pages++
+                    next = f.next
+                }
+                nextUrl = next
+                val books = (ready.feed.entries + extra).filter { it.isBook && it.readable != null }.distinctBy { it.id }
+                askFolder = labels.last() to books
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "목록 전체를 받지 못했습니다: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            } finally { gatheringAll = false }
+        }
+    }
+    askFolder?.let { (name, list) ->
+        val missing = list.count { it.id !in ownedSet }
+        AlertDialog(
+            onDismissRequest = { askFolder = null },
+            title = { Text("⬇️ 「$name」 모두 담기") },
+            text = {
+                Text(
+                    "이 폴더의 책 ${list.size}권 중 서재에 없는 ${missing}권을 받습니다.\n" +
+                        "같은 이름의 📚 컬렉션으로 묶을까요? (이미 서재에 있는 이 폴더 책도 함께 묶습니다)",
+                )
+            },
+            confirmButton = { TextButton(onClick = { askFolder = null; keepFolder(name, list, true) }) { Text("묶어서 받기") } },
+            dismissButton = { TextButton(onClick = { askFolder = null; keepFolder(name, list, false) }) { Text("그냥 받기") } },
+        )
+    }
+    if (editFavorites) FavoritesEditDialog(
+        favorites,
+        onChange = { favorites = it; OpdsFavorites.save(app, serverId, it) },
+        onDismiss = { editFavorites = false },
+    )
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // the folder the user opened, by the name they tapped (feed titles like "Library Series" say little)
         TopBar(if (stack.size == 1) server.name else "📂 " + labels.last(), onBack = ::back) {
+            if (stack.size > 1) androidx.compose.material3.IconButton(
+                onClick = {
+                    val added = OpdsFavorites.toggle(app, serverId, stack.toList(), labels.toList())
+                    favorites = OpdsFavorites.all(app, serverId)
+                    android.widget.Toast.makeText(context, if (added) "⭐ 즐겨찾기에 넣었습니다" else "즐겨찾기에서 뺐습니다", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.semantics { contentDescription = if (isFav) "즐겨찾기에서 빼기" else "이 폴더 즐겨찾기" },
+            ) { Text("⭐", style = MaterialTheme.typography.titleMedium, modifier = Modifier.alpha(if (isFav) 1f else 0.3f)) }
             EmojiButton("⚙️", "연결 설정", onOpenSettings)
         }
         if (onOrganized != null) com.oasisreader.app.ui.CatalogViewSwitch(organized = false, onOrganized = onOrganized, onFolders = {})
@@ -189,6 +279,19 @@ fun OpdsScreen(
                     modifier = if (last) Modifier else Modifier.clickable { popTo(i) },
                 )
             }
+        }
+
+        // the server's first page: ⭐ favourites and the last folder, one tap away
+        if (stack.size == 1 && (favorites.isNotEmpty() || lastPlace != null)) Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            lastPlace?.takeIf { lp -> favorites.none { it.urls.lastOrNull() == lp.urls.lastOrNull() } }?.let { lp ->
+                MiniChip("🕘 ${lp.name}", onClick = { goTo(lp) }, description = "지난번 본 폴더")
+            }
+            favorites.forEach { f -> MiniChip("⭐ ${f.name}", onClick = { goTo(f) }) }
+            if (favorites.isNotEmpty()) MiniChip("✏️", onClick = { editFavorites = true }, description = "즐겨찾기 편집", plain = true)
         }
 
         rootSearch?.let { sf ->
@@ -249,6 +352,13 @@ fun OpdsScreen(
                             nBooks.takeIf { it > 0 }?.let { "📕 " + loadedCount(it, more, "권") },
                         ).joinToString(" · ").ifEmpty { null },
                 )
+                val folderMissing = all.count { it.isBook && it.readable != null && it.id !in ownedSet }
+                if (nBooks > 1 && (folderMissing > 0 || more)) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    MiniChip(
+                        if (gatheringAll) "⏳ 목록을 모으는 중…" else "⬇️ 이 폴더 " + loadedCount(folderMissing, more, "권") + " 모두 담기",
+                        onClick = { downloadFolder(s) }, enabled = !gatheringAll,
+                    )
+                }
                 if (entries.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("항목이 없습니다", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -415,11 +525,7 @@ private fun EntryRow(
             Spacer(Modifier.width(8.dp))
             when {
                 owned -> Text("✅", style = MaterialTheme.typography.titleMedium)
-                progress != null -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                    if (progress < 0f) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                    else CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                }
-                entry.readable != null -> EmojiButton("⬇️", "서재에 담기", onDownload)
+                entry.readable != null -> DownloadControl(entry.id, progress, onDownload)
                 else -> Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -547,15 +653,13 @@ private fun EntryTile(
             }
             if (entry.isBook) {
                 Box(
-                    Modifier.align(Alignment.BottomEnd).padding(4.dp).size(36.dp)
+                    Modifier.align(Alignment.BottomEnd).padding(4.dp).heightIn(min = 36.dp)
                         .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
                         owned -> Text("✅")
-                        progress != null -> if (progress < 0f) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                                            else CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        entry.readable != null -> Text("⬇️", modifier = Modifier.clickable(onClick = onDownload).padding(6.dp))
+                        entry.readable != null -> DownloadControl(entry.id, progress, onDownload, size = 32.dp)
                         else -> Text("—")
                     }
                 }
@@ -563,5 +667,38 @@ private fun EntryTile(
         }
         Spacer(Modifier.height(4.dp))
         Text(entry.title, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+
+/** ⭐ 즐겨찾기 편집: rename, move up, remove. */
+@Composable
+private fun FavoritesEditDialog(list: List<OpdsFavorites.Place>, onChange: (List<OpdsFavorites.Place>) -> Unit, onDismiss: () -> Unit) {
+    var renaming by remember { mutableStateOf<Int?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("⭐ 즐겨찾기 편집") },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                list.forEachIndexed { i, f ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(f.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(f.labels.drop(1).joinToString(" › "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                        TextButton(onClick = { if (i > 0) onChange(list.toMutableList().also { l -> val t = l[i]; l[i] = l[i - 1]; l[i - 1] = t }) }, enabled = i > 0) { Text("🔼") }
+                        TextButton(onClick = { renaming = i }) { Text("✏️") }
+                        TextButton(onClick = { onChange(list.filterIndexed { j, _ -> j != i }) }) { Text("🗑️") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("완료") } },
+    )
+    renaming?.let { i ->
+        CollectionNameDialog("즐겨찾기 이름", list[i].name, onDismiss = { renaming = null }) { name ->
+            renaming = null
+            onChange(list.toMutableList().also { it[i] = it[i].copy(name = name) })
+        }
     }
 }

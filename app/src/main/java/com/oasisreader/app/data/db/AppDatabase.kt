@@ -153,6 +153,13 @@ interface HighlightDao {
 
     @Query("DELETE FROM highlights WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
+
+    /** Highlights kept from a removed book go to the same book received again. */
+    @Query("UPDATE highlights SET bookId = :to WHERE bookId = :from")
+    suspend fun moveBook(from: String, to: String)
+
+    @Query("SELECT COUNT(*) FROM highlights WHERE bookId = :bookId")
+    suspend fun countFor(bookId: String): Int
 }
 
 @Dao
@@ -168,6 +175,42 @@ interface BookmarkDao {
 
     @Query("DELETE FROM bookmarks WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
+}
+
+/**
+ * A book removed from the 서재 whose highlights were kept: what is needed to show and export them
+ * (title, author, chapter titles by spine index as JSON {"3":"제2장"}), and where it came from, so
+ * that receiving the same book again joins the highlights back up.
+ */
+@Entity(tableName = "removed_books")
+data class RemovedBookEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val author: String? = null,
+    val format: String = "epub",
+    val chapters: String = "{}",
+    val opdsId: String? = null,
+    val sourceUrl: String? = null,
+    val identifier: String? = null,
+    val removedAt: Long,
+)
+
+@Dao
+interface RemovedBookDao {
+    @Query("SELECT * FROM removed_books")
+    fun observeAll(): Flow<List<RemovedBookEntity>>
+
+    @Query("SELECT * FROM removed_books WHERE id = :id")
+    suspend fun get(id: String): RemovedBookEntity?
+
+    @Query("SELECT * FROM removed_books")
+    suspend fun all(): List<RemovedBookEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(b: RemovedBookEntity)
+
+    @Query("DELETE FROM removed_books WHERE id = :id")
+    suspend fun delete(id: String)
 }
 
 /** A shelf of the user's own (컬렉션): "출퇴근용", "아이들과 함께" … */
@@ -242,8 +285,8 @@ interface ReadingTimeDao {
 }
 
 @Database(
-    entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class, CollectionEntity::class, BookCollectionEntity::class],
-    version = 6,
+    entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class, CollectionEntity::class, BookCollectionEntity::class, RemovedBookEntity::class],
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -252,6 +295,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun readingTime(): ReadingTimeDao
     abstract fun bookmarks(): BookmarkDao
     abstract fun collections(): CollectionDao
+    abstract fun removedBooks(): RemovedBookDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -259,7 +303,7 @@ abstract class AppDatabase : RoomDatabase() {
         // NOTE: once real data exists, schema changes need real Migrations — never a destructive fallback.
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "oasis.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build().also { instance = it }
         }
 
@@ -306,5 +350,12 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `collections` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `sort` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         db.execSQL("CREATE TABLE IF NOT EXISTS `book_collections` (`collectionId` TEXT NOT NULL, `bookId` TEXT NOT NULL, `addedAt` INTEGER NOT NULL, PRIMARY KEY(`collectionId`, `bookId`))")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_book_collections_bookId` ON `book_collections` (`bookId`)")
+    }
+}
+
+/** v7: removed books whose highlights were kept. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `removed_books` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `author` TEXT, `format` TEXT NOT NULL, `chapters` TEXT NOT NULL, `opdsId` TEXT, `sourceUrl` TEXT, `identifier` TEXT, `removedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
     }
 }

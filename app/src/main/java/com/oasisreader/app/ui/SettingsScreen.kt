@@ -42,7 +42,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> Unit = {}, onReadingDefaults: () -> Unit = {}, onDownloads: () -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> Unit = {}, onReadingDefaults: () -> Unit = {}, onDownloads: () -> Unit = {}, onStorage: () -> Unit = {}) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val app = context.applicationContext
@@ -143,13 +143,14 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 storage?.let {
                     listOf(
                         "📌 서재에 보관한 책  ${L(it.keptBytes)} (${it.keptBooks}권)",
-                        "🎧 받은 오디오북  ${L(it.audioBytes)} (${it.audioBooks}권) — 누르면 받기 관리",
+                        "🎧 받은 오디오북  ${L(it.audioBytes)} (${it.audioBooks}권)",
                         "☁️ 임시 보관  ${L(it.cacheBytes)} (${it.cacheBooks}권)",
-                        "표지·글꼴·기타  ${L(it.otherBytes)}",
+                        "🗃️ 표지·글꼴·기타  ${L(it.otherBytes)}",
+                        "👉 누르면 📦 보관함 관리 (책별로 보고 한꺼번에 지우기·받기)",
                     ).joinToString("\n")
                 } ?: "",
                 enabled = busy == null,
-            ) { onDownloads() }
+            ) { onStorage() }
 
             Section("바로 읽기 (임시 보관)")
             val cachePrefs = remember { com.oasisreader.app.data.CachePrefs(app) }

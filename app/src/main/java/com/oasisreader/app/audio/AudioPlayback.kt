@@ -113,7 +113,11 @@ object AudioPlayback {
                 if (sleepAtTrackEnd && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     sleepAtTrackEnd = false; p.pause()
                 }
-                tick(); save()
+                tick()
+                // only a real move to another track is a place to keep: when the list is set or
+                // cleared (opening a book, ⏹️) the player is at "track 1, 0 s" for a moment, and
+                // saving that wiped the listening place (TODO 5)
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) save()
             }
             override fun onPlaybackStateChanged(state: Int) {
                 tick()
@@ -233,10 +237,11 @@ object AudioPlayback {
     /** Ends listening: saves the place, stops the notification. */
     fun close(context: Context) {
         save()
+        // forget the book before the player is emptied: nothing may be saved from an empty player
+        book = null; playing = false
         main.removeCallbacks(sleepRunnable); sleepAt = 0L; sleepAtTrackEnd = false
         player?.stop()
         player?.clearMediaItems()
-        book = null; playing = false
         context.stopService(Intent(context, AudioService::class.java))
     }
 
@@ -268,6 +273,8 @@ object AudioPlayback {
         val p = player ?: return
         val b = book ?: return
         val w = web ?: return
+        // an empty or not yet loaded player has no place to keep
+        if (p.mediaItemCount != b.tracks.size || p.playbackState == Player.STATE_IDLE) return
         val t = b.tracks.getOrNull(p.currentMediaItemIndex) ?: return
         lastSaved = System.currentTimeMillis()
         val sec = p.currentPosition / 1000.0

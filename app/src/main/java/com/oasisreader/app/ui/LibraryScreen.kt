@@ -7,6 +7,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.border
@@ -144,7 +145,7 @@ fun LibraryScreen(
     onStats: () -> Unit,
     onHighlights: () -> Unit,
     onDownloads: () -> Unit = {},
-    onDelete: (BookEntity) -> Unit,
+    onDelete: (BookEntity, Boolean) -> Unit,
     onRename: (BookEntity, String) -> Unit,
     onPin: (BookEntity, Boolean) -> Unit = { _, _ -> },
 ) {
@@ -418,9 +419,12 @@ fun LibraryScreen(
                             android.widget.Toast.makeText(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
                         }
                         err?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
+                        val paused = remember(b.id, ad.version) { ad.isPaused(ctx, b.id) }
                         when {
-                            dl != null -> TextButton(onClick = { ad.cancel(ctx, b.id) }) {
-                                Text("⬇️ 받는 중 ${(dl * 100).roundToInt()}% · 누르면 멈춤")
+                            dl != null || paused -> Row {
+                                if (paused) TextButton(onClick = { ad.resume(ctx, b.id) }) { Text("▶️ 이어 받기") }
+                                else TextButton(onClick = { ad.pause(ctx, b.id) }) { Text("⏸️ 일시정지 ${((dl ?: 0f) * 100).roundToInt()}%") }
+                                TextButton(onClick = { ad.cancel(ctx, b.id) }) { Text("✖️ 받기 취소") }
                             }
                             b.pinned && b.fileBytes > 0 -> {}
                             b.fileBytes > 0 -> TextButton(onClick = { startDl() }) { Text("⬇️ 나머지 트랙도 받기") }
@@ -464,12 +468,31 @@ fun LibraryScreen(
     }
 
     confirmDelete?.let { b ->
+        // highlights can outlive the book (하이라이트 화면 › 🗑️ 지운 책), kept unless unticked
+        val hlCount by androidx.compose.runtime.produceState(0, b.id) {
+            value = com.oasisreader.app.data.db.AppDatabase.get(ctx).highlights().countFor(b.id)
+        }
+        var keepHl by remember(b.id) { mutableStateOf(true) }
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
             title = { Text("서재에서 지우시겠습니까?") },
-            text = { Text("「${b.title}」 파일과 하이라이트가 이 폰에서 지워집니다. 독서 시간 통계는 남습니다.") },
+            text = {
+                Column {
+                    Text(
+                        "「${b.title}」 파일이 이 폰에서 지워집니다. 독서 시간 통계는 남습니다." +
+                            if (hlCount > 0 && !keepHl) " 하이라이트 ${hlCount}개도 지워집니다." else "",
+                    )
+                    if (hlCount > 0) Row(
+                        Modifier.fillMaxWidth().clickable { keepHl = !keepHl }.padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.Checkbox(checked = keepHl, onCheckedChange = { keepHl = it })
+                        Text("🖍️ 하이라이트·메모 ${hlCount}개는 남기기", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { confirmDelete = null; onDelete(b) }) {
+                TextButton(onClick = { confirmDelete = null; onDelete(b, hlCount > 0 && keepHl) }) {
                     Text("지우기", color = MaterialTheme.colorScheme.error)
                 }
             },

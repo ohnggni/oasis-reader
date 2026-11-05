@@ -62,12 +62,16 @@ fun HighlightExportDialog(bookId: String, onDismiss: () -> Unit) {
                 val store = BookStore.get(app)
                 // book.json stays even when a "바로 읽기" file was dropped, so chapter titles still work
                 val pkg = if (File(store.dir(bookId), "book.json").isFile) runCatching { store.readPackage(bookId) }.getOrNull() else null
-                val title = book?.title ?: pkg?.title ?: "지운 책"
+                // a removed book whose highlights were kept: its title and chapter titles were saved
+                val removed = if (book == null) db.removedBooks().get(bookId) else null
+                val removedCh = com.oasisreader.app.data.removedChapters(removed?.chapters)
+                val title = book?.title ?: pkg?.title ?: removed?.title ?: "지운 책"
                 MarkdownExport(
                     title = title,
                     count = list.size,
                     text = HighlightExport.markdown(
-                        title, book?.author ?: pkg?.author, list, { HighlightExport.chapterTitle(pkg, it) },
+                        title, book?.author ?: pkg?.author ?: removed?.author, list,
+                        { i -> if (pkg != null || removed == null) HighlightExport.chapterTitle(pkg, i) else removedCh[i].orEmpty() },
                         details = loadDetails(app, store, book, title, db.readingTime().forBook(bookId)),
                         positionOf = positions(store, bookId, pkg, list).let { m -> { h -> m[h.id] } },
                     ),
@@ -144,7 +148,10 @@ fun HighlightJsonExportMenu(enabled: Boolean) {
                     val db = AppDatabase.get(app)
                     val store = BookStore.get(app)
                     val list = db.highlights().all()
-                    val books = db.books().all().associateBy { it.id }
+                    // removed books whose highlights were kept count as books here (title, author)
+                    val books = (db.books().all() + db.removedBooks().all().map { r ->
+                        BookEntity(id = r.id, title = r.title, author = r.author, addedAt = r.removedAt, format = r.format)
+                    }).associateBy { it.id }
                     val times = db.readingTime().all().groupBy { it.bookId }
                     val details = list.map { it.bookId }.distinct().associateWith { id ->
                         val b = books[id]
@@ -163,9 +170,50 @@ fun HighlightJsonExportMenu(enabled: Boolean) {
         }
     }
 
+    // every book's highlights in one Markdown file (removed books too)
+    val mdSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val count = withContext(Dispatchers.IO) {
+                runCatching {
+                    val db = AppDatabase.get(app)
+                    val store = BookStore.get(app)
+                    val all = db.highlights().all()
+                    val books = db.books().all().associateBy { it.id }
+                    val removed = db.removedBooks().all().associateBy { it.id }
+                    val text = all.groupBy { it.bookId }.entries
+                        .sortedBy { (id, _) -> books[id]?.title ?: removed[id]?.title ?: "\uFFFF" }
+                        .joinToString("\n\n---\n\n") { (id, hs) ->
+                            val pkg = if (File(store.dir(id), "book.json").isFile) runCatching { store.readPackage(id) }.getOrNull() else null
+                            val r = removed[id]
+                            val ch = com.oasisreader.app.data.removedChapters(r?.chapters)
+                            HighlightExport.markdown(
+                                books[id]?.title ?: pkg?.title ?: r?.title ?: "지운 책",
+                                books[id]?.author ?: pkg?.author ?: r?.author,
+                                hs.sortedWith(compareBy({ it.spineIndex }, { it.createdAt })),
+                                { i -> if (pkg != null || r == null) HighlightExport.chapterTitle(pkg, i) else ch[i].orEmpty() },
+                            )
+                        }
+                    app.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: error("no stream")
+                    all.size
+                }.getOrNull()
+            }
+            Toast.makeText(app, if (count != null) "하이라이트 ${count}개를 내보냈습니다." else "저장하지 못했습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Box {
         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "더보기") }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text("전체 내보내기 (마크다운)") },
+                enabled = enabled,
+                onClick = {
+                    menu = false
+                    val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    mdSaver.launch("og-reader-highlights-$day.md")
+                },
+            )
             DropdownMenuItem(
                 text = { Text("전체 내보내기 (JSON)") },
                 enabled = enabled,

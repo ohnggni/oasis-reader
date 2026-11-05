@@ -139,6 +139,48 @@ class OpdsClient(private val server: Server) {
 
     /** Download to [dest], reporting bytes done / total (-1 if unknown). */
     /** Download to [dest]; returns the server's file name (Content-Disposition), if any. */
+    /**
+     * Download into [part], going on from what is already there (HTTP Range). A server that
+     * answers 200 instead of 206 sends the whole file again: [part] starts over. [stop] is asked
+     * every half megabyte; true ends the download early (the part stays). Returns the server's
+     * file name and whether the file is complete.
+     */
+    suspend fun downloadResume(url: String, part: File, onProgress: (Long, Long) -> Unit, stop: () -> Boolean): Pair<String?, Boolean> = withContext(Dispatchers.IO) {
+        val have = if (part.isFile) part.length() else 0L
+        val req = request(url).newBuilder().apply { if (have > 0) header("Range", "bytes=$have-") }.build()
+        Http.client.newCall(req).execute().use { r ->
+            if (r.code == 416 && have > 0) { part.delete(); return@withContext downloadResume(url, part, onProgress, stop) }
+            check(r)
+            val fileName = r.header("Content-Disposition")?.let { fileNameFrom(it) }
+            val body = r.body ?: throw IOException("빈 응답")
+            val append = have > 0 && r.code == 206
+            val start = if (append) have else 0L
+            val total = body.contentLength().let { if (it > 0) it + start else -1L }
+            if (total > MAX_BOOK_BYTES) throw IOException("파일이 너무 큽니다 (${total / 1048576} MB)")
+            val free = part.absoluteFile.parentFile?.usableSpace ?: Long.MAX_VALUE
+            if (total > 0 && free < (total - start) * 2 + 200L * 1024 * 1024)
+                throw IOException("폰 저장공간이 부족합니다 (약 ${(total * 2) / 1048576} MB 필요, ${free / 1048576} MB 남음)")
+            var done = start
+            var sinceCheck = 0L
+            java.io.FileOutputStream(part, append).use { out ->
+                val buf = ByteArray(64 * 1024)
+                body.byteStream().use { input ->
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n; sinceCheck += n
+                        if (done > MAX_BOOK_BYTES) throw IOException("파일이 너무 큽니다")
+                        onProgress(done, total)
+                        if (sinceCheck >= 512 * 1024) { sinceCheck = 0; if (stop()) return@withContext fileName to false }
+                    }
+                }
+            }
+            if (total > 0 && done < total) throw IOException("연결이 끊겼습니다")
+            fileName to true
+        }
+    }
+
     suspend fun download(url: String, dest: File, onProgress: (Long, Long) -> Unit): String? = withContext(Dispatchers.IO) {
         Http.client.newCall(request(url)).execute().use { r ->
             check(r)

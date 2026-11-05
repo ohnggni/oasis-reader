@@ -183,10 +183,22 @@ class BookStore(private val context: Context) {
                 kosyncDoc = runCatching { KoSync.partialMd5(kept) }.getOrNull(),
             )
             db.books().insert(book)
+            reattachHighlights(book)
             book
         } finally {
             tmp.deleteRecursively()
         }
+    }
+
+    /** The same book as one removed earlier (same source, or same identifier): its kept highlights come back. */
+    private suspend fun reattachHighlights(book: BookEntity) {
+        val match = db.removedBooks().all().firstOrNull { r ->
+            (book.opdsId != null && r.opdsId == book.opdsId) ||
+                (book.sourceUrl != null && r.sourceUrl == book.sourceUrl) ||
+                (!book.identifier.isNullOrBlank() && r.identifier == book.identifier && r.format == book.format)
+        } ?: return
+        db.highlights().moveBook(match.id, book.id)
+        db.removedBooks().delete(match.id)
     }
 
     /** Book files missing (e.g. restored from a backup without books)? */
@@ -215,8 +227,25 @@ class BookStore(private val context: Context) {
         }
     }
 
-    suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        db.highlights().deleteForBook(id)
+    /**
+     * Remove a book from the 서재. With [keepHighlights] (and highlights to keep) its highlights
+     * stay, with the title, author and chapter titles they need, in removed_books.
+     */
+    suspend fun delete(id: String, keepHighlights: Boolean = false) = withContext(Dispatchers.IO) {
+        val keep = keepHighlights && db.highlights().countFor(id) > 0
+        if (keep) db.books().get(id)?.let { b ->
+            val pkg = if (File(dir(id), "book.json").isFile) runCatching { readPackage(id) }.getOrNull() else null
+            val chapters = db.highlights().allFor(id).map { it.spineIndex }.distinct()
+                .associate { i -> i.toString() to HighlightExport.chapterTitle(pkg, i) }
+            db.removedBooks().insert(
+                com.oasisreader.app.data.db.RemovedBookEntity(
+                    id = id, title = b.title, author = b.author, format = b.format,
+                    chapters = kotlinx.serialization.json.JsonObject(chapters.mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) }).toString(),
+                    opdsId = b.opdsId, sourceUrl = b.sourceUrl, identifier = b.identifier, removedAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+        if (!keep) db.highlights().deleteForBook(id)
         db.bookmarks().deleteForBook(id)
         db.collections().unlinkBook(id)
         db.books().delete(id)
@@ -254,6 +283,18 @@ class BookStore(private val context: Context) {
             total -= size; dropped++
         }
         dropped
+    }
+
+    /**
+     * 폰에서 지우기 (보관함 관리): the book's file goes, the 서재 entry, place and highlights stay
+     * (☁ — it is received again when opened). Only for books that came from a server.
+     */
+    suspend fun removeFiles(id: String): Boolean = withContext(Dispatchers.IO) {
+        val b = db.books().get(id) ?: return@withContext false
+        if (b.sourceUrl == null) return@withContext false
+        dropFiles(id)
+        db.books().setPinned(id, false)
+        true
     }
 
     private fun dropFiles(id: String) {

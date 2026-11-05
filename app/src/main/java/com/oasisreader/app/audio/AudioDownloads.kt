@@ -52,7 +52,7 @@ object AudioDownloads {
     private val lock = Any()
 
     @Serializable
-    internal data class Queue(val wanted: List<Int> = emptyList(), val since: Long = 0, val error: String? = null)
+    internal data class Queue(val wanted: List<Int> = emptyList(), val since: Long = 0, val error: String? = null, val paused: Boolean = false)
 
     fun root(context: Context) = File(context.applicationContext.filesDir, "media")
     internal fun dir(context: Context, bookId: String) = File(root(context), bookId)
@@ -139,7 +139,7 @@ object AudioDownloads {
     internal fun pendingBooks(context: Context): List<String> =
         root(context).listFiles()?.filter { File(it, QUEUE).isFile }
             ?.map { it.name to readQueue(context, it.name) }
-            ?.filter { it.second.wanted.isNotEmpty() }
+            ?.filter { it.second.wanted.isNotEmpty() && !it.second.paused }
             ?.sortedBy { it.second.since }?.map { it.first }.orEmpty()
 
     /** Tracks of [bookId] waiting to be received. */
@@ -157,7 +157,7 @@ object AudioDownloads {
             if (book != null) writeManifest(app, row.id, book)
             updateQueue(app, row.id) { q ->
                 val add = trackIds ?: listOf(ALL)
-                Queue(wanted = (q.wanted + add).distinct(), since = if (q.wanted.isEmpty()) System.currentTimeMillis() else q.since, error = null)
+                Queue(wanted = (q.wanted + add).distinct(), since = if (q.wanted.isEmpty()) System.currentTimeMillis() else q.since, error = null, paused = false)
             }
             errors.remove(row.id)
             if (progress[row.id] == null) progress[row.id] = 0f
@@ -186,11 +186,47 @@ object AudioDownloads {
     }
 
     /** Stop receiving [bookId] (what is already kept stays; a half track resumes next time). */
+    /** ✖️ Stop receiving [bookId]: out of the queue, half tracks deleted (kept tracks stay). */
     fun cancel(context: Context, bookId: String) {
         val app = context.applicationContext
         scope.launch {
             updateQueue(app, bookId) { Queue() }
+            dir(app, bookId).listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
             progress.remove(bookId); current.remove(bookId); errors.remove(bookId)
+            refreshRow(app, bookId)
+        }
+    }
+
+    /** ⏸️ Pause [bookId]: it stays in the queue, a half track stays for later. */
+    fun pause(context: Context, bookId: String) {
+        val app = context.applicationContext
+        scope.launch {
+            updateQueue(app, bookId) { it.copy(paused = true) }
+            current.remove(bookId)
+            version++
+        }
+    }
+
+    /** ▶️ Go on with [bookId] (also tries a failed one again). */
+    fun resume(context: Context, bookId: String) {
+        val app = context.applicationContext
+        scope.launch {
+            updateQueue(app, bookId) { it.copy(paused = false, error = null) }
+            errors.remove(bookId)
+            if (progress[bookId] == null) progress[bookId] = 0f
+            version++
+            kick(app)
+        }
+    }
+
+    fun isPaused(context: Context, bookId: String) = readQueue(context, bookId).let { it.paused && it.wanted.isNotEmpty() }
+
+    /** Every audiobook waiting in the queue: paused. */
+    fun pauseAll(context: Context) {
+        val app = context.applicationContext
+        scope.launch {
+            root(app).listFiles()?.forEach { d -> if (readQueue(app, d.name).wanted.isNotEmpty()) updateQueue(app, d.name) { it.copy(paused = true) } }
+            current.clear()
             version++
         }
     }
