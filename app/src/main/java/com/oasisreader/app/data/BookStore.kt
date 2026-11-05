@@ -285,6 +285,18 @@ class BookStore(private val context: Context) {
         dropped
     }
 
+    /**
+     * 폰에서 지우기 (보관함 관리): the book's file goes, the 서재 entry, place and highlights stay
+     * (☁ — it is received again when opened). Only for books that came from a server.
+     */
+    suspend fun removeFiles(id: String): Boolean = withContext(Dispatchers.IO) {
+        val b = db.books().get(id) ?: return@withContext false
+        if (b.sourceUrl == null) return@withContext false
+        dropFiles(id)
+        db.books().setPinned(id, false)
+        true
+    }
+
     private fun dropFiles(id: String) {
         synchronized(packageCache) { packageCache.remove(id) }
         synchronized(comicCache) { comicCache.remove(id) }

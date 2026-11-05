@@ -108,6 +108,7 @@ private object Route {
     const val AUDIO = "audio"            // bookoasis audiobooks
     const val AUDIO_PLAYER = "audio_player"
     const val DOWNLOADS = "downloads"    // ⬇️ 받기 관리
+    const val STORAGE = "storage"        // 📦 보관함 관리
 }
 
 @Composable
@@ -240,6 +241,11 @@ private fun App() {
             onDoc = { id -> route = Route.DOC + id },
             onReadingDefaults = { route = Route.READING_DEFAULTS },
             onDownloads = { downloadsReturn = Route.SETTINGS; route = Route.DOWNLOADS },
+            onStorage = { route = Route.STORAGE },
+        )
+        route == Route.STORAGE -> com.oasisreader.app.ui.StorageManagerScreen(
+            onBack = { route = Route.SETTINGS },
+            onDownloads = { downloadsReturn = Route.STORAGE; route = Route.DOWNLOADS },
         )
         route == Route.READING_DEFAULTS -> com.oasisreader.app.reader.ReadingDefaultsScreen(onBack = { route = Route.SETTINGS })
         route.startsWith(Route.DOC) -> {
