@@ -128,7 +128,7 @@ object BookQueue {
             channel(app)
             runCatching { setForeground(getForegroundInfo()) }
             var retry = false
-            while (true) {
+            while (!isStopped) {
                 val job = all(app).firstOrNull { it.state == State.WAITING } ?: break
                 val left = all(app).count { it.state == State.WAITING }
                 try {
