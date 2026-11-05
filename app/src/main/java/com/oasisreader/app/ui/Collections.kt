@@ -45,6 +45,13 @@ object ShelfCollections {
         return c
     }
 
+    /** The 컬렉션 called [name] (same name, ignoring case and spaces at the ends), made when missing. */
+    suspend fun findOrCreate(db: AppDatabase, name: String): CollectionEntity {
+        val n = name.trim()
+        return db.collections().all().firstOrNull { it.name.trim().equals(n, ignoreCase = true) }
+            ?: create(db, n)
+    }
+
     suspend fun delete(db: AppDatabase, id: String) {
         db.collections().unlinkCollection(id)
         db.collections().deleteCollection(id)

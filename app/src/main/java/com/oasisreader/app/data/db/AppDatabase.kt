@@ -195,6 +195,9 @@ interface CollectionDao {
     @Query("SELECT * FROM book_collections")
     fun observeLinks(): Flow<List<BookCollectionEntity>>
 
+    @Query("SELECT * FROM collections ORDER BY sort, createdAt")
+    suspend fun all(): List<CollectionEntity>
+
     @Query("SELECT COALESCE(MAX(sort), 0) FROM collections")
     suspend fun maxSort(): Int
 

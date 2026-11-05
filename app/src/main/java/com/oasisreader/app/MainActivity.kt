@@ -119,7 +119,8 @@ private fun App() {
 
     var route by rememberSaveable { mutableStateOf(Route.LIBRARY) }
     var serverReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
-    var audioReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }   // where the full player goes back to
+    var audioReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
+    var downloadsReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }   // where the full player goes back to
     var importing by remember { mutableStateOf(false) }
 
     val books by remember { db.books().observeAll() }.collectAsState(initial = null)
@@ -215,6 +216,7 @@ private fun App() {
             onServer = { route = Route.SERVERS },
             onDoc = { id -> route = Route.DOC + id },
             onReadingDefaults = { route = Route.READING_DEFAULTS },
+            onDownloads = { downloadsReturn = Route.SETTINGS; route = Route.DOWNLOADS },
         )
         route == Route.READING_DEFAULTS -> com.oasisreader.app.reader.ReadingDefaultsScreen(onBack = { route = Route.SETTINGS })
         route.startsWith(Route.DOC) -> {
@@ -225,7 +227,7 @@ private fun App() {
                 shareable = id == com.oasisreader.app.ui.DOC_META,
             )
         }
-        route == Route.DOWNLOADS -> com.oasisreader.app.audio.DownloadsScreen(onBack = { route = Route.LIBRARY })
+        route == Route.DOWNLOADS -> com.oasisreader.app.audio.DownloadsScreen(onBack = { route = downloadsReturn })
         route == Route.HIGHLIGHTS -> HighlightsScreen(
             onBack = { route = Route.LIBRARY },
             onOpen = { h -> route = Route.READER + h.bookId + ":" + h.spineIndex + ":" + h.id },
@@ -293,7 +295,7 @@ private fun App() {
             onSettings = { route = Route.SETTINGS },
             onStats = { route = Route.STATS },
             onHighlights = { route = Route.HIGHLIGHTS },
-            onDownloads = { route = Route.DOWNLOADS },
+            onDownloads = { downloadsReturn = Route.LIBRARY; route = Route.DOWNLOADS },
             onDelete = { b -> scope.launch { store.delete(b.id) } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },

@@ -507,7 +507,7 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
 /** Another device read further (progress sync): shown after the library's own progress. */
 private fun aheadText(pct: Float?): String = pct?.let { " · ⇄ ${(it * 100).roundToInt()}%" }.orEmpty()
 
-private fun progressText(b: BookEntity): String = ShelfKind.of(b).emoji + " " + when {
+private fun progressText(b: BookEntity): String = when {
     b.finishedAt != null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "다 들음" else "다 읽음"
     b.lastReadAt == null -> if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) "새 오디오북" else "새 책"
     else -> "${(b.progress * 100).roundToInt()}%"
@@ -534,7 +534,7 @@ private fun GridBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(b.title, style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(ShelfKind.of(b).emoji + " " + b.title, style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOfNotNull(b.author, progressText(b) + aheadText(ahead)).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
@@ -565,7 +565,7 @@ private fun ListBook(b: BookEntity, store: BookStore, onClick: () -> Unit, onMen
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(b.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(ShelfKind.of(b).emoji + " " + b.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             b.author?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)

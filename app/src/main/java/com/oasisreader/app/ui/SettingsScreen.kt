@@ -42,7 +42,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> Unit = {}, onReadingDefaults: () -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> Unit = {}, onReadingDefaults: () -> Unit = {}, onDownloads: () -> Unit = {}) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val app = context.applicationContext
@@ -127,12 +127,33 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 PageKeys.setVolumeKeys(app, volumeKeys)
             }
 
+            var usage by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+            var usageKey by remember { mutableStateOf(0) }
+            var storage by remember { mutableStateOf<com.oasisreader.app.data.StorageUsage?>(null) }
+            LaunchedEffect(usageKey) {
+                usage = com.oasisreader.app.data.BookStore.get(app).cacheUsage()
+                storage = com.oasisreader.app.data.Storage.usage(app)
+            }
+
+            Section("저장 공간")
+            val L = com.oasisreader.app.data.Storage::label
+            Item(
+                "💾",
+                storage?.let { "앱 전체 ${L(it.totalBytes)} · 폰 남은 공간 ${L(it.freeBytes)}" } ?: "저장 공간을 세는 중…",
+                storage?.let {
+                    listOf(
+                        "📌 서재에 보관한 책  ${L(it.keptBytes)} (${it.keptBooks}권)",
+                        "🎧 받은 오디오북  ${L(it.audioBytes)} (${it.audioBooks}권) — 누르면 받기 관리",
+                        "☁️ 임시 보관  ${L(it.cacheBytes)} (${it.cacheBooks}권)",
+                        "표지·글꼴·기타  ${L(it.otherBytes)}",
+                    ).joinToString("\n")
+                } ?: "",
+                enabled = busy == null,
+            ) { onDownloads() }
+
             Section("바로 읽기 (임시 보관)")
             val cachePrefs = remember { com.oasisreader.app.data.CachePrefs(app) }
             var limit by remember { mutableStateOf(cachePrefs.limitMb) }
-            var usage by remember { mutableStateOf<Pair<Int, Long>?>(null) }
-            var usageKey by remember { mutableStateOf(0) }
-            LaunchedEffect(usageKey) { usage = com.oasisreader.app.data.BookStore.get(app).cacheUsage() }
             Item(
                 "📦", "임시 보관 한도: ${com.oasisreader.app.data.CachePrefs.label(limit)}",
                 (usage?.let { (n, bytes) -> "지금 ${n}권 · ${"%.0f".format(bytes / 1048576.0)} MB. " } ?: "") +

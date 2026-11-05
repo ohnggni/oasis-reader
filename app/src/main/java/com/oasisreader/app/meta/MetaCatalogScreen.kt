@@ -200,15 +200,51 @@ fun MetaCatalogScreen(
     }
 
     /** 서재에 담기 / 보관: keep for good (a cached book with its file still here is just marked). */
-    fun keep(b: MetaBook) {
+    fun keep(b: MetaBook, quiet: Boolean = false, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null) {
         val href = api.downloadUrl(b) ?: return
         if (href in ownedSet) scope.launch {
             val book = db.books().findBySource(null, href) ?: return@launch
             if (store.hasFiles(book.id)) {
                 db.books().setPinned(book.id, true)
-                android.widget.Toast.makeText(context, "서재에 보관합니다: ${book.title}", android.widget.Toast.LENGTH_SHORT).show()
-            } else Downloads.startUrl(app, server, api.key(b), href, b.name)
-        } else Downloads.startUrl(app, server, api.key(b), href, b.name)
+                if (!quiet) android.widget.Toast.makeText(context, "서재에 보관합니다: ${book.title}", android.widget.Toast.LENGTH_SHORT).show()
+                onDone?.invoke(book)
+            } else Downloads.startUrl(app, server, api.key(b), href, b.name, onDone = onDone)
+        } else Downloads.startUrl(app, server, api.key(b), href, b.name, onDone = onDone)
+    }
+
+    /**
+     * A whole series to the 서재: the missing books are kept, and with [collection] every book
+     * of the series on the 서재 (kept now or before) goes on the 컬렉션 of that name.
+     */
+    fun keepSeries(list: List<MetaBook>, collection: String?) {
+        scope.launch {
+            val col = collection?.let { com.oasisreader.app.ui.ShelfCollections.findOrCreate(db, it) }
+            fun link(book: com.oasisreader.app.data.db.BookEntity) {
+                if (col != null) scope.launch { com.oasisreader.app.ui.ShelfCollections.set(db, col.id, book.id, true) }
+            }
+            var n = 0
+            list.forEach { b ->
+                val href = api.downloadUrl(b) ?: return@forEach
+                if (!b.readable) return@forEach
+                if (href !in pinnedSet) { keep(b, quiet = true) { link(it) }; n++ }
+                else db.books().findBySource(null, href)?.let { link(it) }
+            }
+            android.widget.Toast.makeText(
+                context,
+                (if (n > 0) "${n}권을 받습니다" else "모두 서재에 있습니다") + (col?.let { " · 📚 ${it.name}에 묶습니다" } ?: ""),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+    var askSeries by remember { mutableStateOf<Pair<String, List<MetaBook>>?>(null) }
+    askSeries?.let { (name, list) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { askSeries = null },
+            title = { Text("📚 컬렉션으로 묶을까요?") },
+            text = { Text("「$name」 시리즈의 책을 서재에 담으면서 같은 이름의 컬렉션으로 묶습니다. 이미 서재에 있는 이 시리즈의 책도 함께 묶습니다.") },
+            confirmButton = { TextButton(onClick = { askSeries = null; keepSeries(list, name) }) { Text("묶어서 받기") } },
+            dismissButton = { TextButton(onClick = { askSeries = null; keepSeries(list, null) }) { Text("그냥 받기") } },
+        )
     }
 
     fun openOrDownload(b: MetaBook) {
@@ -240,12 +276,7 @@ fun MetaCatalogScreen(
             onBack = { openSeries = null },
             onBook = { openBook = it },
             onAction = ::openOrDownload,
-            onDownloadAll = { list ->
-                list.forEach { b ->
-                    val href = api.downloadUrl(b) ?: return@forEach
-                    if (href !in pinnedSet && b.readable) keep(b)
-                }
-            },
+            onDownloadAll = { list -> askSeries = s.seriesName to list },
         )
         BookDetailOverlay()
     }

@@ -116,7 +116,7 @@ fun ThinSlider(
     }
 }
 
-/** − and + side by side, small and round like the slider's dot. Held down, they repeat ([repeat]). */
+/** − and + side by side, each in a round rim. Held down, they repeat ([repeat]). */
 @Composable
 fun StepButtons(onMinus: () -> Unit, onPlus: () -> Unit, enabled: Boolean = true, repeat: Boolean = true) {
     Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
@@ -132,8 +132,8 @@ private fun StepButton(glyph: String, label: String, onClick: () -> Unit, enable
     val accent = MaterialTheme.colorScheme.primary
     val line = MaterialTheme.colorScheme.outlineVariant
     Box(
-        Modifier.size(24.dp).clip(CircleShape)
-            .border(0.8.dp, line, CircleShape)
+        Modifier.size(26.dp).clip(CircleShape)
+            .border(1.3.dp, if (enabled) accent.copy(alpha = 0.7f) else line, CircleShape)
             .semantics { contentDescription = label }
             .pointerInput(enabled, repeat) {
                 if (!enabled) return@pointerInput
