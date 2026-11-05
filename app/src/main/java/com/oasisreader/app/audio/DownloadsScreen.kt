@@ -149,31 +149,36 @@ fun DownloadsScreen(onBack: () -> Unit) {
     val books = rows.orEmpty().filter { it.format == AudioLibraryLink.FORMAT && it.id in ids }
         .map { it to bookState(app, it.id) }
         .sortedWith(compareBy({ it.second.order }, { it.first.title }))
-    val busy = books.any { it.second.pending }
+    val bv = com.oasisreader.app.data.BookQueue.version
+    val jobs = remember(bv) { com.oasisreader.app.data.BookQueue.all(app) }
+    val dlProgress by com.oasisreader.app.data.Downloads.progress.collectAsState()
+    val busy = books.any { it.second.pending && !it.second.paused } || jobs.any { it.state == com.oasisreader.app.data.BookQueue.State.WAITING }
     var notifOk by remember { mutableStateOf(notificationsAllowed(context)) }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifOk = it }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar("⬇️ 받기 관리", onBack = onBack) {
-            if (busy) com.oasisreader.app.ui.EmojiButton("⏸️", "모두 멈춤") { AudioDownloads.cancelAll(context) }
+            if (busy) com.oasisreader.app.ui.EmojiButton("⏸️", "모두 멈춤") {
+                AudioDownloads.pauseAll(context); com.oasisreader.app.data.BookQueue.pauseAll(context)
+            }
         }
         LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 val bytes = books.sumOf { AudioDownloads.keptBytes(app, it.first.id) }
                 val free = app.filesDir.usableSpace
                 Text(
-                    "폰에 받은 오디오북 ${books.count { it.second.kept > 0 }}권 · ${gb(bytes)} 사용 · 남은 공간 ${gb(free)}",
+                    "받는 중·대기 책 ${jobs.size}권 · 폰에 받은 오디오북 ${books.count { it.second.kept > 0 }}권 (${gb(bytes)}) · 남은 공간 ${gb(free)}",
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 Text(
-                    "받은 파일은 이 앱 안에만 있고 이 폰에서만 풀리게 암호화되어 있습니다. 앱을 닫아도 받기는 계속됩니다.",
+                    "앱을 닫아도 받기는 계속됩니다. ⏸️ 일시정지 · ▶️ 이어 받기 · ✖️ 받기 취소. 받은 파일은 이 앱 안에만 있습니다(오디오북은 이 폰에서만 풀리게 암호화).",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 var wifi by remember { mutableStateOf(AudioDownloadWorker.wifiOnly(context)) }
                 Row(
-                    Modifier.fillMaxWidth().clickable { wifi = !wifi; AudioDownloads.setWifiOnly(context, wifi) }.padding(horizontal = 16.dp, vertical = 4.dp),
+                    Modifier.fillMaxWidth().clickable { wifi = !wifi; AudioDownloads.setWifiOnly(context, wifi); com.oasisreader.app.data.BookQueue.rekick(context) }.padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
@@ -183,7 +188,7 @@ fun DownloadsScreen(onBack: () -> Unit) {
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    androidx.compose.material3.Switch(checked = wifi, onCheckedChange = { wifi = it; AudioDownloads.setWifiOnly(context, it) })
+                    androidx.compose.material3.Switch(checked = wifi, onCheckedChange = { wifi = it; AudioDownloads.setWifiOnly(context, it); com.oasisreader.app.data.BookQueue.rekick(context) })
                 }
                 if (!notifOk && Build.VERSION.SDK_INT >= 33) Row(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
@@ -196,9 +201,17 @@ fun DownloadsScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 HorizontalDivider(thickness = 0.5.dp)
             }
-            if (books.isEmpty()) item {
+            // 📖 책 · 만화 · PDF being received or waiting
+            if (jobs.isNotEmpty()) item {
+                Text("📖 책 · 만화 · PDF", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+            }
+            items(jobs, key = { "job_" + it.key }) { job -> BookJobRow(job, dlProgress[job.key]) }
+            if (books.isNotEmpty()) item {
+                Text("🎧 오디오북", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+            }
+            if (books.isEmpty() && jobs.isEmpty()) item {
                 Text(
-                    "폰에 받은 오디오북이 없습니다.\n서재에서 오디오북을 길게 눌러 \"⬇️ 폰에 받기\"를 고르거나, 오디오북 상세 화면에서 책 전체나 트랙을 받으세요.",
+                    "받는 중인 책이나 폰에 받은 오디오북이 없습니다.\n책은 서버 목록에서 ⬇️ 서재에 담기, 오디오북은 서재에서 길게 눌러 \"⬇️ 폰에 받기\"나 상세 화면에서 받으세요.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(24.dp),
                 )
@@ -212,15 +225,16 @@ fun DownloadsScreen(onBack: () -> Unit) {
 }
 
 /** A book in 받기 관리. [order]: coming, waiting, failed, partly kept, kept. */
-private data class BookDl(val tracks: Int, val kept: Int, val pending: Boolean, val running: Boolean, val error: String?) {
-    val order get() = when { running -> 0; pending -> 1; error != null -> 2; kept < tracks -> 3; else -> 4 }
+private data class BookDl(val tracks: Int, val kept: Int, val pending: Boolean, val running: Boolean, val error: String?, val paused: Boolean = false) {
+    val order get() = when { running -> 0; pending && !paused -> 1; paused -> 2; error != null -> 3; kept < tracks -> 4; else -> 5 }
 }
 
 private fun bookState(app: Context, id: String): BookDl {
     val tracks = AudioDownloads.trackList(app, id)?.size ?: 0
     val kept = AudioDownloads.keptTracks(app, id).size
     val pending = AudioDownloads.wantedTracks(app, id).isNotEmpty()
-    return BookDl(tracks, kept, pending, AudioDownloads.current[id] != null, AudioDownloads.errors[id] ?: AudioDownloads.readQueue(app, id).error)
+    val q = AudioDownloads.readQueue(app, id)
+    return BookDl(tracks, kept, pending, AudioDownloads.current[id] != null, AudioDownloads.errors[id] ?: q.error, paused = q.paused && pending)
 }
 
 @Composable
@@ -238,6 +252,7 @@ private fun BookCard(row: BookEntity, st: BookDl, onAll: () -> Unit, onRemove: (
                 val bytes = AudioDownloads.keptBytes(context, row.id)
                 val status = when {
                     st.running -> "⬇️ 받는 중 ${((overall ?: 0f) * 100).toInt()}%"
+                    st.paused -> "⏸️ 일시정지"
                     st.pending -> if (AudioDownloadWorker.wifiOnly(context)) "⏳ 받기 대기 (와이파이 연결되면 시작)" else "⏳ 받기 대기 (연결되면 시작)"
                     st.error != null -> "⚠️ ${st.error}"
                     st.tracks > 0 && st.kept >= st.tracks -> "✅ 다 받음"
@@ -253,17 +268,19 @@ private fun BookCard(row: BookEntity, st: BookDl, onAll: () -> Unit, onRemove: (
             }
             Text(if (open) "🔼" else "🔽", fontSize = 13.sp)
         }
-        if (st.running || st.pending) {
+        if (st.running || (st.pending && !st.paused)) {
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(progress = { overall ?: 0f }, modifier = Modifier.fillMaxWidth())
         }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
             when {
-                st.pending -> MiniChip("⏸️ 멈춤", onClick = { AudioDownloads.cancel(context, row.id) })
-                st.tracks == 0 || st.kept < st.tracks -> MiniChip(if (st.error != null) "🔁 다시 받기" else "⬇️ 전부 받기", onClick = onAll)
+                st.paused -> MiniChip("▶️", onClick = { AudioDownloads.resume(context, row.id) }, description = "이어 받기")
+                st.pending -> MiniChip("⏸️", onClick = { AudioDownloads.pause(context, row.id) }, description = "일시정지")
+                st.tracks == 0 || st.kept < st.tracks -> MiniChip(if (st.error != null) "🔁" else "⬇️", onClick = onAll, description = if (st.error != null) "다시 받기" else "전부 받기")
             }
-            if (st.kept > 0 || st.pending) MiniChip("🗑️ 폰에서 지우기", onClick = { confirm = true })
+            if (st.pending) MiniChip("✖️", onClick = { AudioDownloads.cancel(context, row.id) }, description = "받기 취소")
+            if (st.kept > 0) MiniChip("🗑️", onClick = { confirm = true }, description = "폰에서 지우기")
         }
         if (open) {
             val tracks = AudioDownloads.trackList(context, row.id).orEmpty()
@@ -310,3 +327,40 @@ private fun Cover(bookId: String) {
 
 private fun mb(bytes: Long) = "%.0f MB".format(bytes / 1048576.0)
 private fun gb(bytes: Long) = if (bytes >= 1L shl 30) "%.1f GB".format(bytes / 1073741824.0) else "%.0f MB".format(bytes / 1048576.0)
+
+
+/** A book · comic · PDF in the queue: title, how far, ⏸️/▶️ and ✖️. */
+@Composable
+private fun BookJobRow(job: com.oasisreader.app.data.BookQueue.Job, progress: Float?) {
+    val context = LocalContext.current
+    val Q = com.oasisreader.app.data.BookQueue
+    val part = remember(job.key, progress) { Q.partFile(context, job.key).let { if (it.isFile) it.length() else 0L } }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(job.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val status = when {
+                    job.state == Q.State.PAUSED -> "⏸️ 일시정지" + (if (part > 0) " · ${mb(part)} 받음" else "")
+                    job.state == Q.State.FAILED -> "⚠️ ${job.error ?: "받지 못했습니다"}"
+                    progress != null && progress >= 0f -> "⬇️ 받는 중 ${(progress * 100).toInt()}%"
+                    progress != null -> "⬇️ 받는 중" + (if (part > 0) " · ${mb(part)}" else "")
+                    else -> "⏳ 받기 대기" + (job.error?.let { " · $it" } ?: "")
+                }
+                Text(status, style = MaterialTheme.typography.labelMedium,
+                    color = if (job.state == Q.State.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
+                if (job.state == Q.State.WAITING) MiniChip("⏸️", onClick = { Q.pause(context, job.key) }, description = "일시정지")
+                else MiniChip(if (job.state == Q.State.FAILED) "🔁" else "▶️", onClick = { Q.resume(context, job.key) }, description = "이어 받기")
+                MiniChip("✖️", onClick = { Q.cancel(context, job.key) }, description = "받기 취소")
+            }
+        }
+        if (job.state == Q.State.WAITING && progress != null) {
+            Spacer(Modifier.height(4.dp))
+            if (progress >= 0f) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+            else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+    }
+    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+}

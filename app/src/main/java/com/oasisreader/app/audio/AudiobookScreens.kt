@@ -366,7 +366,11 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                         val kept = onShelf?.let { it.pinned && it.fileBytes > 0 } == true
                         dlErr?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
                         when {
-                            dl != null -> TextButton(onClick = { AudioDownloads.cancel(context, rowId) }) { Text("⬇️ 폰에 받는 중 ${(dl * 100).toInt()}% · 누르면 멈춤") }
+                            dl != null || AudioDownloads.isPaused(context, rowId) -> Row {
+                                if (AudioDownloads.isPaused(context, rowId)) TextButton(onClick = { AudioDownloads.resume(context, rowId) }) { Text("▶️ 이어 받기") }
+                                else TextButton(onClick = { AudioDownloads.pause(context, rowId) }) { Text("⏸️ 받는 중 ${((dl ?: 0f) * 100).toInt()}%") }
+                                TextButton(onClick = { AudioDownloads.cancel(context, rowId) }) { Text("✖️ 취소") }
+                            }
                             kept -> Text("⬇️ 폰에 받음 (오프라인으로 들을 수 있음)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
                             else -> TextButton(onClick = {
                                 scope.launch {

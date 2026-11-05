@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
         com.oasisreader.app.meta.MetaApi.cacheDir = java.io.File(cacheDir, "meta")
         com.oasisreader.app.audio.AudioDownloads.migrateLegacy(this)   // plain kept tracks → encrypted (once)
         com.oasisreader.app.audio.AudioProgressSync.schedule(this)      // listening places that did not go out yet
+        com.oasisreader.app.data.BookQueue.resumeWaiting(this)          // books still waiting to be received
         setContent {
             OasisTheme {
                 // Surface supplies onBackground as the default text colour (dark mode)

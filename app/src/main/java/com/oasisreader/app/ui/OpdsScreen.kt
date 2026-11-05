@@ -199,7 +199,7 @@ fun OpdsScreen(
                     col?.let { ShelfCollections.set(db, it.id, already.id, true) }
                 } else {
                     n++
-                    Downloads.start(app, server, e, onDone = { b -> col?.let { c -> scope.launch { ShelfCollections.set(db, c.id, b.id, true) } } })
+                    Downloads.start(app, server, e, collectionId = col?.id)
                 }
             }
             android.widget.Toast.makeText(
@@ -525,11 +525,7 @@ private fun EntryRow(
             Spacer(Modifier.width(8.dp))
             when {
                 owned -> Text("✅", style = MaterialTheme.typography.titleMedium)
-                progress != null -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                    if (progress < 0f) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                    else CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                }
-                entry.readable != null -> EmojiButton("⬇️", "서재에 담기", onDownload)
+                entry.readable != null -> DownloadControl(entry.id, progress, onDownload)
                 else -> Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -657,15 +653,13 @@ private fun EntryTile(
             }
             if (entry.isBook) {
                 Box(
-                    Modifier.align(Alignment.BottomEnd).padding(4.dp).size(36.dp)
+                    Modifier.align(Alignment.BottomEnd).padding(4.dp).heightIn(min = 36.dp)
                         .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
                         owned -> Text("✅")
-                        progress != null -> if (progress < 0f) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                                            else CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        entry.readable != null -> Text("⬇️", modifier = Modifier.clickable(onClick = onDownload).padding(6.dp))
+                        entry.readable != null -> DownloadControl(entry.id, progress, onDownload, size = 32.dp)
                         else -> Text("—")
                     }
                 }

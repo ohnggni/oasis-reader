@@ -419,9 +419,12 @@ fun LibraryScreen(
                             android.widget.Toast.makeText(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
                         }
                         err?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
+                        val paused = remember(b.id, ad.version) { ad.isPaused(ctx, b.id) }
                         when {
-                            dl != null -> TextButton(onClick = { ad.cancel(ctx, b.id) }) {
-                                Text("⬇️ 받는 중 ${(dl * 100).roundToInt()}% · 누르면 멈춤")
+                            dl != null || paused -> Row {
+                                if (paused) TextButton(onClick = { ad.resume(ctx, b.id) }) { Text("▶️ 이어 받기") }
+                                else TextButton(onClick = { ad.pause(ctx, b.id) }) { Text("⏸️ 일시정지 ${((dl ?: 0f) * 100).roundToInt()}%") }
+                                TextButton(onClick = { ad.cancel(ctx, b.id) }) { Text("✖️ 받기 취소") }
                             }
                             b.pinned && b.fileBytes > 0 -> {}
                             b.fileBytes > 0 -> TextButton(onClick = { startDl() }) { Text("⬇️ 나머지 트랙도 받기") }

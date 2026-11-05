@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Receives the audiobook tracks waiting in [AudioDownloads]' queue, one book after another,
- * as a foreground service with a progress notification ("모두 취소" stops it). Network
+ * as a foreground service with a progress notification ("모두 멈춤" pauses it). Network
  * trouble: WorkManager tries again later (needs a connection); a half track goes on from
  * where it stopped (HTTP Range, [MediaCrypt] continues the same file).
  */
@@ -41,6 +41,8 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
     private class Refused(message: String) : Exception(message)
     /** The track was taken out of the queue while it came. */
     private class Unwanted : Exception()
+    /** The book was paused while it came (the half track stays). */
+    private class Paused : Exception()
 
     private var lastNote = 0L
 
@@ -95,6 +97,7 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val scope = HashSet<Int>()   // the tracks this run is about (for the percentage)
         while (true) {
             val q = AudioDownloads.readQueue(app, bookId)
+            if (q.paused) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return }
             val all = AudioDownloads.ALL in q.wanted
             val kept = AudioDownloads.keptTracks(app, bookId)
             val wanted = d.book.tracks.filter { all || it.id in q.wanted }
@@ -122,6 +125,9 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 track(app, web, d.book.id, bookId, next) { report(it) }
             } catch (e: Unwanted) {
                 continue   // the queue changed: read it again
+            } catch (e: Paused) {
+                AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
+                return
             }
             if (!all) AudioDownloads.updateQueue(app, bookId) { it.copy(wanted = it.wanted - next.id) }
             AudioDownloads.refreshRow(app, bookId)
@@ -173,6 +179,7 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                                 if (isStopped) throw CancellationException("stopped")
                                 val q = AudioDownloads.readQueue(app, bookId)
                                 if (AudioDownloads.ALL !in q.wanted && t.id !in q.wanted) throw Unwanted()
+                                if (q.paused) throw Paused()
                                 if (len > 0) onFrac((got.toFloat() / len).coerceIn(0f, 1f))
                             }
                         }
@@ -242,14 +249,17 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
                 .setContentIntent(openApp(app))
-                .addAction(0, "모두 취소", cancel)
+                .addAction(0, "모두 멈춤", cancel)
                 .build()
             return ForegroundInfo(NOTE_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         }
     }
 
-    /** "모두 취소" in the notification. */
+    /** "모두 멈춤" in the notification: everything waiting is paused (half tracks stay; ▶️ goes on). */
     class CancelReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = AudioDownloads.cancelAll(context)
+        override fun onReceive(context: Context, intent: Intent) {
+            AudioDownloads.pauseAll(context)
+            androidx.work.WorkManager.getInstance(context.applicationContext).cancelUniqueWork(AudioDownloads.WORK)
+        }
     }
 }

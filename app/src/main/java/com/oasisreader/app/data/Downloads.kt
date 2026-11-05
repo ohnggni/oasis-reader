@@ -33,8 +33,22 @@ object Downloads {
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages: SharedFlow<String> = _messages
 
-    fun start(context: Context, server: Server, entry: OpdsEntry, pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null) {
+    /** Progress from the background queue ([BookQueue]); null takes the entry out. */
+    fun setProgress(key: String, f: Float?) = _progress.update { if (f == null) it - key else it + (key to f) }
+    fun clearProgress() = _progress.update { emptyMap() }
+    fun message(text: String) { _messages.tryEmit(text) }
+
+    /**
+     * 서재에 담기 (pinned, nothing to do after) goes to the background queue ([BookQueue]):
+     * it goes on with the app closed and can be paused. 바로 읽기 (opens the book when done)
+     * runs here, right away.
+     */
+    fun start(context: Context, server: Server, entry: OpdsEntry, pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null) {
         val acq = entry.readable ?: run { _messages.tryEmit("EPUB, CBZ/ZIP, TXT, PDF 파일이 없는 항목입니다"); return }
+        if (pinned && onDone == null) {
+            BookQueue.enqueue(context, BookQueue.Job(entry.id, server.id, acq.href, entry.title, collectionId = collectionId))
+            return
+        }
         if (_progress.value.containsKey(entry.id)) return
         val app = context.applicationContext
         _progress.update { it + (entry.id to -1f) }
@@ -70,8 +84,12 @@ object Downloads {
      */
     fun startUrl(
         context: Context, server: Server, key: String, href: String, title: String,
-        pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null,
+        pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null,
     ) {
+        if (pinned && onDone == null) {
+            BookQueue.enqueue(context, BookQueue.Job(key, server.id, href, title, meta = true, collectionId = collectionId))
+            return
+        }
         if (_progress.value.containsKey(key)) return
         val app = context.applicationContext
         _progress.update { it + (key to -1f) }
