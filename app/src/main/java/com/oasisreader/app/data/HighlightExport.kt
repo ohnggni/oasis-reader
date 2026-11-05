@@ -316,3 +316,9 @@ object HighlightExport {
     private fun paragraph(note: String): String =
         note.lines().joinToString("\n") { it.trimEnd() }.replace(Regex("\n{3,}"), "\n\n")
 }
+
+/** Chapter titles kept for a removed book (removed_books.chapters, {"3":"제2장"}). */
+fun removedChapters(json: String?): Map<Int, String> = runCatching {
+    Http.json.parseToJsonElement(json ?: "{}").let { it as kotlinx.serialization.json.JsonObject }
+        .mapNotNull { (k, v) -> k.toIntOrNull()?.let { i -> i to ((v as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "") } }.toMap()
+}.getOrDefault(emptyMap())

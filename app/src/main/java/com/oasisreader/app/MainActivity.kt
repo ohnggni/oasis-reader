@@ -319,7 +319,7 @@ private fun App() {
             onStats = { route = Route.STATS },
             onHighlights = { route = Route.HIGHLIGHTS },
             onDownloads = { downloadsReturn = Route.LIBRARY; route = Route.DOWNLOADS },
-            onDelete = { b -> scope.launch { store.delete(b.id) } },
+            onDelete = { b, keepHl -> scope.launch { store.delete(b.id, keepHl) } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
         )
