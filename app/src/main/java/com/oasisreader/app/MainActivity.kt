@@ -154,6 +154,28 @@ private fun App() {
         }
     }
 
+    // 폴더에서 가져오기: pick a folder → look through it → confirm → import in the background
+    var folderScanning by remember { mutableStateOf(false) }
+    var folderPlan by remember { mutableStateOf<com.oasisreader.app.data.FolderImport.Plan?>(null) }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        folderScanning = true
+        scope.launch {
+            runCatching { com.oasisreader.app.data.FolderImport.plan(context, uri) }
+                .onSuccess { folderPlan = it }
+                .onFailure { Toast.makeText(context, "폴더를 읽지 못했습니다: ${it.message}", Toast.LENGTH_LONG).show() }
+            folderScanning = false
+        }
+    }
+    if (folderScanning) com.oasisreader.app.ui.FolderScanningDialog()
+    folderPlan?.let { plan ->
+        com.oasisreader.app.ui.FolderImportDialog(plan, onDismiss = { folderPlan = null }) { group ->
+            folderPlan = null
+            com.oasisreader.app.data.FolderImport.start(context, plan, group)
+            Toast.makeText(context, "가져오기를 시작했습니다. 알림에서 진행을 볼 수 있습니다.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     fun openServer(from: String, id: String?) { serverReturn = from; route = Route.SERVER + (id ?: "") }
 
     PageStatusBarIcons()
@@ -292,6 +314,7 @@ private fun App() {
                     "application/vnd.comicbook+zip", "application/x-cbz", "text/plain", "application/pdf", "application/octet-stream",
                 ))
             },
+            onImportFolder = { runCatching { folderPicker.launch(null) } },
             onSettings = { route = Route.SETTINGS },
             onStats = { route = Route.STATS },
             onHighlights = { route = Route.HIGHLIGHTS },

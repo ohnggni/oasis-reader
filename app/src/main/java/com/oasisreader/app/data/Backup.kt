@@ -43,7 +43,7 @@ object Backup {
         val bookDirs = store.root.listFiles()?.filter { it.isDirectory && !it.name.endsWith(".tmp") }.orEmpty()
         // book files only for books the user added from the phone; books from a server are
         // received again from it (and do not leave the app as plain files)
-        val ownFiles = if (includeBooks) db.books().all().filter { it.sourceUrl == null && it.opdsId == null }.map { it.id }.toSet() else emptySet()
+        val ownFiles = if (includeBooks) db.books().all().filter { it.sourceUrl == null && (it.opdsId == null || it.opdsId.startsWith(FolderImport.PREFIX)) }.map { it.id }.toSet() else emptySet()
         val manifest = BackupManifest(
             createdAt = System.currentTimeMillis(),
             books = bookDirs.size,

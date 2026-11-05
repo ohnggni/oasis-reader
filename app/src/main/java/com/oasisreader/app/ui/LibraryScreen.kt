@@ -139,6 +139,7 @@ fun LibraryScreen(
     onOpen: (BookEntity) -> Unit,
     onCatalog: () -> Unit,
     onImportFile: () -> Unit,
+    onImportFolder: () -> Unit = {},
     onSettings: () -> Unit,
     onStats: () -> Unit,
     onHighlights: () -> Unit,
@@ -216,6 +217,7 @@ fun LibraryScreen(
                     listOf(
                         Triple("☁️", "서버에서 책 찾기", onCatalog),
                         Triple("📁", "파일에서 가져오기", onImportFile),
+                        Triple("🗂️", "폴더에서 가져오기", onImportFolder),
                         Triple("🖍️", "하이라이트", onHighlights),
                         Triple("📊", "독서 통계", onStats),
                         Triple("⬇️", "받기 관리", onDownloads),
