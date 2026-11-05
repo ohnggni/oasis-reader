@@ -145,7 +145,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                         "📌 서재에 보관한 책  ${L(it.keptBytes)} (${it.keptBooks}권)",
                         "🎧 받은 오디오북  ${L(it.audioBytes)} (${it.audioBooks}권) — 누르면 받기 관리",
                         "☁️ 임시 보관  ${L(it.cacheBytes)} (${it.cacheBooks}권)",
-                        "표지·글꼴·기타  ${L(it.otherBytes)}",
+                        "🗃️ 표지·글꼴·기타  ${L(it.otherBytes)}",
                     ).joinToString("\n")
                 } ?: "",
                 enabled = busy == null,

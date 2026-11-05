@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, release-1.1]   # release-1.1: build check only (no release; publish runs on main)
     paths-ignore:
       - "**.md"
   workflow_dispatch:
