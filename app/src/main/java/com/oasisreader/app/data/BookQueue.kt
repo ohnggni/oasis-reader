@@ -178,11 +178,11 @@ object BookQueue {
             Downloads.message("서재에 담았습니다: ${book.title}")
         }
 
-        private suspend fun note(title: String, left: Int, f: Float) {
+        private fun note(title: String, left: Int, f: Float) {
             val now = System.currentTimeMillis()
             if (now - lastNote < 1000) return
             lastNote = now
-            runCatching { setForeground(info("$title" + (if (left > 1) " · 남은 ${left}권" else ""), (f * 100).toInt(), 100)) }
+            runCatching { setForegroundAsync(info(title + (if (left > 1) " · 남은 ${left}권" else ""), (f * 100).toInt(), 100)) }
         }
 
         private fun info(text: String, done: Int, total: Int): ForegroundInfo {

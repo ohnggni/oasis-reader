@@ -333,30 +333,29 @@ private fun gb(bytes: Long) = if (bytes >= 1L shl 30) "%.1f GB".format(bytes / 1
 @Composable
 private fun BookJobRow(job: com.oasisreader.app.data.BookQueue.Job, progress: Float?) {
     val context = LocalContext.current
-    val Q = com.oasisreader.app.data.BookQueue
-    val part = remember(job.key, progress) { Q.partFile(context, job.key).let { if (it.isFile) it.length() else 0L } }
+    val part = remember(job.key, progress) { com.oasisreader.app.data.BookQueue.partFile(context, job.key).let { if (it.isFile) it.length() else 0L } }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(job.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val status = when {
-                    job.state == Q.State.PAUSED -> "⏸️ 일시정지" + (if (part > 0) " · ${mb(part)} 받음" else "")
-                    job.state == Q.State.FAILED -> "⚠️ ${job.error ?: "받지 못했습니다"}"
+                    job.state == com.oasisreader.app.data.BookQueue.State.PAUSED -> "⏸️ 일시정지" + (if (part > 0) " · ${mb(part)} 받음" else "")
+                    job.state == com.oasisreader.app.data.BookQueue.State.FAILED -> "⚠️ ${job.error ?: "받지 못했습니다"}"
                     progress != null && progress >= 0f -> "⬇️ 받는 중 ${(progress * 100).toInt()}%"
                     progress != null -> "⬇️ 받는 중" + (if (part > 0) " · ${mb(part)}" else "")
                     else -> "⏳ 받기 대기" + (job.error?.let { " · $it" } ?: "")
                 }
                 Text(status, style = MaterialTheme.typography.labelMedium,
-                    color = if (job.state == Q.State.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (job.state == com.oasisreader.app.data.BookQueue.State.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
-                if (job.state == Q.State.WAITING) MiniChip("⏸️", onClick = { Q.pause(context, job.key) }, description = "일시정지")
-                else MiniChip(if (job.state == Q.State.FAILED) "🔁" else "▶️", onClick = { Q.resume(context, job.key) }, description = "이어 받기")
-                MiniChip("✖️", onClick = { Q.cancel(context, job.key) }, description = "받기 취소")
+                if (job.state == com.oasisreader.app.data.BookQueue.State.WAITING) MiniChip("⏸️", onClick = { com.oasisreader.app.data.BookQueue.pause(context, job.key) }, description = "일시정지")
+                else MiniChip(if (job.state == com.oasisreader.app.data.BookQueue.State.FAILED) "🔁" else "▶️", onClick = { com.oasisreader.app.data.BookQueue.resume(context, job.key) }, description = "이어 받기")
+                MiniChip("✖️", onClick = { com.oasisreader.app.data.BookQueue.cancel(context, job.key) }, description = "받기 취소")
             }
         }
-        if (job.state == Q.State.WAITING && progress != null) {
+        if (job.state == com.oasisreader.app.data.BookQueue.State.WAITING && progress != null) {
             Spacer(Modifier.height(4.dp))
             if (progress >= 0f) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
