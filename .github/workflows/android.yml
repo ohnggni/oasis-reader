@@ -84,11 +84,17 @@ jobs:
         run: |
           V="${{ env.APP_VERSION }}"
           cp "out/OasisReader-$V-debug.apk" out/OasisReader.apk
+          # release body = the top "## x.y" section of the in-app release notes;
+          # falls back to the commit message when that section is empty
+          awk '/^## /{n++; if(n==1){next}} n==1' app/src/main/assets/release-notes.md > out/notes.md
+          if ! grep -q '[^[:space:]]' out/notes.md; then
+            git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' | head -20 > out/notes.md
+          fi
           gh release create "v$V" out/OasisReader.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "OG Reader $V" \
-            --notes "$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' | head -20)" \
+            --notes-file out/notes.md \
             --latest
 
       - name: Remove signing key
