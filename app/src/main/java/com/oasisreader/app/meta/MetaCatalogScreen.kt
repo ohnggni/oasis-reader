@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.oasisreader.app.comic.ComicParser
 import com.oasisreader.app.data.Downloads
@@ -302,21 +303,19 @@ fun MetaCatalogScreen(
             EmojiButton("⚙️", "서버 설정", onOpenSettings)
         }
         com.oasisreader.app.ui.CatalogViewSwitch(organized = true, onOrganized = {}, onFolders = onOpdsFolders)
-        OutlinedTextField(
+        com.oasisreader.app.ui.CompactSearchField(
             value = query,
             onValueChange = { query = it; if (it.isBlank()) activeQuery = "" },
-            placeholder = { Text("시리즈·제목·저자 검색") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = {
+            placeholder = "시리즈·제목·저자 검색",
+            onSearch = {
                 activeQuery = query.trim()
                 // results take the screen: put the keyboard away
                 keyboard?.hide(); focus.clearFocus()
-            }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            },
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
         )
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(com.oasisreader.app.ui.MiniChipGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -376,25 +375,39 @@ fun MetaCatalogScreen(
                 )
             }
         }
+        // one line: how many (left) · 시리즈/권 · 타일·크기 (right)
+        val countText = when {
+            loading && seriesItems.isEmpty() && bookItems.isEmpty() -> null
+            activeQuery.isNotBlank() && searchBooks -> total?.let { "📕 ${it.grouped()}권" } ?: "📕 " + com.oasisreader.app.ui.loadedCount(bookItems.size, hasMore, "권")
+            total != null -> "📚 시리즈 ${total!!.grouped()}개" + (totalBooks?.let { " · ${it.grouped()}권" } ?: "")
+            seriesItems.isNotEmpty() -> "📚 시리즈 " + com.oasisreader.app.ui.loadedCount(seriesItems.size, hasMore)
+            else -> null
+        }
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 2.dp, bottom = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(com.oasisreader.app.ui.MiniChipGap),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            Box(Modifier.weight(1f)) {
+                Text(
+                    countText.orEmpty(), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp),
+                )
+            }
             if (activeQuery.isNotBlank()) {
                 com.oasisreader.app.ui.MiniChip("📚 시리즈", selected = !searchBooks, onClick = { searchBooks = false })
                 com.oasisreader.app.ui.MiniChip("📕 권", selected = searchBooks, onClick = { searchBooks = true })
-                Spacer(Modifier.width(8.dp))
             }
             if (!(activeQuery.isNotBlank() && searchBooks)) {
                 com.oasisreader.app.ui.MiniChip(
-                    if (seriesList) "📃 목록" else "🔲 타일", plain = true,
+                    if (seriesList) "📃" else "🔲", plain = true,
                     onClick = { seriesList = !seriesList; prefs.edit().putBoolean("series_list", seriesList).apply() },
                     description = if (seriesList) "목록으로 보는 중 (누르면 타일)" else "타일로 보는 중 (누르면 목록)",
                 )
                 if (!seriesList) {
                     var sizeOpen by remember { mutableStateOf(false) }
                     Box {
-                        com.oasisreader.app.ui.MiniChip("📐 크기", onClick = { sizeOpen = true }, description = "타일 크기", plain = true)
+                        com.oasisreader.app.ui.MiniChip("📐", onClick = { sizeOpen = true }, description = "타일 크기", plain = true)
                         androidx.compose.material3.DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
                             Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
                                 Text("타일 크기", style = MaterialTheme.typography.labelLarge)
@@ -431,15 +444,6 @@ fun MetaCatalogScreen(
             maxLines = 2, modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
         )
         val booksMode = activeQuery.isNotBlank() && searchBooks
-        com.oasisreader.app.ui.CountLine(
-            when {
-                loading && seriesItems.isEmpty() && bookItems.isEmpty() -> null
-                booksMode -> total?.let { "📕 ${it.grouped()}권" } ?: "📕 " + com.oasisreader.app.ui.loadedCount(bookItems.size, hasMore, "권")
-                total != null -> "📚 시리즈 ${total!!.grouped()}개" + (totalBooks?.let { " · ${it.grouped()}권" } ?: "")
-                seriesItems.isNotEmpty() -> "📚 시리즈 " + com.oasisreader.app.ui.loadedCount(seriesItems.size, hasMore)
-                else -> null
-            },
-        )
         when {
             err != null && seriesItems.isEmpty() && bookItems.isEmpty() -> Column(
                 Modifier.fillMaxSize().padding(32.dp),
@@ -499,7 +503,7 @@ fun MetaCatalogScreen(
                             modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
                         )
                         Spacer(Modifier.height(4.dp))
-                        Text(s.seriesName, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(com.oasisreader.app.ui.ShelfSearch.breakAnywhere(s.seriesName), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(
                             listOfNotNull("${s.bookCount}권", metaDate(s.latestMtime)).joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,

@@ -69,4 +69,41 @@ object ShelfSearch {
         }
         return (a.length - i) - (b.length - j)
     }
+
+    /**
+     * For showing a title under a cover: it may wrap after any letter (not only at spaces), so it
+     * always starts right beside its emoji; words may be cut. Emoji and joined characters stay whole.
+     */
+    fun breakAnywhere(t: String): String {
+        val sb = StringBuilder(t.length * 2)
+        for (i in t.indices) {
+            val c = t[i]
+            sb.append(c)
+            val n = t.getOrNull(i + 1) ?: continue
+            if (c.isHighSurrogate() || n.isLowSurrogate()) continue
+            if (c == '\u200D' || n == '\u200D' || n == '\uFE0F' || n.isWhitespace() || c.isWhitespace()) continue
+            sb.append('\u200B')
+        }
+        return sb.toString()
+    }
+
+    /** "📖 제목" that never leaves the emoji alone on the first line. */
+    fun labeled(emoji: String, title: String): String = emoji + "\u00A0" + breakAnywhere(title)
+
+    private val volumeTail = Regex(
+        "(?i)[\\s._\\-]*(?:[\\(\\[]\\s*)?(?:제\\s*)?(?:vol\\.?\\s*|volume\\s*|v\\s*)?\\d+(?:\\.\\d+)?\\s*(?:권|화|부|편|장|회)?(?:\\s*[\\)\\]])?\\s*$",
+    )
+    private val hashTail = Regex("#\\d+\\s*$")
+
+    /**
+     * A series name from a volume title: the volume number at the end taken off
+     * ("원피스 01권", "원피스 2권", "원피스 (3)", "Berserk Vol.4" → "원피스" / "Berserk").
+     * Null when nothing is left or there was no number.
+     */
+    fun seriesStem(title: String): String? {
+        var t = title.trim().replace(hashTail, "").trim()
+        val before = t
+        t = t.replace(volumeTail, "").trim().trimEnd('-', '_', '.', ',', ':').trim()
+        return t.takeIf { it.isNotEmpty() && it != before }
+    }
 }

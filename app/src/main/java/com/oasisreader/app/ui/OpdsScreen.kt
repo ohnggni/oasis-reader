@@ -301,13 +301,11 @@ fun OpdsScreen(
         rootSearch?.let { sf ->
             val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
             val focus = androidx.compose.ui.platform.LocalFocusManager.current
-            OutlinedTextField(
+            com.oasisreader.app.ui.CompactSearchField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("제목·저자 검색") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
+                placeholder = "제목·저자 검색",
+                onSearch = {
                     keyboard?.hide(); focus.clearFocus()
                     val q = query.trim()
                     if (q.isNotEmpty()) scope.launch {
@@ -315,8 +313,8 @@ fun OpdsScreen(
                         if (u != null) open(u, "검색: $q")
                         else android.widget.Toast.makeText(context, "검색 주소를 찾지 못했습니다", android.widget.Toast.LENGTH_SHORT).show()
                     }
-                }),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                },
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
             )
         }
 

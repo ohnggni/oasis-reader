@@ -261,7 +261,12 @@ fun LibraryScreen(
             },
         )
     }
-    var grouped by remember(tabKey) { mutableStateOf(shelfPrefs.getBoolean(pk("grouped"), false)) }
+    // 묶어 보기: none / by 컬렉션 / by series (automatic, no 컬렉션 needed)
+    var groupMode by remember(tabKey) {
+        mutableStateOf(shelfPrefs.getString(pk("group"), null) ?: if (shelfPrefs.getBoolean(pk("grouped"), false)) "collection" else "none")
+    }
+    fun setGroup(m: String) { groupMode = m; shelfPrefs.edit().putString(pk("group"), m).apply() }
+    val grouped = groupMode != "none"
     var stackFolders by remember { mutableStateOf(shelfPrefs.getString("folder_style", "grid") == "stack") }
     var closedCols by remember { mutableStateOf(shelfPrefs.getStringSet("closed_cols", emptySet()).orEmpty().toSet()) }
     fun toggleClosed(id: String) {
@@ -279,7 +284,18 @@ fun LibraryScreen(
 
     // 폴더 안 (컬렉션별 그리드에서 폴더를 누름)
     var openFolder by rememberSaveable { mutableStateOf<String?>(null) }
-    val folder = collections.firstOrNull { it.id == openFolder }
+    // series groups (묶기: 시리즈): books from the same server series / folder, or with the same title
+    // once the volume number is taken off; same kind only; two or more. Shown like 컬렉션 folders
+    // (ids "s:…", not saved anywhere).
+    val seriesGroups: List<Pair<CollectionEntity, List<BookEntity>>> = remember(base, groupMode) {
+        if (groupMode != "series") emptyList()
+        else base.groupBy { seriesKeyOf(it) }.mapNotNull { (k, bs) ->
+            if (k == null || bs.size < 2) null
+            else CollectionEntity("s:$k", seriesNameOf(bs), 0L, 0) to bs
+        }
+    }
+    val folder = collections.firstOrNull { it.id == openFolder } ?: seriesGroups.firstOrNull { it.first.id == openFolder }?.first
+    val inSeries = remember(seriesGroups) { seriesGroups.flatMap { it.second.map { b -> b.id } }.toSet() }
 
     // 선택 모드
     var selected by remember { mutableStateOf(setOf<String>()) }
@@ -297,14 +313,17 @@ fun LibraryScreen(
         if (q.isEmpty()) pool else pool.filter { b -> hitText(b) || namesOf[b.id].orEmpty().any { ShelfSearch.matches(it, q) } }
     }
     val useGroups = grouped && activeCol == null && folder == null
-    val entries: List<ShelfEntry> = remember(shown, pool, q, useGroups, tiles, folder, byCol, collections, closedCols, sort) {
+    val entries: List<ShelfEntry> = remember(shown, pool, q, useGroups, tiles, folder, byCol, collections, closedCols, sort, seriesGroups, groupMode) {
         when {
-            folder != null -> byCol[folder.id].orEmpty().let { ids -> shown.filter { it.id in ids }.map { ShelfEntry.Book(it) } }
+            folder != null -> (byCol[folder.id] ?: seriesGroups.firstOrNull { it.first.id == folder.id }?.second?.map { it.id }?.toSet()).orEmpty()
+                .let { ids -> shown.filter { it.id in ids }.let { l -> if (folder.id.startsWith("s:")) l.sortedWith { a, b -> ShelfSearch.naturalCompare(a.title, b.title) } else l }.map { ShelfEntry.Book(it) } }
             !useGroups -> shown.map { ShelfEntry.Book(it) }
             else -> {
                 // with a search, a folder is shown when its name matches; the other hits come out as books
-                val folders = collections.mapNotNull { c ->
-                    val ids = byCol[c.id] ?: return@mapNotNull null
+                val groups: List<Pair<CollectionEntity, Set<String>>> =
+                    if (groupMode == "series") seriesGroups.map { (c, bs) -> c to bs.map { it.id }.toSet() }
+                    else collections.mapNotNull { c -> byCol[c.id]?.let { c to it } }
+                val folders = groups.mapNotNull { (c, ids) ->
                     val inside = if (q.isEmpty()) shown.filter { it.id in ids }
                     else if (ShelfSearch.matches(c.name, q)) pool.filter { it.id in ids } else emptyList()
                     inside.takeIf { it.isNotEmpty() }?.let { c to it }
@@ -312,7 +331,8 @@ fun LibraryScreen(
                     if (sort == ShelfSort.TITLE || sort == ShelfSort.AUTHOR) list.sortedWith { a, b -> ShelfSearch.naturalCompare(a.first.name, b.first.name) }
                     else list.sortedByDescending { (_, bs) -> bs.maxOf { it.lastReadAt ?: it.addedAt } }
                 }
-                val loose = if (q.isEmpty()) shown.filter { it.id !in inAnyCol } else shown.filter { hitText(it) }
+                val grpIds = if (groupMode == "series") inSeries else inAnyCol
+                val loose = if (q.isEmpty()) shown.filter { it.id !in grpIds } else shown.filter { hitText(it) }
                 if (tiles) folders.map { (c, bs) -> ShelfEntry.Folder(c, bs) } + loose.map { ShelfEntry.Book(it) }
                 else folders.flatMap { (c, bs) ->
                     val open = c.id !in closedCols
@@ -325,6 +345,15 @@ fun LibraryScreen(
     val visibleIds = remember(entries) { entries.flatMap { it.bookIds() }.distinct() }
     val chosen = remember(selected, books) { books.filter { it.id in selected } }
     LaunchedEffect(bookIds) { if (selected.any { it !in bookIds }) selected = selected.filter { it in bookIds }.toSet() }
+
+    /** 🔗 an automatic series group → a real 컬렉션 with the same books. */
+    fun makeCollection(name: String, ids: List<String>) {
+        ShelfActions.scope.launch {
+            val c = ShelfCollections.create(colDb, name)
+            ShelfActions.addToCollection(app, c.id, ids)
+        }
+        android.widget.Toast.makeText(ctx, "📚 컬렉션 「$name」을 만들었습니다", android.widget.Toast.LENGTH_SHORT).show()
+    }
 
     var bulkDelete by remember { mutableStateOf(false) }
     var bulkRemove by remember { mutableStateOf(false) }
@@ -411,7 +440,7 @@ fun LibraryScreen(
             var viewOpen by remember { mutableStateOf(false) }
             Box {
                 MiniChip(
-                    (if (tiles) "🔲 타일" else "📃 목록") + if (grouped) " · 📚" else "", plain = true,
+                    (if (tiles) "🔲 타일" else "📃 목록") + when (groupMode) { "collection" -> " · 📚"; "series" -> " · 🔗"; else -> "" }, plain = true,
                     onClick = { viewOpen = true },
                     description = "보기 방식",
                 )
@@ -421,8 +450,12 @@ fun LibraryScreen(
                     DropdownMenuItem(text = { Text("📃 목록") }, leadingIcon = { CheckMark(!tiles) }, onClick = { viewOpen = false; setLayout(false) })
                     HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("📚 컬렉션별로 묶어 보기") }, leadingIcon = { CheckMark(grouped) },
-                        onClick = { viewOpen = false; grouped = !grouped; openFolder = null; shelfPrefs.edit().putBoolean(pk("grouped"), grouped).apply() },
+                        text = { Text("📚 컬렉션별로 묶기") }, leadingIcon = { CheckMark(groupMode == "collection") },
+                        onClick = { viewOpen = false; openFolder = null; setGroup(if (groupMode == "collection") "none" else "collection") },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🔗 시리즈별로 묶기 (자동)") }, leadingIcon = { CheckMark(groupMode == "series") },
+                        onClick = { viewOpen = false; openFolder = null; setGroup(if (groupMode == "series") "none" else "series") },
                     )
                     if (grouped && tiles) {
                         HorizontalDivider()
@@ -516,14 +549,16 @@ fun LibraryScreen(
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            EmojiButton("⬅️", "컬렉션에서 나가기") { openFolder = null }
+            val auto = folder.id.startsWith("s:")
+            EmojiButton("⬅️", "묶음에서 나가기") { openFolder = null }
             Text(
-                "📚 ${folder.name} · ${entries.size}권", style = MaterialTheme.typography.titleSmall,
+                (if (auto) "🔗 " else "📚 ") + "${folder.name} · ${entries.size}권", style = MaterialTheme.typography.titleSmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
             CollectionMenuButton(
                 onRename = { renameCol = folder }, onDelete = { deleteCol = folder },
                 onSelectAll = { selected = selected + visibleIds },
+                onMakeCollection = if (auto) ({ makeCollection(folder.name, visibleIds) }) else null,
             )
         }
 
@@ -586,6 +621,7 @@ fun LibraryScreen(
                                 onClick = { if (selecting) toggle(e.bookIds()) else { openFolder = e.c.id } },
                                 onLongClick = { toggle(e.bookIds()) },
                                 onRename = { renameCol = e.c }, onDelete = { deleteCol = e.c },
+                                onMakeCollection = if (e.c.id.startsWith("s:")) ({ makeCollection(e.c.name, e.bookIds()) }) else null,
                             )
                             is ShelfEntry.Head -> {}
                         }
@@ -614,6 +650,7 @@ fun LibraryScreen(
                                 onClick = { if (selecting) toggle(e.bookIds()) else toggleClosed(e.c.id) },
                                 onLongClick = { toggle(e.bookIds()) },
                                 onRename = { renameCol = e.c }, onDelete = { deleteCol = e.c },
+                                onMakeCollection = if (e.c.id.startsWith("s:")) ({ makeCollection(e.c.name, e.bookIds()) }) else null,
                             )
                             is ShelfEntry.Folder -> {}
                         }
@@ -855,7 +892,7 @@ private fun SelectionBar(count: Int, allSelected: Boolean, onClose: () -> Unit, 
 
 /** ⋮ on a 컬렉션 folder or head: 이름 바꾸기 · 컬렉션 지우기 (and 모두 고르기). */
 @Composable
-private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onSelectAll: () -> Unit, size: Dp = 36.dp) {
+private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onSelectAll: () -> Unit, size: Dp = 36.dp, onMakeCollection: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.size(size)) {
@@ -863,8 +900,13 @@ private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onS
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("☑️ 모두 고르기") }, onClick = { open = false; onSelectAll() })
-            DropdownMenuItem(text = { Text("✏️ 이름 바꾸기") }, onClick = { open = false; onRename() })
-            DropdownMenuItem(text = { Text("🗑️ 컬렉션 지우기…", color = MaterialTheme.colorScheme.error) }, onClick = { open = false; onDelete() })
+            if (onMakeCollection != null) {
+                // an automatic series group: nothing to rename or delete; it can become a 컬렉션
+                DropdownMenuItem(text = { Text("📚 컬렉션으로 만들기") }, onClick = { open = false; onMakeCollection() })
+            } else {
+                DropdownMenuItem(text = { Text("✏️ 이름 바꾸기") }, onClick = { open = false; onRename() })
+                DropdownMenuItem(text = { Text("🗑️ 컬렉션 지우기…", color = MaterialTheme.colorScheme.error) }, onClick = { open = false; onDelete() })
+            }
         }
     }
 }
@@ -890,6 +932,7 @@ private fun androidx.compose.foundation.layout.BoxScope.SelectBadge(on: Boolean)
 private fun FolderTile(
     c: CollectionEntity, books: List<BookEntity>, store: BookStore, stack: Boolean, compact: Boolean, selected: Boolean?,
     onClick: () -> Unit, onLongClick: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit,
+    onMakeCollection: (() -> Unit)? = null,
 ) {
     val covers = remember(books) { books.sortedWith { a, b -> ShelfSearch.naturalCompare(a.title, b.title) }.take(4) }
     val read = books.count { it.finishedAt != null }
@@ -931,13 +974,13 @@ private fun FolderTile(
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text("📚 " + c.name, style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(ShelfSearch.labeled(if (c.id.startsWith("s:")) "🔗" else "📚", c.name), style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     "${books.size}권" + if (read > 0) " · ${read}권 읽음" else "",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                 )
             }
-            CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, size = if (compact) 26.dp else 36.dp)
+            CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, size = if (compact) 26.dp else 36.dp, onMakeCollection = onMakeCollection)
         }
     }
 }
@@ -948,6 +991,7 @@ private fun FolderTile(
 private fun CollectionHead(
     c: CollectionEntity, books: List<BookEntity>, open: Boolean, selected: Boolean?,
     onClick: () -> Unit, onLongClick: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit,
+    onMakeCollection: (() -> Unit)? = null,
 ) {
     val read = books.count { it.finishedAt != null }
     Row(
@@ -957,7 +1001,7 @@ private fun CollectionHead(
     ) {
         if (selected != null) Text(if (selected) "☑️ " else "⬜ ", fontSize = 16.sp)
         Column(Modifier.weight(1f)) {
-            Text("📚 ${c.name}", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text((if (c.id.startsWith("s:")) "🔗 " else "📚 ") + c.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${books.size}권" + if (read > 0) " · ${read}권 읽음" else "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (read in 1 until books.size) {
@@ -967,7 +1011,7 @@ private fun CollectionHead(
             }
         }
         Text(if (open) "🔼" else "🔽")
-        CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick)
+        CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, onMakeCollection = onMakeCollection)
     }
 }
 
@@ -1033,7 +1077,7 @@ private fun GridBook(
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(ShelfKind.of(b).emoji + " " + b.title, style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(ShelfSearch.labeled(ShelfKind.of(b).emoji, b.title), style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOfNotNull(b.author, progressText(b) + aheadText(ahead)).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
@@ -1068,7 +1112,7 @@ private fun ListBook(
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(ShelfKind.of(b).emoji + " " + b.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(ShelfSearch.labeled(ShelfKind.of(b).emoji, b.title), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             b.author?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1165,4 +1209,28 @@ private fun KindOrderDialog(initial: List<ShelfKind>, onDismiss: () -> Unit, onS
         confirmButton = { TextButton(onClick = { onSave(order); onDismiss() }) { Text("저장") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
+}
+
+/**
+ * Which series a book belongs to, for 🔗 시리즈별로 묶기: the server series or folder it came from
+ * (since 1.2), else its title without the volume number; per kind, so a novel and a comic of the same
+ * name stay apart. Null: not part of a series.
+ */
+private fun seriesKeyOf(b: BookEntity): String? {
+    val kind = ShelfKind.of(b).name
+    com.oasisreader.app.data.BookOrigin.decode(b.origin)?.let { o ->
+        when (o.type) {
+            com.oasisreader.app.data.BookOrigin.META -> o.series?.let { return "$kind|m|${o.server}|${o.library}|$it" }
+            com.oasisreader.app.data.BookOrigin.OPDS -> o.urls.lastOrNull()?.let { return "$kind|o|${o.server}|$it" }
+            com.oasisreader.app.data.BookOrigin.FOLDER -> o.folder?.takeIf { it.isNotBlank() }?.let { return "$kind|f|${o.tree}|$it" }
+        }
+    }
+    return ShelfSearch.seriesStem(b.title)?.let { "$kind|t|" + ShelfSearch.normalize(it) }
+}
+
+/** The group's name: the common title without volume numbers, or the first title. */
+private fun seriesNameOf(books: List<BookEntity>): String {
+    val stems = books.mapNotNull { ShelfSearch.seriesStem(it.title) }
+    return stems.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+        ?: books.minWithOrNull { a, b -> ShelfSearch.naturalCompare(a.title, b.title) }?.title.orEmpty()
 }

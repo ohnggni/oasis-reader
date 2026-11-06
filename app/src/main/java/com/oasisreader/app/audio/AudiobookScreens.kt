@@ -97,6 +97,8 @@ private fun JsonObject.firstList(vararg prefer: String): List<JsonObject> {
 private data class AudioItem(
     val id: Int?, val title: String, val author: String?, val libraryId: String?, val cover: String?, val progress: Double?,
     val completed: Boolean = false,
+    val added: String? = null,       // latest_added (for merging several categories by date)
+    val folder: String? = null,      // anchor_dir (for merging by folder name)
 )
 private data class AudioLibrary(val id: String, val name: String)
 
@@ -112,6 +114,8 @@ private fun JsonElement.toItem(): AudioItem? {
         cover = o.str("cover_image", "cover", "cover_url", "thumbnail"),
         progress = o.dbl("total_progress_pct", "progress_pct", "progress"),
         completed = (o.int("is_completed") ?: 0) != 0,
+        added = o.str("latest_added"),
+        folder = o.str("anchor_dir"),
     )
 }
 
@@ -156,7 +160,8 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
     val items = remember(server) { mutableStateListOf<AudioItem>() }
     var page by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
-    var total by remember { mutableStateOf<Int?>(null) }   // all that match, when the server says and no app-side filter applies
+    var total by remember { mutableStateOf<Int?>(null) }
+    val totals = remember(server) { HashMap<String, Int>() }   // all that match, when the server says and no app-side filter applies
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf<AudioItem?>(null) }
@@ -172,37 +177,60 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
             .onFailure { error = it.message }
     }
     fun keep(it: AudioItem): Boolean =
-        (libIds.size <= 1 || it.libraryId?.toIntOrNull() in libIds) &&
-            when (readFilter) { "done" -> it.completed; "listening" -> !it.completed; else -> true }
-    /** One more page; with several categories or a filter, pages are read on until a few match. */
+        when (readFilter) { "done" -> it.completed; "listening" -> !it.completed; else -> true }
+    // several categories: bookoasis takes one library_id, so each is asked on its own (OR) and the
+    // results merged in the chosen order; each keeps its own next page (a merged page can be a
+    // little out of order at the seams, never empty while any category has more)
+    val cursors = remember(server) { HashMap<String, Int>() }       // library ("all" = none chosen) → next page
+    val done = remember(server) { HashSet<String>() }
+    val sortKey: (AudioItem) -> String = { a ->
+        when (sort) {
+            AudioSort.NAME -> a.title
+            AudioSort.FOLDER -> a.folder ?: a.title
+            AudioSort.ADDED -> a.added.orEmpty()
+        }
+    }
+    suspend fun fetch(lib: String, pg: Int): Pair<List<AudioItem>, Boolean> {
+        val o = web.get("/api/media/list", mapOf(
+            "type" to "audiobook", "library_id" to lib,
+            "search" to searchWithField(active, field),
+            "sort" to sort.api(sortDesc), "page" to pg, "limit" to 40,
+        ))
+        val list = o.firstList("items", "series", "data", "list", "books").mapNotNull { it.toItem() }
+        if (pg == 1) {
+            val pgo = o["pagination"] as? JsonObject
+            (o.int("total", "total_count", "totalCount", "count") ?: pgo?.int("total", "total_count", "count"))?.let { totals[lib] = it }
+        }
+        val more = (o["has_more"] as? JsonPrimitive)?.contentOrNull == "true" || (o["has_more"] == null && list.size >= 40)
+        return list to more
+    }
+    /** p == 1: start over; otherwise one more round from every category that still has more. */
     suspend fun load(p: Int) {
         loading = true; error = null
         try {
-            var next = p
+            val libs = if (libIds.isEmpty()) listOf("all") else libIds.sorted().map { it.toString() }
+            if (p == 1) { items.clear(); cursors.clear(); done.clear(); totals.clear(); page = 0; libs.forEach { cursors[it] = 1 } }
             var added = 0
-            var more: Boolean
+            var rounds = 0
             do {
-                val o = web.get("/api/media/list", mapOf(
-                    "type" to "audiobook",
-                    "library_id" to (libIds.singleOrNull()?.toString() ?: "all"),
-                    "search" to searchWithField(active, field),
-                    "sort" to sort.api(sortDesc), "page" to next, "limit" to 40,
-                ))
-                val list = o.firstList("items", "series", "data", "list", "books").mapNotNull { it.toItem() }
-                if (next == 1) {
-                    items.clear()
-                    // the server's count holds only when it did all the filtering (one category, no 읽음 filter)
-                    val pg = o["pagination"] as? JsonObject
-                    total = if (libIds.size <= 1 && readFilter.isEmpty())
-                        (o.int("total", "total_count", "totalCount", "count") ?: pg?.int("total", "total_count", "count")) else null
+                val batch = ArrayList<AudioItem>()
+                for (lib in libs) {
+                    if (lib in done) continue
+                    val pg = cursors[lib] ?: 1
+                    val (list, more) = fetch(lib, pg)
+                    batch += list.filter(::keep)
+                    cursors[lib] = pg + 1
+                    if (!more) done += lib
                 }
-                val kept = list.filter(::keep)
-                items.addAll(kept); added += kept.size
-                more = (o["has_more"] as? JsonPrimitive)?.contentOrNull == "true" || (o["has_more"] == null && list.size >= 40)
-                page = next
-                next++
-            } while (more && added < 24 && next - p < 15)
-            hasMore = more
+                val cmp = compareBy<AudioItem, String>(com.oasisreader.app.ui.ShelfSearch.natural) { sortKey(it) }
+                val sorted = if (libs.size > 1) batch.sortedWith(if (sortDesc) cmp.reversed() else cmp) else batch
+                items.addAll(sorted); added += sorted.size
+                page++
+                rounds++
+                // the 읽음 filter can leave a round empty: read on a little, then stop (more stays offered)
+            } while (added < 24 && done.size < libs.size && rounds < 6)
+            hasMore = done.size < libs.size
+            total = if (readFilter.isEmpty() && totals.keys.containsAll(libs)) libs.sumOf { totals[it] ?: 0 } else null
         } catch (e: Exception) {
             error = e.message ?: e.javaClass.simpleName
         } finally { loading = false }
@@ -264,15 +292,13 @@ private fun AudioShelf(
     load: (Int) -> Unit, onOpen: (AudioItem) -> Unit,
 ) {
     Column {
-        OutlinedTextField(
-            value = query, onValueChange = onQuery, singleLine = true,
-            placeholder = { Text("검색 (🔍 칩에서 제목·작가·주제)") },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        com.oasisreader.app.ui.CompactSearchField(
+            value = query, onValueChange = onQuery, placeholder = "검색 (🔍 칩에서 제목·작가·주제)", onSearch = onSearch,
+            onClear = onSearch,
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
         )
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(com.oasisreader.app.ui.MiniChipGap),
             verticalAlignment = Alignment.CenterVertically,
         ) { filters() }
@@ -283,6 +309,11 @@ private fun AudioShelf(
                 TextButton(onClick = { load(1) }) { Text("다시 시도") }
             }
             loading && items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            // nothing yet but more to look through (the 읽음 filter): offer to read on, never a dead end
+            items.isEmpty() && hasMore -> Column(Modifier.padding(24.dp)) {
+                Text("아직 맞는 오디오북을 못 찾았습니다.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { load(page + 1) }) { Text("🔎 더 찾아보기") }
+            }
             items.isEmpty() -> Text("오디오북이 없습니다.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(110.dp),

@@ -1,5 +1,9 @@
 package com.oasisreader.app.ui
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -107,13 +111,67 @@ private fun BrandMark(sub: String?, modifier: Modifier = Modifier) {
  */
 @Composable
 fun CatalogViewSwitch(organized: Boolean, onOrganized: () -> Unit, onFolders: () -> Unit) {
-    androidx.compose.foundation.layout.Row(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(MiniChipGap),
+    // tabs, so they read apart from the filter chips below
+    androidx.compose.material3.TabRow(
+        selectedTabIndex = if (organized) 0 else 1,
+        containerColor = barColor(),
+        contentColor = MaterialTheme.colorScheme.primary,
+        divider = { androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant) },
     ) {
-        MiniChip("📚 시리즈별", selected = organized, onClick = { if (!organized) onOrganized() })
-        MiniChip("📂 폴더별", selected = !organized, onClick = { if (organized) onFolders() })
+        listOf(true to "📚 시리즈별", false to "📂 폴더별").forEach { (o, label) ->
+            androidx.compose.material3.Tab(
+                selected = organized == o,
+                onClick = { if (o != organized) { if (o) onOrganized() else onFolders() } },
+                modifier = Modifier.height(42.dp),
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
+                Text(
+                    label, style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (organized == o) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+                )
+            }
+        }
     }
+}
+
+/**
+ * A low search box (about 40dp instead of a text field's 56): 🔍, the text, ✖️ to clear.
+ * [onSearch] runs on the keyboard's search key.
+ */
+@Composable
+fun CompactSearchField(
+    value: String, onValueChange: (String) -> Unit, placeholder: String, onSearch: () -> Unit,
+    modifier: Modifier = Modifier, onClear: (() -> Unit)? = null,
+) {
+    val outline = MaterialTheme.colorScheme.outline
+    androidx.compose.foundation.text.BasicTextField(
+        value = value, onValueChange = onValueChange, singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { onSearch() }),
+        modifier = modifier.height(40.dp),
+        decorationBox = { inner ->
+            androidx.compose.foundation.layout.Row(
+                Modifier.fillMaxSize()
+                    .border(1.dp, outline.copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Text("🔍", style = MaterialTheme.typography.bodyMedium)
+                androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    inner()
+                }
+                if (value.isNotEmpty()) Text(
+                    "✖️", style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.clickable { onValueChange(""); onClear?.invoke() }.padding(8.dp),
+                )
+            }
+        },
+    )
 }
 
 /**

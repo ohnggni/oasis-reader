@@ -29,6 +29,10 @@ object Downloads {
     private val _progress = MutableStateFlow<Map<String, Float>>(emptyMap())
     val progress: StateFlow<Map<String, Float>> = _progress
 
+    /** 바로 읽기 (and 다음 권) downloads, not queued: key -> title, so 받기 관리 can show them */
+    private val _direct = MutableStateFlow<Map<String, String>>(emptyMap())
+    val direct: StateFlow<Map<String, String>> = _direct
+
     /** user-facing messages ("받았습니다", errors) */
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages: SharedFlow<String> = _messages
@@ -52,6 +56,7 @@ object Downloads {
         if (_progress.value.containsKey(entry.id)) return
         val app = context.applicationContext
         _progress.update { it + (entry.id to -1f) }
+        _direct.update { it + (entry.id to entry.title) }
         scope.launch {
             val tmp = File(app.cacheDir, "dl_${System.nanoTime()}.bin")
             try {
@@ -75,6 +80,7 @@ object Downloads {
             } finally {
                 tmp.delete()
                 _progress.update { it - entry.id }
+                _direct.update { it - entry.id }
             }
         }
     }
@@ -95,6 +101,7 @@ object Downloads {
         if (_progress.value.containsKey(key)) return
         val app = context.applicationContext
         _progress.update { it + (key to -1f) }
+        _direct.update { it + (key to title) }
         scope.launch {
             val tmp = File(app.cacheDir, "dl_${System.nanoTime()}.bin")
             try {
@@ -120,6 +127,7 @@ object Downloads {
             } finally {
                 tmp.delete()
                 _progress.update { it - key }
+                _direct.update { it - key }
             }
         }
     }

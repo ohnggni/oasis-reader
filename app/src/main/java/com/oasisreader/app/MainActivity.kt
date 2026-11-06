@@ -183,6 +183,25 @@ private fun App() {
     }
 
     fun openServer(from: String, id: String?) { serverReturn = from; route = Route.SERVER + (id ?: "") }
+    /** Open a 서재 book: an audiobook goes to the player (its place from the server first), else the reader. */
+    fun openShelfBook(b: BookEntity) {
+            if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) {
+                // an audiobook: its tracks and place from the server, then the player
+                // playing it right now: straight to the player; paused or not loaded: ask the
+                // server for its place first (it may have been listened to elsewhere)
+                val already = com.oasisreader.app.audio.AudioPlayback.playing &&
+                    com.oasisreader.app.audio.AudioPlayback.book?.let { it.serverId to it.id } ==
+                    com.oasisreader.app.audio.AudioLibraryLink.parse(b)
+                audioReturn = Route.LIBRARY
+                if (already) route = Route.AUDIO_PLAYER
+                else scope.launch {
+                    Toast.makeText(context, "오디오북을 여는 중…", Toast.LENGTH_SHORT).show()
+                    runCatching { com.oasisreader.app.audio.AudioLibraryLink.play(context, b) }
+                        .onSuccess { route = Route.AUDIO_PLAYER }
+                        .onFailure { com.oasisreader.app.ui.Notice.show(context, "열 수 없습니다: ${it.message}") }
+                }
+            } else route = Route.READER + b.id
+    }
     /** 📂 있던 폴더 열기: the OPDS folder or meta series a book was received from. */
     fun openOrigin(b: BookEntity) {
         val o = com.oasisreader.app.data.BookOrigin.decode(b.origin) ?: return
@@ -277,7 +296,11 @@ private fun App() {
                 shareable = id == com.oasisreader.app.ui.DOC_META,
             )
         }
-        route == Route.DOWNLOADS -> com.oasisreader.app.audio.DownloadsScreen(onBack = { route = downloadsReturn })
+        route == Route.DOWNLOADS -> com.oasisreader.app.audio.DownloadsScreen(
+            onBack = { route = downloadsReturn },
+            onStorage = { storageReturn = Route.DOWNLOADS; route = Route.STORAGE },
+            onOpen = { id -> books?.firstOrNull { it.id == id }?.let { openShelfBook(it) } },
+        )
         route == Route.HIGHLIGHTS -> HighlightsScreen(
             onBack = { route = Route.LIBRARY },
             onOpen = { h -> route = Route.READER + h.bookId + ":" + h.spineIndex + ":" + h.id },
@@ -324,24 +347,7 @@ private fun App() {
             loaded = books != null,
             importing = importing,
             store = store,
-            onOpen = { b: BookEntity ->
-                if (b.format == com.oasisreader.app.audio.AudioLibraryLink.FORMAT) {
-                    // an audiobook: its tracks and place from the server, then the player
-                    // playing it right now: straight to the player; paused or not loaded: ask the
-                    // server for its place first (it may have been listened to elsewhere)
-                    val already = com.oasisreader.app.audio.AudioPlayback.playing &&
-                        com.oasisreader.app.audio.AudioPlayback.book?.let { it.serverId to it.id } ==
-                        com.oasisreader.app.audio.AudioLibraryLink.parse(b)
-                    audioReturn = Route.LIBRARY
-                    if (already) route = Route.AUDIO_PLAYER
-                    else scope.launch {
-                        Toast.makeText(context, "오디오북을 여는 중…", Toast.LENGTH_SHORT).show()
-                        runCatching { com.oasisreader.app.audio.AudioLibraryLink.play(context, b) }
-                            .onSuccess { route = Route.AUDIO_PLAYER }
-                            .onFailure { com.oasisreader.app.ui.Notice.show(context, "열 수 없습니다: ${it.message}") }
-                    }
-                } else route = Route.READER + b.id
-            },
+            onOpen = { b: BookEntity -> openShelfBook(b) },
             onCatalog = { route = Route.CATALOG },
             onImportFile = {
                 picker.launch(arrayOf(
