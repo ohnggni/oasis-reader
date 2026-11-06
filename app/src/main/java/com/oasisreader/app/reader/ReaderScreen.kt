@@ -383,6 +383,7 @@ private fun ReaderBody(
                     colors = ReaderHtml.COLORS,
                     docUrl = doc.url,
                     head = chapterTitleFor(p, t.index).ifBlank { book?.title.orEmpty() },
+                    headLeft = readingChrome.statusLine,
                     hasPrev = t.index > 0,
                     hasNext = t.index < p.spine.size - 1,
                 ),

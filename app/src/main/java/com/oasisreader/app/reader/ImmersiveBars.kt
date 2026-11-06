@@ -73,7 +73,7 @@ fun rememberCutoutRoom(): CutoutRoom {
             when {
                 r.right < w * 0.3f -> left = maxOf(left, r.right.toFloat())
                 r.left > w * 0.7f -> right = maxOf(right, (w - r.left).toFloat())
-                else -> top = maxOf(top, r.bottom.toFloat())
+                // a hole in the middle: the top line still starts at the very top (it may sit over the hole)
             }
         }
         with(density) { CutoutRoom(top.toDp(), left.toDp(), right.toDp()) }
@@ -130,24 +130,31 @@ fun Modifier.barTopInset(chrome: ReadingChrome, cut: CutoutRoom): Modifier = com
 }
 
 /**
- * The top line where the status bar was: clock on the left, battery on the right, small and muted,
- * like the chapter title line. Nothing when both are off. Height [height].
+ * The top line where the status bar was, from the very top of the screen: the title on the left
+ * (from the left edge), clock and battery together on the right, small and muted like the chapter
+ * title line. Nothing when both are off. A camera hole may sit over it; that is fine.
  */
 @Composable
-fun StatusLine(chrome: ReadingChrome, cut: CutoutRoom, color: Color, modifier: Modifier = Modifier, height: Dp = 30.dp) {
+fun StatusLine(
+    chrome: ReadingChrome, cut: CutoutRoom, color: Color, modifier: Modifier = Modifier,
+    height: Dp = 30.dp, title: String? = null,
+) {
     if (!chrome.statusLine) return
     val ctx = LocalContext.current
     val time by rememberClock(ctx, chrome.clock)
     val battery by rememberBattery(ctx, chrome.battery)
-    Box(modifier.fillMaxWidth().height(height)) {
-        if (chrome.clock) Text(
-            time, color = color, fontSize = 11.sp,
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = maxOf(14.dp, cut.left + 6.dp)),
+    val right = listOfNotNull(time.takeIf { chrome.clock }, battery.takeIf { chrome.battery && it.isNotEmpty() }).joinToString("  ")
+    androidx.compose.foundation.layout.Row(
+        modifier.fillMaxWidth().height(height).padding(start = 16.dp, end = maxOf(14.dp, cut.right + 6.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // left: the title (comics/PDF; a book draws its chapter title in the page itself)
+        Text(
+            title.orEmpty(), color = color, fontSize = 11.sp, maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
-        if (chrome.battery && battery.isNotEmpty()) Text(
-            battery, color = color, fontSize = 11.sp,
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = maxOf(14.dp, cut.right + 6.dp)),
-        )
+        if (right.isNotEmpty()) Text(right, color = color, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
     }
 }
 

@@ -30,6 +30,7 @@ data class ReaderConfig(
     val colors: List<String>,
     val docUrl: String,              // this chapter's URL (same-chapter links)
     val head: String = "",           // running head: the chapter title at the top of every page
+    val headLeft: Boolean = false,   // status bar hidden + clock/battery: head on the left, room on the right
     val hasPrev: Boolean = false,
     val hasNext: Boolean = false,
 )
@@ -187,6 +188,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   font: 11px/30px sans-serif; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   opacity: .8; pointer-events: none;
 }
+html.hleft #rhead { text-align: left; padding: 0 120px 0 16px; }
 
 /* highlight palette shown over a text selection */
 #hlbar {
@@ -255,6 +257,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   html.setAttribute('data-w', String(CFG.weight || 0));
 
   document.getElementById('rhead').textContent = CFG.head || '';
+  if (CFG.headLeft) html.classList.add('hleft');
   var cprev = document.getElementById('cprev'), cnext = document.getElementById('cnext');
   if (!CFG.hasPrev) cprev.style.visibility = 'hidden';
   if (!CFG.hasNext) cnext.textContent = '마지막 장입니다';

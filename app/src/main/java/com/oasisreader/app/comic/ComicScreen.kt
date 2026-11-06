@@ -788,7 +788,7 @@ private fun ComicViewer(
         }
         if (!barsVisible) com.oasisreader.app.reader.StatusLine(
             readingChrome, cut, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            Modifier.align(Alignment.TopStart).padding(top = cut.top), height = topLine,
+            Modifier.align(Alignment.TopStart), height = topLine, title = book.title,
         )
         AnimatedVisibility(
             visible = barsVisible,
