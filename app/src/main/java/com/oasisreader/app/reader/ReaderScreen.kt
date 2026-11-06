@@ -160,10 +160,6 @@ private sealed interface LoadState {
 fun ReaderScreen(bookId: String, focusHighlight: Pair<Int, String>? = null, onBack: () -> Unit) {
     val app = LocalContext.current.applicationContext
     val prefs = remember(bookId) { ReaderPrefs(app, bookId) }
-    // 상태바·내비게이션 바 숨기기 (읽기 기본값), and the camera hole for the top line
-    val readingChrome = remember { ReadingChrome.of(prefs) }
-    ImmersiveBars(readingChrome)
-    val cut = rememberCutoutRoom()
     var theme by remember(bookId) { mutableStateOf(prefs.theme) }
     val rTheme = theme.resolve(isAppDark())
     com.oasisreader.app.ui.theme.OasisTheme(darkTheme = rTheme.dark) {
@@ -177,6 +173,10 @@ private fun ReaderBody(
     prefs: ReaderPrefs, theme: ReaderTheme, rTheme: ReaderTheme, onTheme: (ReaderTheme) -> Unit,
 ) {
     val context = LocalContext.current
+    // 상태바·내비게이션 바 숨기기 (읽기 기본값), and the camera hole for the top line
+    val readingChrome = remember { ReadingChrome.of(prefs) }
+    ImmersiveBars(readingChrome)
+    val cut = rememberCutoutRoom()
     val app = context.applicationContext
     val store = remember { BookStore.get(app) }
     val db = remember { AppDatabase.get(app) }
