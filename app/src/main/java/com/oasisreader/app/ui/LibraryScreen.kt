@@ -372,15 +372,38 @@ fun LibraryScreen(
         if (importing) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         // 종류 탭
-        if (showTabs) Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
-        ) {
-            KindTab("전체 ${base.size}", kind == null) { setTab(null); openFolder = null }
-            presentKinds.forEach { k -> KindTab("${k.emoji} ${kindCounts[k] ?: 0}", kind == k, "${k.label} ${kindCounts[k] ?: 0}권") { setTab(k); openFolder = null } }
+        if (showTabs) {
+            // real tabs: the whole width shared, the chosen one bold with a wide underline, a line below
+            val tabs = listOf<ShelfKind?>(null) + presentKinds
+            androidx.compose.material3.TabRow(
+                selectedTabIndex = tabs.indexOf(kind).coerceAtLeast(0),
+                containerColor = barColor(),
+                contentColor = MaterialTheme.colorScheme.primary,
+                divider = { HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant) },
+            ) {
+                tabs.forEach { k ->
+                    val on = k == kind
+                    val n = if (k == null) base.size else kindCounts[k] ?: 0
+                    androidx.compose.material3.Tab(
+                        selected = on,
+                        onClick = { setTab(k); openFolder = null },
+                        modifier = Modifier.height(46.dp).semantics { contentDescription = (k?.label ?: "전체") + " ${n}권" },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Text(
+                            (k?.emoji ?: "전체") + " $n",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
         }
 
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
         ) {
             MiniChip("🔍", onClick = { searchOpen = !searchOpen; if (!searchOpen) { query = "" } }, selected = searchOpen, description = "서재에서 찾기")
@@ -809,23 +832,6 @@ fun LibraryScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("취소") } },
         )
-    }
-}
-
-/** 종류 탭: emoji and count, an underline when chosen. */
-@Composable
-private fun KindTab(label: String, on: Boolean, description: String? = null, onClick: () -> Unit) {
-    Column(
-        Modifier.clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp)
-            .let { m -> if (description != null) m.semantics { contentDescription = description } else m },
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            label, style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-            color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Box(Modifier.padding(top = 4.dp).height(2.dp).width(28.dp).background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(1.dp)))
     }
 }
 

@@ -101,22 +101,32 @@ class ReaderPrefs(context: Context, private val bookId: String? = null) {
 
     /** books, comics, PDF: no Android status bar while one is open (the 서재 keeps it) */
     var hideStatusBar: Boolean
-        get() = prefs.getBoolean("hide_status_bar", false)
-        set(v) = prefs.edit().putBoolean("hide_status_bar", v).apply()
+        get() = bool("hide_status_bar", false)
+        set(v) = setBool("hide_status_bar", v)
 
     /** the same for the navigation bar (gesture handle / buttons) */
     var hideNavBar: Boolean
         get() = prefs.getBoolean("hide_nav_bar", false)
         set(v) = prefs.edit().putBoolean("hide_nav_bar", v).apply()
 
-    /** with the status bar hidden: a small clock (left) and battery (right) on the top line */
+    /** with the status bar hidden: a small clock and battery on the right of the top line */
     var showClock: Boolean
-        get() = prefs.getBoolean("show_clock", false)
-        set(v) = prefs.edit().putBoolean("show_clock", v).apply()
+        get() = bool("show_clock", false)
+        set(v) = setBool("show_clock", v)
 
     var showBattery: Boolean
-        get() = prefs.getBoolean("show_battery", false)
-        set(v) = prefs.edit().putBoolean("show_battery", v).apply()
+        get() = bool("show_battery", false)
+        set(v) = setBool("show_battery", v)
+
+    /** the chapter title at the top of the page (comics/PDF: the book's title, with the status bar hidden) */
+    var showHead: Boolean
+        get() = bool("show_head", true)
+        set(v) = setBool("show_head", v)
+
+    /** the page number / % at the bottom; off = the text goes further down */
+    var showPageNum: Boolean
+        get() = bool("show_page_num", true)
+        set(v) = setBool("show_page_num", v)
 
     /** hide the top bar a few seconds after it appears */
     var autoHideBars: Boolean
@@ -195,6 +205,7 @@ class ReaderPrefs(context: Context, private val bookId: String? = null) {
         val BOOK_KEYS = setOf(
             "font_px", "mode", "weight", "font_id", "publisher_style", "line_height",
             "turn_style", "turn_speed", "theme", "margin_top", "margin_bottom", "margin_left", "margin_right",
+            "hide_status_bar", "show_clock", "show_battery", "show_head", "show_page_num",
         )
     }
 }

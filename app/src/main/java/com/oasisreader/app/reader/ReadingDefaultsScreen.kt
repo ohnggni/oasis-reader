@@ -73,10 +73,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
     var mRight by remember { mutableIntStateOf(prefs.marginRight) }
     var brightness by remember { mutableFloatStateOf(prefs.brightness) }
     var keepOn by remember { mutableStateOf(prefs.keepScreenOn) }
-    var hideStatus by remember { mutableStateOf(prefs.hideStatusBar) }
-    var hideNav by remember { mutableStateOf(prefs.hideNavBar) }
-    var clock by remember { mutableStateOf(prefs.showClock) }
-    var battery by remember { mutableStateOf(prefs.showBattery) }
+    var chromeSet by remember { mutableStateOf(ReadingChrome.of(prefs)) }
     var autoHide by remember { mutableStateOf(prefs.autoHideBars) }
     var fontBusy by remember { mutableStateOf<String?>(null) }
     var fontProgress by remember { mutableFloatStateOf(0f) }
@@ -154,16 +151,11 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
             PanelSwitch("상단바 자동 숨김", null, autoHide, { autoHide = it; prefs.autoHideBars = it })
 
             Spacer(Modifier.height(8.dp))
-            PanelTitle("상태바 · 내비게이션 바 · 책·만화·PDF를 볼 때만")
-            PanelSwitch("상태바 숨기기", null, hideStatus, { hideStatus = it; prefs.hideStatusBar = it })
-            if (hideStatus) {
-                PanelSwitch("　위쪽에 시계 표시", null, clock, { clock = it; prefs.showClock = it })
-                PanelSwitch("　위쪽에 배터리 표시", null, battery, { battery = it; prefs.showBattery = it })
-            }
-            PanelSwitch("내비게이션 바 숨기기", null, hideNav, { hideNav = it; prefs.hideNavBar = it })
+            PanelTitle("화면 표시 · 책·만화·PDF (책마다 ▤ / ☀️ 패널에서 따로 바꿀 수 있음)")
+            ChromeSwitches(chromeSet, withNav = true) { c -> chromeSet = c; prefs.saveChrome(c) }
             Text(
                 "서재에서는 그대로 보입니다. 숨긴 바는 화면 가장자리에서 쓸어 넘기면 잠깐 나타납니다." +
-                    if (hideNav) " 제스처 내비게이션에서는 뒤로·홈이 \"한 번 쓸어 바를 꺼내고, 한 번 더\" 두 번이 될 수 있습니다." else "",
+                    if (chromeSet.hideNav) " 제스처 내비게이션에서는 뒤로·홈이 \"한 번 쓸어 바를 꺼내고, 한 번 더\" 두 번이 될 수 있습니다." else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

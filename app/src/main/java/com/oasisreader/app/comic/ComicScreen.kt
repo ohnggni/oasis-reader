@@ -97,6 +97,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.oasisreader.app.reader.barTopInset
 import com.oasisreader.app.reader.readingInsets
+import com.oasisreader.app.reader.saveChrome
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -285,7 +286,7 @@ private fun ComicViewer(
     val prefs = remember { app.getSharedPreferences("comic", android.content.Context.MODE_PRIVATE) }
     val readerPrefs = remember { com.oasisreader.app.reader.ReaderPrefs(app, book.id) }
     // 상태바·내비게이션 바 숨기기 (읽기 기본값, shared with books)
-    val readingChrome = remember { com.oasisreader.app.reader.ReadingChrome.of(readerPrefs) }
+    var readingChrome by remember { mutableStateOf(com.oasisreader.app.reader.ReadingChrome.of(readerPrefs)) }
     com.oasisreader.app.reader.ImmersiveBars(readingChrome)
     val cut = com.oasisreader.app.reader.rememberCutoutRoom()
     val scope = rememberCoroutineScope()
@@ -456,7 +457,7 @@ private fun ComicViewer(
     LaunchedEffect(barsVisible, barsShownAt, panel, autoHide) {
         if (!barsVisible) { panel = com.oasisreader.app.ui.ReadPanel.NONE; return@LaunchedEffect }
         if (panel != com.oasisreader.app.ui.ReadPanel.NONE || !autoHide) return@LaunchedEffect
-        delay(2_000)
+        delay(2_500)
         barsVisible = false
     }
     fun toggleBars() { barsVisible = !barsVisible; if (barsVisible) barsShownAt = System.currentTimeMillis() }
@@ -469,8 +470,8 @@ private fun ComicViewer(
 
     // with a bar hidden: a band at the bottom for the page number, so it does not sit on the picture
     // (not in the webtoon scroll, which runs under it as before), and the clock/battery line on top
-    val pageBand = (readingChrome.hideStatus || readingChrome.hideNav) && mode == ComicMode.PAGE
-    val topLine = if (readingChrome.statusLine) 22.dp else 0.dp
+    val pageBand = readingChrome.pageNum && (readingChrome.hideStatus || readingChrome.hideNav) && mode == ComicMode.PAGE
+    val topLine = if (readingChrome.statusLine) com.oasisreader.app.reader.STATUS_LINE_TOP + com.oasisreader.app.reader.STATUS_LINE_HEIGHT + 4.dp else 0.dp
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(
             Modifier.fillMaxSize().readingInsets(readingChrome, cut, topLine).padding(bottom = if (pageBand) 24.dp else 0.dp),
@@ -772,6 +773,16 @@ private fun ComicViewer(
             }
         }
 
+        // with the bars up (no panel), a tap or swipe on the page only puts them away — no page turn
+        if (panel == com.oasisreader.app.ui.ReadPanel.NONE && barsVisible) Box(
+            Modifier.fillMaxSize().pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false).consume()
+                    do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
+                    barsVisible = false
+                }
+            },
+        )
         // a settings panel is open: a tap (or swipe) on the page only closes it — the page stays
         if (panel != com.oasisreader.app.ui.ReadPanel.NONE) Box(
             Modifier.fillMaxSize().pointerInput(Unit) {
@@ -787,8 +798,8 @@ private fun ComicViewer(
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(barColor))
         }
         if (!barsVisible) com.oasisreader.app.reader.StatusLine(
-            readingChrome, cut, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            Modifier.align(Alignment.TopStart), height = topLine, title = book.title,
+            readingChrome, cut, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            Modifier.align(Alignment.TopStart), title = book.title,
         )
         AnimatedVisibility(
             visible = barsVisible,
@@ -838,6 +849,11 @@ private fun ComicViewer(
                                         com.oasisreader.app.ui.PanelSwitch("바 자동 숨김", null, autoHide, {
                                             autoHide = it; readerPrefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
                                         }, Modifier.weight(1f))
+                                    }
+                                    // 이 책만 (책별 설정, 기본값은 읽기 기본값)
+                                    com.oasisreader.app.reader.ChromeSwitches(readingChrome, comic = true) { c ->
+                                        readingChrome = c
+                                        readerPrefs.saveChrome(c)
                                     }
                                 }
                                 com.oasisreader.app.ui.ReadPanel.TEXT -> {
@@ -913,7 +929,7 @@ private fun ComicViewer(
             )
         }
 
-        if (label.isNotEmpty()) {
+        if (label.isNotEmpty() && readingChrome.pageNum) {
             Text(
                 "$label  ·  ${(progress * 100).roundToInt()}%",
                 style = MaterialTheme.typography.labelSmall,

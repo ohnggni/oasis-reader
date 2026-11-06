@@ -41,15 +41,25 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
-/** The reading screens' choices about the system bars (읽기 기본값 › 화면). */
-data class ReadingChrome(val hideStatus: Boolean, val hideNav: Boolean, val clock: Boolean, val battery: Boolean) {
-    /** The clock/battery line is only drawn where the status bar was. */
-    val statusLine get() = hideStatus && (clock || battery)
+/**
+ * What the reading screens show around the page (읽기 기본값, and per book in the ▤ panel):
+ * system bars, the top line (chapter title · clock · battery) and the page number at the bottom.
+ */
+data class ReadingChrome(
+    val hideStatus: Boolean, val hideNav: Boolean, val clock: Boolean, val battery: Boolean,
+    val head: Boolean = true, val pageNum: Boolean = true,
+) {
+    /** The app's own top line where the status bar was (title left, clock + battery right). */
+    val statusLine get() = hideStatus && (head || clock || battery)
 
     companion object {
-        fun of(p: ReaderPrefs) = ReadingChrome(p.hideStatusBar, p.hideNavBar, p.showClock, p.showBattery)
+        fun of(p: ReaderPrefs) = ReadingChrome(p.hideStatusBar, p.hideNavBar, p.showClock, p.showBattery, p.showHead, p.showPageNum)
     }
 }
+
+/** Top line: its padding from the top edge (the same as the page number's from the bottom) and height. */
+val STATUS_LINE_TOP = 10.dp
+val STATUS_LINE_HEIGHT = 18.dp
 
 /**
  * Where the camera hole is at the top, in dp: [top] = how far down the page must start
@@ -106,8 +116,13 @@ fun ImmersiveBars(chrome: ReadingChrome) {
         apply()
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) apply() }
         owner.lifecycle.addObserver(obs)
+        // a dialog, menu or keyboard takes the window focus and Android shows the bars again:
+        // hide them once the focus comes back
+        val focus = android.view.ViewTreeObserver.OnWindowFocusChangeListener { has -> if (has) view.post { apply() } }
+        view.viewTreeObserver.addOnWindowFocusChangeListener(focus)
         onDispose {
             owner.lifecycle.removeObserver(obs)
+            runCatching { view.viewTreeObserver.removeOnWindowFocusChangeListener(focus) }
             ctl?.show(WindowInsetsCompat.Type.systemBars())
         }
     }
@@ -130,14 +145,13 @@ fun Modifier.barTopInset(chrome: ReadingChrome, cut: CutoutRoom): Modifier = com
 }
 
 /**
- * The top line where the status bar was, from the very top of the screen: the title on the left
- * (from the left edge), clock and battery together on the right, small and muted like the chapter
- * title line. Nothing when both are off. A camera hole may sit over it; that is fine.
+ * The top line where the status bar was: the title on the left (from the left edge, a camera hole
+ * may sit over it), clock and battery together on the right, in the page number's size and colour,
+ * [STATUS_LINE_TOP] from the top. Nothing unless the status bar is hidden.
  */
 @Composable
 fun StatusLine(
-    chrome: ReadingChrome, cut: CutoutRoom, color: Color, modifier: Modifier = Modifier,
-    height: Dp = 30.dp, title: String? = null,
+    chrome: ReadingChrome, cut: CutoutRoom, color: Color, modifier: Modifier = Modifier, title: String? = null,
 ) {
     if (!chrome.statusLine) return
     val ctx = LocalContext.current
@@ -145,16 +159,14 @@ fun StatusLine(
     val battery by rememberBattery(ctx, chrome.battery)
     val right = listOfNotNull(time.takeIf { chrome.clock }, battery.takeIf { chrome.battery && it.isNotEmpty() }).joinToString("  ")
     androidx.compose.foundation.layout.Row(
-        modifier.fillMaxWidth().height(height).padding(start = 16.dp, end = maxOf(14.dp, cut.right + 6.dp)),
+        modifier.fillMaxWidth().padding(top = STATUS_LINE_TOP, start = 16.dp, end = maxOf(16.dp, cut.right + 6.dp)).height(STATUS_LINE_HEIGHT),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // left: the title (comics/PDF; a book draws its chapter title in the page itself)
         Text(
-            title.orEmpty(), color = color, fontSize = 11.sp, maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            if (chrome.head) title.orEmpty() else "", color = color, style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
         )
-        if (right.isNotEmpty()) Text(right, color = color, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+        if (right.isNotEmpty()) Text(right, color = color, style = androidx.compose.material3.MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(start = 10.dp))
     }
 }
 
@@ -195,4 +207,34 @@ private fun rememberBattery(ctx: Context, on: Boolean): androidx.compose.runtime
         onDispose { runCatching { ctx.unregisterReceiver(r) } }
     }
     return state
+}
+
+/** Writes [c] (per book when [this] has a book; the navigation bar is always for every book). */
+fun ReaderPrefs.saveChrome(c: ReadingChrome) {
+    hideStatusBar = c.hideStatus; showClock = c.clock; showBattery = c.battery
+    showHead = c.head; showPageNum = c.pageNum; hideNavBar = c.hideNav
+}
+
+/**
+ * The switches for what is shown around the page: 상태바 숨기기 · 장 제목 (comics: 책 제목) ·
+ * 시계 · 배터리 (only with the status bar hidden) · 쪽 번호 [· 내비게이션 바 숨기기].
+ */
+@Composable
+fun ChromeSwitches(c: ReadingChrome, comic: Boolean = false, withNav: Boolean = false, onChange: (ReadingChrome) -> Unit) {
+    val w = Modifier
+    androidx.compose.foundation.layout.Column {
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+            com.oasisreader.app.ui.PanelSwitch("상태바 숨기기", null, c.hideStatus, { onChange(c.copy(hideStatus = it)) }, w.weight(1f))
+            com.oasisreader.app.ui.PanelSwitch(if (comic) "책 제목" else "장 제목", null, c.head, { onChange(c.copy(head = it)) }, w.weight(1f))
+        }
+        if (c.hideStatus) androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+            com.oasisreader.app.ui.PanelSwitch("시계", null, c.clock, { onChange(c.copy(clock = it)) }, w.weight(1f))
+            com.oasisreader.app.ui.PanelSwitch("배터리", null, c.battery, { onChange(c.copy(battery = it)) }, w.weight(1f))
+        }
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+            com.oasisreader.app.ui.PanelSwitch("아래 쪽 번호", null, c.pageNum, { onChange(c.copy(pageNum = it)) }, w.weight(1f))
+            if (withNav) com.oasisreader.app.ui.PanelSwitch("내비게이션 바 숨기기", null, c.hideNav, { onChange(c.copy(hideNav = it)) }, w.weight(1f))
+            else androidx.compose.foundation.layout.Spacer(w.weight(1f))
+        }
+    }
 }

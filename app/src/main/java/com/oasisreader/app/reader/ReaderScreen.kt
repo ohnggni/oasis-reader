@@ -179,7 +179,8 @@ private fun ReaderBody(
 ) {
     val context = LocalContext.current
     // 상태바·내비게이션 바 숨기기 (읽기 기본값), and the camera hole for the top line
-    val readingChrome = remember { ReadingChrome.of(prefs) }
+    var readingChrome by remember { mutableStateOf(ReadingChrome.of(prefs)) }
+    fun setChrome(c: ReadingChrome) { readingChrome = c; prefs.saveChrome(c) }
     ImmersiveBars(readingChrome)
     val cut = rememberCutoutRoom()
     val app = context.applicationContext
@@ -325,8 +326,11 @@ private fun ReaderBody(
     // text clear of it with a fixed extra margin on both sides (only in this posture).
     val sideways = rememberSideways()
     val sidePad = if (sideways) SIDEWAYS_PAD_DP.dp else 0.dp
-    val padTop = (BAR_DP + 10 + mTop).coerceAtLeast(16)
-    val padBottom = ((if (sideways) 34 + SIDEWAYS_EXTRA_BOTTOM else 34) + mBottom).coerceAtLeast(12)
+    // status bar hidden and nothing on the top line / no page number: the text takes that room
+    val topFree = readingChrome.hideStatus && !readingChrome.statusLine
+    val padTop = ((if (topFree) 26 else BAR_DP + 10) + mTop).coerceAtLeast(16)
+    val bottomBase = if (readingChrome.pageNum) 34 else 16
+    val padBottom = ((if (sideways) bottomBase + SIDEWAYS_EXTRA_BOTTOM else bottomBase) + mBottom).coerceAtLeast(12)
     val padLeft = (24 + mLeft).coerceAtLeast(6)
     val padRight = (24 + mRight).coerceAtLeast(6)
 
@@ -383,7 +387,7 @@ private fun ReaderBody(
                     colors = ReaderHtml.COLORS,
                     docUrl = doc.url,
                     head = chapterTitleFor(p, t.index).ifBlank { book?.title.orEmpty() },
-                    headLeft = readingChrome.statusLine,
+                    headShow = readingChrome.head && !readingChrome.hideStatus,
                     hasPrev = t.index > 0,
                     hasNext = t.index < p.spine.size - 1,
                 ),
@@ -402,7 +406,7 @@ private fun ReaderBody(
     LaunchedEffect(barsVisible, barsShownAt, panel, menuOpen, tocOpen, hlListOpen, autoHide, state is LoadState.Ready) {
         if (!autoHide || !barsVisible || state !is LoadState.Ready) return@LaunchedEffect
         if (panel != Panel.NONE || menuOpen || tocOpen || hlListOpen) return@LaunchedEffect
-        delay(2_000)
+        delay(2_500)
         barsVisible = false
     }
 
@@ -410,6 +414,9 @@ private fun ReaderBody(
         webView?.evaluateJavascript("window.Reader && Reader.setSpread($spread)", null)
     }
     // insets can change (rotation, fold/unfold)
+    // the running head in the page: off, or drawn by the app on the status line instead
+    val headInPage = readingChrome.head && !readingChrome.hideStatus
+    LaunchedEffect(headInPage, webView) { webView?.evaluateJavascript("window.Reader && Reader.setHead($headInPage)", null) }
     LaunchedEffect(padTop, padBottom, padLeft, padRight, webView) {
         webView?.evaluateJavascript("window.Reader && Reader.setInsets($padTop, $padBottom, $padLeft, $padRight)", null)
     }
@@ -668,6 +675,7 @@ private fun ReaderBody(
 
     fun resetBookSettings() {
         prefs.resetBook()
+        readingChrome = ReadingChrome.of(prefs)
         fontPx = prefs.fontPx; lineHeight = prefs.lineHeight; mode = prefs.mode
         weight = prefs.weight; fontId = prefs.fontId; publisherStyle = prefs.publisherStyle
         turnStyle = prefs.turnStyle; turnSpeed = prefs.turnSpeed
@@ -1010,7 +1018,21 @@ private fun ReaderBody(
             )
 
             // where the status bar was: clock (left) and battery (right) on the chapter-title line
-            if (state is LoadState.Ready && !showBars) StatusLine(readingChrome, cut, Color(rTheme.muted).copy(alpha = 0.8f), Modifier.align(Alignment.TopStart))
+            if (state is LoadState.Ready && !showBars) StatusLine(
+                readingChrome, cut, chrome.copy(alpha = 0.6f), Modifier.align(Alignment.TopStart),
+                title = chapterTitle.ifBlank { title },
+            )
+
+            // with the bars up, a tap or swipe on the page only puts them away (no page turn)
+            if (panel == Panel.NONE && barsVisible && state is LoadState.Ready) Box(
+                Modifier.fillMaxSize().pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false).consume()
+                        do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
+                        barsVisible = false
+                    }
+                },
+            )
 
             // the running head (chapter title) is drawn inside the page, so it turns with it
             com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
@@ -1141,6 +1163,7 @@ private fun ReaderBody(
                                                     prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
                                                 },
                                             )
+                                            ChromeSwitches(readingChrome, onChange = ::setChrome)
                                             com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
                                         }
                                         Panel.NAV -> {
@@ -1219,7 +1242,7 @@ private fun ReaderBody(
             )
 
             // page indicator — book mode: "3 / 34 · 12%", scroll mode: "12%"
-            if (state is LoadState.Ready || turnShot != null) {
+            if (readingChrome.pageNum && (state is LoadState.Ready || turnShot != null)) {
                 val pct = "${(overall * 100).roundToInt()}%"
                 val label = if (mode == ReaderMode.PAGE && pageLabel.isNotEmpty()) "$pageLabel  ·  $pct" else pct
                 if (mode == ReaderMode.SCROLL) {

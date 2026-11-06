@@ -1,5 +1,9 @@
 package com.oasisreader.app.audio
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -436,9 +440,34 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val b = AudioPlayback.book
     val web = AudioPlayback.web
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("재생 중", onBack = onBack) {
-            if (b != null) com.oasisreader.app.ui.EmojiButton("⏹️", "듣기 끝내기") { AudioPlayback.close(context); onBack() }
+    // the top bar fades out 2.5 s after the last touch (its place stays, so nothing moves under
+    // the finger); any touch brings it back, and while hidden its buttons do not react
+    var barShown by remember { mutableStateOf(true) }
+    var touchedAt by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(barShown, touchedAt, b) {
+        if (b == null || !barShown) return@LaunchedEffect
+        kotlinx.coroutines.delay(2_500)
+        barShown = false
+    }
+    val barAlpha by androidx.compose.animation.core.animateFloatAsState(if (barShown) 1f else 0f, label = "bar")
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                barShown = true; touchedAt = System.currentTimeMillis()
+            }
+        },
+    ) {
+        Box {
+            Box(Modifier.graphicsLayer { alpha = barAlpha }) {
+                TopBar("재생 중", onBack = onBack) {
+                    if (b != null) com.oasisreader.app.ui.EmojiButton("⏹️", "듣기 끝내기") { AudioPlayback.close(context); onBack() }
+                }
+            }
+            // hidden: a touch on the bar only brings it back
+            if (!barShown) Box(Modifier.matchParentSize().pointerInput(Unit) {
+                awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() }
+            })
         }
         if (b == null || web == null) Text("재생 중인 오디오북이 없습니다.", modifier = Modifier.padding(24.dp))
         else Column(

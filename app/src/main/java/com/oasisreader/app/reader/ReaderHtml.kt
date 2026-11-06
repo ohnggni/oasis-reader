@@ -30,7 +30,7 @@ data class ReaderConfig(
     val colors: List<String>,
     val docUrl: String,              // this chapter's URL (same-chapter links)
     val head: String = "",           // running head: the chapter title at the top of every page
-    val headLeft: Boolean = false,   // status bar hidden + clock/battery: head on the left, room on the right
+    val headShow: Boolean = true,    // false: no running head in the page (off, or drawn by the app on the status line)
     val hasPrev: Boolean = false,
     val hasNext: Boolean = false,
 )
@@ -188,7 +188,6 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   font: 11px/30px sans-serif; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   opacity: .8; pointer-events: none;
 }
-html.hleft #rhead { text-align: left; padding: 0 120px 0 16px; }
 
 /* highlight palette shown over a text selection */
 #hlbar {
@@ -257,7 +256,7 @@ html.hleft #rhead { text-align: left; padding: 0 120px 0 16px; }
   html.setAttribute('data-w', String(CFG.weight || 0));
 
   document.getElementById('rhead').textContent = CFG.head || '';
-  if (CFG.headLeft) html.classList.add('hleft');
+  if (CFG.headShow === false) document.getElementById('rhead').style.display = 'none';
   var cprev = document.getElementById('cprev'), cnext = document.getElementById('cnext');
   if (!CFG.hasPrev) cprev.style.visibility = 'hidden';
   if (!CFG.hasNext) cnext.textContent = '마지막 장입니다';
@@ -726,6 +725,7 @@ html.hleft #rhead { text-align: left; padding: 0 120px 0 16px; }
       layout(f);
     },
     goFraction: function (f) { layout(f); },
+    setHead: function (v) { document.getElementById('rhead').style.display = v ? '' : 'none'; },
     goAnchor: function (id) { anchorId = id; if (!goAnchor()) report(); },
     /* read aloud: this chapter's sentences and the first one on the page on screen */
     ttsList: function (matchText, frac) {
