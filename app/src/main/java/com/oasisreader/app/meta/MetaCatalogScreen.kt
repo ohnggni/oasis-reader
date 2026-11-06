@@ -92,6 +92,11 @@ private fun mb(bytes: Long) = if (bytes <= 0) null else "%.0f MB".format(bytes /
  * The bookoasis catalog as it should be: libraries → series (newest first by real file date)
  * → volumes with clean titles. Data from oasis-meta, files from bookoasis.
  */
+/** 📂 있던 폴더 열기: the series the meta catalog of that server should open with, once. */
+object MetaCatalogNav {
+    val pending = HashMap<String, MetaSeries>()
+}
+
 @Composable
 fun MetaCatalogScreen(
     serverId: String,
@@ -144,7 +149,7 @@ fun MetaCatalogScreen(
     var seriesTile by remember { mutableIntStateOf(prefs.getInt("series_tile", SERIES_TILE_DEFAULT).let { v -> SERIES_TILE_STEPS.minBy { kotlin.math.abs(it - v) } }) }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
-    var openSeries by remember { mutableStateOf<MetaSeries?>(null) }
+    var openSeries by remember { mutableStateOf<MetaSeries?>(MetaCatalogNav.pending.remove(serverId)) }   // 📂 있던 폴더 열기 opens a series
     var openBook by remember { mutableStateOf<MetaBook?>(null) }   // detail sheet over the list
     var reload by remember { mutableIntStateOf(0) }
 
@@ -196,7 +201,7 @@ fun MetaCatalogScreen(
     fun readNow(b: MetaBook) {
         val href = api.downloadUrl(b) ?: return
         if (href in ownedSet) scope.launch { db.books().findBySource(null, href)?.let { onOpenBook(it.id) } }
-        else Downloads.startUrl(app, server, api.key(b), href, b.name, pinned = false, onDone = { onOpenBook(it.id) })
+        else Downloads.startUrl(app, server, api.key(b), href, b.name, pinned = false, onDone = { onOpenBook(it.id) }, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
     }
 
     /** 서재에 담기 / 보관: keep for good (a cached book with its file still here is just marked). */
@@ -208,8 +213,8 @@ fun MetaCatalogScreen(
                 db.books().setPinned(book.id, true)
                 if (!quiet) android.widget.Toast.makeText(context, "서재에 보관합니다: ${book.title}", android.widget.Toast.LENGTH_SHORT).show()
                 collectionId?.let { com.oasisreader.app.ui.ShelfCollections.set(db, it, book.id, true) }
-            } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId)
-        } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId)
+            } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+        } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
     }
 
     /**
@@ -249,7 +254,7 @@ fun MetaCatalogScreen(
         if (href in ownedSet) {
             scope.launch { db.books().findBySource(null, href)?.let { onOpenBook(it.id) } }
         } else {
-            Downloads.startUrl(app, server, api.key(b), href, b.name)
+            Downloads.startUrl(app, server, api.key(b), href, b.name, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
         }
     }
 

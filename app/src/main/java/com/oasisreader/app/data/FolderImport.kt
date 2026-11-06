@@ -149,6 +149,7 @@ object FolderImport {
                         pinned = true, moveSource = true,
                     )
                     collectionFor(item)?.let { ShelfCollections.set(db, it, book.id, true) }
+                    db.books().setOrigin(book.id, com.oasisreader.app.data.BookOrigin.folder(tree.toString(), item.folder))
                     ok++
                 } catch (e: Exception) {
                     failed += item.name

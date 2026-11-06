@@ -157,20 +157,25 @@ private sealed interface LoadState {
 
 /** The reader in its page colours: menus and panels take the theme's light or dark look. */
 @Composable
-fun ReaderScreen(bookId: String, focusHighlight: Pair<Int, String>? = null, onBack: () -> Unit) {
+fun ReaderScreen(
+    bookId: String, focusHighlight: Pair<Int, String>? = null, onBack: () -> Unit,
+    onOpenBook: (String) -> Unit = {}, onOpenFolder: (com.oasisreader.app.data.db.BookEntity) -> Unit = {},
+) {
     val app = LocalContext.current.applicationContext
     val prefs = remember(bookId) { ReaderPrefs(app, bookId) }
     var theme by remember(bookId) { mutableStateOf(prefs.theme) }
     val rTheme = theme.resolve(isAppDark())
     com.oasisreader.app.ui.theme.OasisTheme(darkTheme = rTheme.dark) {
-        ReaderBody(bookId, focusHighlight, onBack, prefs, theme, rTheme) { t -> theme = t; prefs.theme = t }
+        ReaderBody(bookId, focusHighlight, onBack, prefs, theme, rTheme, onOpenBook, onOpenFolder) { t -> theme = t; prefs.theme = t }
     }
 }
 
 @Composable
 private fun ReaderBody(
     bookId: String, focusHighlight: Pair<Int, String>?, onBack: () -> Unit,
-    prefs: ReaderPrefs, theme: ReaderTheme, rTheme: ReaderTheme, onTheme: (ReaderTheme) -> Unit,
+    prefs: ReaderPrefs, theme: ReaderTheme, rTheme: ReaderTheme,
+    onOpenBook: (String) -> Unit, onOpenFolder: (com.oasisreader.app.data.db.BookEntity) -> Unit,
+    onTheme: (ReaderTheme) -> Unit,
 ) {
     val context = LocalContext.current
     // 상태바·내비게이션 바 숨기기 (읽기 기본값), and the camera hole for the top line
@@ -569,10 +574,23 @@ private fun ReaderBody(
         ReadAloudService.update(chapter = pkg?.let { chapterTitleFor(it, curIndex) })
     }
 
+    // 다음 권: looked up once the last page is reached (the 컬렉션, then the folder it came from)
+    var atBookEnd by remember { mutableStateOf(false) }
+    var nextVol by remember { mutableStateOf<com.oasisreader.app.data.NextVolume?>(null) }
+    var nextAsked by remember { mutableStateOf(false) }
+    var nextClosed by remember { mutableStateOf(false) }
+    LaunchedEffect(atBookEnd) {
+        if (atBookEnd && !nextAsked) {
+            nextAsked = true
+            book?.let { b -> nextVol = runCatching { com.oasisreader.app.data.NextVolumes.find(app, b) }.getOrNull() }
+        }
+    }
+
     fun savePosition(fraction: Float, end: Boolean) {
         val p = pkg ?: return
         curFraction = fraction
         val idx = curIndex
+        atBookEnd = end && idx == p.spine.size - 1
         val overall = p.overall(idx, fraction)
         scope.launch {
             db.books().savePosition(bookId, idx, fraction, overall, System.currentTimeMillis())
@@ -1139,6 +1157,14 @@ private fun ReaderBody(
                                                 book = book?.copy(finishedAt = at)
                                                 scope.launch { db.books().setFinished(bookId, at) }
                                             }
+                                            com.oasisreader.app.ui.PanelAction("⏭️", "다음 권") {
+                                                panel = Panel.NONE
+                                                scope.launch { findAndOpenNext(context, book, nextVol, onOpenBook) }
+                                            }
+                                            if (canOpenOrigin(book)) com.oasisreader.app.ui.PanelAction("📂", "이 책이 있던 폴더 열기") {
+                                                panel = Panel.NONE
+                                                book?.let(onOpenFolder)
+                                            }
                                         }
                                         else -> {}
                                     }
@@ -1175,6 +1201,14 @@ private fun ReaderBody(
                         )
                     }
                 }
+            }
+
+            // the end of the book: the next volume, one tap away
+            nextVol?.let { n ->
+                if (atBookEnd && !nextClosed && jumpBack == null) NextVolumeCard(
+                    n, onOpen = { openNextVolume(context, n, onOpenBook) }, onDismiss = { nextClosed = true },
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = if (showBars) 104.dp else 44.dp),
+                )
             }
 
             // this page is bookmarked: a small ribbon in the top corner

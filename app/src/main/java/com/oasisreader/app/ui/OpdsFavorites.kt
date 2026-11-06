@@ -15,6 +15,9 @@ object OpdsFavorites {
     @Serializable
     data class Place(val urls: List<String>, val labels: List<String>, val name: String = labels.lastOrNull().orEmpty())
 
+    /** 📂 있던 폴더 열기: the folder the OPDS screen of that server should start in, once. */
+    val pending = HashMap<String, Place>()
+
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("catalog", Context.MODE_PRIVATE)
     private val listSer = ListSerializer(Place.serializer())
 

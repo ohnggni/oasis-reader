@@ -712,7 +712,7 @@ fun LibraryScreen(
                         val n = links.count { it.bookId == b.id }
                         Text("📚 컬렉션에 넣기" + if (n > 0) " (${n}곳에 있음)" else "")
                     }
-                    onSourceFolder?.let { open -> TextButton(onClick = { menuFor = null; open(b) }) { Text("📂 있던 폴더 열기") } }
+                    onSourceFolder?.takeIf { com.oasisreader.app.reader.canOpenOrigin(b) }?.let { open -> TextButton(onClick = { menuFor = null; open(b) }) { Text("📂 있던 폴더 열기") } }
                     TextButton(onClick = { menuFor = null; renaming = b }) { Text("✏️ 제목 바꾸기") }
                     val isAudio = b.format == AudioLibraryLink.FORMAT
                     if (isAudio) {

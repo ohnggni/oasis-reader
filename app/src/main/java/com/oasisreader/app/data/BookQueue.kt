@@ -45,6 +45,7 @@ object BookQueue {
         val state: State = State.WAITING,
         val error: String? = null,
         val addedAt: Long = System.currentTimeMillis(),
+        val origin: String? = null,      // BookOrigin JSON (DB v8)
     )
 
     private const val WORK = "book-download"
@@ -173,6 +174,7 @@ object BookQueue {
                 db.books().rename(book.id, job.title); book = book.copy(title = job.title)
             }
             job.collectionId?.let { com.oasisreader.app.ui.ShelfCollections.set(db, it, book.id, true) }
+            Downloads.recordOrigin(app, book.id, job.origin)
             change(app) { l -> l.filterNot { it.key == job.key } }
             Downloads.setProgress(job.key, null)
             Downloads.message("서재에 담았습니다: ${book.title}")

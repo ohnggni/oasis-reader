@@ -44,6 +44,8 @@ data class BookEntity(
     @ColumnInfo(defaultValue = "1") val pinned: Boolean = true,
     // KOReader document id (partial MD5 of the original file) for bookoasis progress sync
     val kosyncDoc: String? = null,
+    // where it came from, for 다음 권 / 있던 폴더 열기: JSON of [com.oasisreader.app.data.BookOrigin] (DB v8)
+    val origin: String? = null,
 )
 
 @Entity(tableName = "highlights", indices = [Index("bookId")])
@@ -120,6 +122,12 @@ interface BookDao {
 
     @Query("UPDATE books SET spineIndex = :spine, chapterFraction = :fraction, progress = :progress, lastReadAt = :now WHERE id = :id")
     suspend fun savePosition(id: String, spine: Int, fraction: Float, progress: Float, now: Long)
+
+    @Query("UPDATE books SET origin = :origin WHERE id = :id")
+    suspend fun setOrigin(id: String, origin: String?)
+
+    @Query("SELECT * FROM books WHERE origin = :origin")
+    suspend fun withOrigin(origin: String): List<BookEntity>
 
     @Query("UPDATE books SET finishedAt = :at WHERE id = :id")
     suspend fun setFinished(id: String, at: Long?)
@@ -286,7 +294,7 @@ interface ReadingTimeDao {
 
 @Database(
     entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class, CollectionEntity::class, BookCollectionEntity::class, RemovedBookEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -303,7 +311,7 @@ abstract class AppDatabase : RoomDatabase() {
         // NOTE: once real data exists, schema changes need real Migrations — never a destructive fallback.
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "oasis.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build().also { instance = it }
         }
 
@@ -357,5 +365,12 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
 val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `removed_books` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `author` TEXT, `format` TEXT NOT NULL, `chapters` TEXT NOT NULL, `opdsId` TEXT, `sourceUrl` TEXT, `identifier` TEXT, `removedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+    }
+}
+
+/** v8: books.origin — the OPDS folder / meta series / phone folder a book came from. */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `books` ADD COLUMN `origin` TEXT")
     }
 }

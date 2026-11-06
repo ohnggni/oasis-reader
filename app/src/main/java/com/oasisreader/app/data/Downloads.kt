@@ -43,10 +43,10 @@ object Downloads {
      * it goes on with the app closed and can be paused. 바로 읽기 (opens the book when done)
      * runs here, right away.
      */
-    fun start(context: Context, server: Server, entry: OpdsEntry, pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null) {
+    fun start(context: Context, server: Server, entry: OpdsEntry, pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null, origin: String? = null) {
         val acq = entry.readable ?: run { _messages.tryEmit("EPUB, CBZ/ZIP, TXT, PDF 파일이 없는 항목입니다"); return }
         if (pinned && onDone == null) {
-            BookQueue.enqueue(context, BookQueue.Job(entry.id, server.id, acq.href, entry.title, collectionId = collectionId))
+            BookQueue.enqueue(context, BookQueue.Job(entry.id, server.id, acq.href, entry.title, collectionId = collectionId, origin = origin))
             return
         }
         if (_progress.value.containsKey(entry.id)) return
@@ -66,6 +66,7 @@ object Downloads {
                     tmp, sourceUrl = acq.href, opdsId = entry.id,
                     titleHint = hint, fallbackTitle = entry.title, pinned = pinned, moveSource = true,
                 )
+                recordOrigin(app, book.id, origin)
                 afterImport(app, book, pinned, onDone)
             } catch (e: HttpException) {
                 _messages.tryEmit("받기 실패: ${e.message}")
@@ -85,9 +86,10 @@ object Downloads {
     fun startUrl(
         context: Context, server: Server, key: String, href: String, title: String,
         pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null,
+        origin: String? = null,
     ) {
         if (pinned && onDone == null) {
-            BookQueue.enqueue(context, BookQueue.Job(key, server.id, href, title, meta = true, collectionId = collectionId))
+            BookQueue.enqueue(context, BookQueue.Job(key, server.id, href, title, meta = true, collectionId = collectionId, origin = origin))
             return
         }
         if (_progress.value.containsKey(key)) return
@@ -109,6 +111,7 @@ object Downloads {
                         b.copy(title = title)
                     } else b
                 }
+                recordOrigin(app, book.id, origin)
                 afterImport(app, book, pinned, onDone)
             } catch (e: HttpException) {
                 _messages.tryEmit("받기 실패: ${e.message}")
@@ -119,6 +122,11 @@ object Downloads {
                 _progress.update { it - key }
             }
         }
+    }
+
+    /** Where the book came from (다음 권 / 있던 폴더 열기). */
+    suspend fun recordOrigin(app: Context, bookId: String, origin: String?) {
+        if (origin != null) runCatching { com.oasisreader.app.data.db.AppDatabase.get(app).books().setOrigin(bookId, origin) }
     }
 
     /** Kept books get a message; "바로 읽기" opens the book and makes room in the cache. */

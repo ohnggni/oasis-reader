@@ -180,6 +180,23 @@ private fun App() {
     }
 
     fun openServer(from: String, id: String?) { serverReturn = from; route = Route.SERVER + (id ?: "") }
+    /** 📂 있던 폴더 열기: the OPDS folder or meta series a book was received from. */
+    fun openOrigin(b: BookEntity) {
+        val o = com.oasisreader.app.data.BookOrigin.decode(b.origin) ?: return
+        val sid = o.server ?: return
+        when (o.type) {
+            com.oasisreader.app.data.BookOrigin.OPDS -> {
+                com.oasisreader.app.ui.OpdsFavorites.pending[sid] = com.oasisreader.app.ui.OpdsFavorites.Place(o.urls, o.labels)
+                route = Route.OPDS_OF + sid
+            }
+            com.oasisreader.app.data.BookOrigin.META -> {
+                val series = o.series ?: return
+                val lib = o.library ?: return
+                com.oasisreader.app.meta.MetaCatalogNav.pending[sid] = com.oasisreader.app.meta.MetaSeries(lib, series)
+                route = Route.CATALOG_OF + sid
+            }
+        }
+    }
 
     PageStatusBarIcons()
     when {
@@ -285,11 +302,18 @@ private fun App() {
             // reader:<bookId>[:<spineIndex>:<highlightId>]
             val parts = route.removePrefix(Route.READER).split(':')
             val focus = if (parts.size >= 3) parts[1].toIntOrNull()?.let { it to parts[2] } else null
-            val format by produceState<String?>(null, parts[0]) { value = db.books().get(parts[0])?.format ?: BookStore.FORMAT_EPUB }
-            when (format) {
-                null -> Box(Modifier.fillMaxSize())
-                BookStore.FORMAT_COMIC, BookStore.FORMAT_PDF -> ComicScreen(bookId = parts[0], onBack = { route = Route.LIBRARY })
-                else -> ReaderScreen(bookId = parts[0], focusHighlight = focus, onBack = { route = Route.LIBRARY })
+            key(parts[0]) {
+                val format by produceState<String?>(null, parts[0]) { value = db.books().get(parts[0])?.format ?: BookStore.FORMAT_EPUB }
+                val openBook: (String) -> Unit = { id -> route = Route.READER + id }
+                when (format) {
+                    null -> Box(Modifier.fillMaxSize())
+                    BookStore.FORMAT_COMIC, BookStore.FORMAT_PDF -> ComicScreen(
+                        bookId = parts[0], onBack = { route = Route.LIBRARY }, onOpenBook = openBook, onOpenFolder = ::openOrigin,
+                    )
+                    else -> ReaderScreen(
+                        bookId = parts[0], focusHighlight = focus, onBack = { route = Route.LIBRARY }, onOpenBook = openBook, onOpenFolder = ::openOrigin,
+                    )
+                }
             }
         }
         else -> Box(Modifier.fillMaxSize()) { LibraryScreen(
@@ -331,6 +355,7 @@ private fun App() {
             onDelete = { b, keepHl -> scope.launch { store.delete(b.id, keepHl) } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
+            onSourceFolder = ::openOrigin,
         )
             // an audiobook is loaded: a small player at the bottom of the library
             com.oasisreader.app.audio.AudioMiniBar(

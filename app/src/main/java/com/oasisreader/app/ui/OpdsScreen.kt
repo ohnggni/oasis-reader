@@ -98,8 +98,12 @@ fun OpdsScreen(
     }
 
     // navigation stack of catalog pages
-    val stack = remember { mutableStateListOf(server.url) }
-    val labels = remember { mutableStateListOf(server.name) }   // folder name shown for each stack level
+    // 📂 있던 폴더 열기 (from a book) starts right in that folder
+    val startAt = remember(serverId) { OpdsFavorites.pending.remove(serverId)?.takeIf { it.urls.isNotEmpty() && it.urls.size == it.labels.size } }
+    val stack = remember { mutableStateListOf(*(startAt?.urls ?: listOf(server.url)).toTypedArray()) }
+    val labels = remember { mutableStateListOf(*(startAt?.labels ?: listOf(server.name)).toTypedArray()) }   // folder name shown for each stack level
+    /** This folder, as the 출처 of a book received here (다음 권 / 있던 폴더 열기). */
+    fun here(): String? = com.oasisreader.app.data.BookOrigin.opds(server.id, stack.toList(), labels.toList())
     fun open(url: String, label: String) { stack.add(url); labels.add(label) }
     fun popTo(level: Int) { while (stack.size > level + 1) { stack.removeAt(stack.size - 1); labels.removeAt(labels.size - 1) } }
     var state by remember { mutableStateOf<FeedState>(FeedState.Loading) }
@@ -199,7 +203,7 @@ fun OpdsScreen(
                     col?.let { ShelfCollections.set(db, it.id, already.id, true) }
                 } else {
                     n++
-                    Downloads.start(app, server, e, collectionId = col?.id)
+                    Downloads.start(app, server, e, collectionId = col?.id, origin = here())
                 }
             }
             android.widget.Toast.makeText(
@@ -379,7 +383,7 @@ fun OpdsScreen(
                                 owned = e.id in ownedSet,
                                 progress = progress[e.id],
                                 onClick = { if (e.navHref != null && !e.isBook) open(e.navHref, e.title) else detail = e },
-                                onDownload = { Downloads.start(app, server, e) },
+                                onDownload = { Downloads.start(app, server, e, origin = here()) },
                             )
                         }
                         nextUrl?.let { more ->
@@ -412,7 +416,7 @@ fun OpdsScreen(
                             onClick = {
                                 if (e.navHref != null && !e.isBook) open(e.navHref, e.title) else detail = e
                             },
-                            onDownload = { Downloads.start(app, server, e) },
+                            onDownload = { Downloads.start(app, server, e, origin = here()) },
                         )
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }
@@ -480,9 +484,9 @@ fun OpdsScreen(
                     e.readable != null -> Row {
                         TextButton(onClick = {
                             detail = null
-                            Downloads.start(app, server, e, pinned = false, onDone = { onOpenBook(it.id) })
+                            Downloads.start(app, server, e, pinned = false, onDone = { onOpenBook(it.id) }, origin = here())
                         }) { Text("📖 바로 읽기") }
-                        TextButton(onClick = { Downloads.start(app, server, e) }) { Text("⬇️ 서재에 담기") }
+                        TextButton(onClick = { Downloads.start(app, server, e, origin = here()) }) { Text("⬇️ 서재에 담기") }
                     }
                 }
             },

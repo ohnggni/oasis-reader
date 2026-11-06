@@ -160,7 +160,7 @@ private fun decodeStrip(file: File, s: Slice, targetW: Int): Bitmap? {
 
 /** Vertical, gap-free webtoon viewer for CBZ/ZIP books. */
 @Composable
-fun ComicScreen(bookId: String, onBack: () -> Unit) {
+fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit = {}, onOpenFolder: (BookEntity) -> Unit = {}) {
     val context = LocalContext.current
     val app = context.applicationContext
     val store = remember { BookStore.get(app) }
@@ -233,7 +233,7 @@ fun ComicScreen(bookId: String, onBack: () -> Unit) {
                 TextButton(onClick = onBack) { Text("뒤로") }
             }
             b == null || p == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            else -> ComicViewer(b, p, store, db, onBack)
+            else -> ComicViewer(b, p, store, db, onBack, onOpenBook, onOpenFolder)
         }
     }
 }
@@ -276,7 +276,10 @@ private fun guessMode(pkg: ComicPackage): ComicMode {
 }
 
 @Composable
-private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, db: AppDatabase, onBack: () -> Unit) {
+private fun ComicViewer(
+    book: BookEntity, pkg: ComicPackage, store: BookStore, db: AppDatabase, onBack: () -> Unit,
+    onOpenBook: (String) -> Unit, onOpenFolder: (BookEntity) -> Unit,
+) {
     val context = LocalContext.current
     val app = context.applicationContext
     val prefs = remember { app.getSharedPreferences("comic", android.content.Context.MODE_PRIVATE) }
@@ -307,6 +310,10 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
     var turnPicker by remember { mutableStateOf(false) }
     var turnSpeed by remember { mutableStateOf(readerPrefs.turnSpeed) }
     var finished by remember { mutableStateOf(book.finishedAt != null) }
+    // 다음 권 (looked up at the last page)
+    var nextVol by remember { mutableStateOf<com.oasisreader.app.data.NextVolume?>(null) }
+    var nextAsked by remember { mutableStateOf(false) }
+    var nextClosed by remember { mutableStateOf(false) }
 
     // position, shared by both modes: page index + fraction inside that page (scroll mode)
     var curPage by remember { mutableIntStateOf(book.spineIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))) }
@@ -871,6 +878,14 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                                         val at = if (finished) System.currentTimeMillis() else null
                                         scope.launch { db.books().setFinished(book.id, at) }
                                     }
+                                    com.oasisreader.app.ui.PanelAction("⏭️", "다음 권") {
+                                        panel = com.oasisreader.app.ui.ReadPanel.NONE
+                                        scope.launch { com.oasisreader.app.reader.findAndOpenNext(context, book, nextVol, onOpenBook) }
+                                    }
+                                    if (com.oasisreader.app.reader.canOpenOrigin(book)) com.oasisreader.app.ui.PanelAction("📂", "이 책이 있던 폴더 열기") {
+                                        panel = com.oasisreader.app.ui.ReadPanel.NONE
+                                        onOpenFolder(book)
+                                    }
                                 }
                                 else -> {}
                             }
@@ -879,6 +894,23 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
+        }
+
+        // the last page: the next volume, one tap away
+        val atEnd = pageCount > 0 && lastPageShown >= pageCount - 1
+        LaunchedEffect(atEnd) {
+            if (atEnd && !nextAsked) {
+                nextAsked = true
+                nextVol = runCatching { com.oasisreader.app.data.NextVolumes.find(app, book) }.getOrNull()
+            }
+        }
+        nextVol?.let { n ->
+            if (atEnd && !nextClosed) com.oasisreader.app.reader.NextVolumeCard(
+                n, onOpen = { com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook) }, onDismiss = { nextClosed = true },
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .let { if (readingChrome.hideNav) it else it.navigationBarsPadding() }
+                    .padding(start = 16.dp, end = 16.dp, bottom = if (barsVisible) 96.dp else 40.dp),
+            )
         }
 
         if (label.isNotEmpty()) {
