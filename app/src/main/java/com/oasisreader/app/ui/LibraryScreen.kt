@@ -287,9 +287,10 @@ fun LibraryScreen(
     // series groups (묶기: 시리즈): books from the same server series / folder, or with the same title
     // once the volume number is taken off; same kind only; two or more. Shown like 컬렉션 folders
     // (ids "s:…", not saved anywhere).
-    val seriesGroups: List<Pair<CollectionEntity, List<BookEntity>>> = remember(base, groupMode) {
+    // 컬렉션 stay as they are: only books on no 컬렉션 are grouped by series
+    val seriesGroups: List<Pair<CollectionEntity, List<BookEntity>>> = remember(base, groupMode, inAnyCol) {
         if (groupMode != "series") emptyList()
-        else base.groupBy { seriesKeyOf(it) }.mapNotNull { (k, bs) ->
+        else base.filter { it.id !in inAnyCol }.groupBy { seriesKeyOf(it) }.mapNotNull { (k, bs) ->
             if (k == null || bs.size < 2) null
             else CollectionEntity("s:$k", seriesNameOf(bs), 0L, 0) to bs
         }
@@ -320,9 +321,10 @@ fun LibraryScreen(
             !useGroups -> shown.map { ShelfEntry.Book(it) }
             else -> {
                 // with a search, a folder is shown when its name matches; the other hits come out as books
+                // 🔗 시리즈별: the 컬렉션 folders as with 📚, plus series groups of the books on no 컬렉션
                 val groups: List<Pair<CollectionEntity, Set<String>>> =
-                    if (groupMode == "series") seriesGroups.map { (c, bs) -> c to bs.map { it.id }.toSet() }
-                    else collections.mapNotNull { c -> byCol[c.id]?.let { c to it } }
+                    collections.mapNotNull { c -> byCol[c.id]?.let { c to it } } +
+                        (if (groupMode == "series") seriesGroups.map { (c, bs) -> c to bs.map { it.id }.toSet() } else emptyList())
                 val folders = groups.mapNotNull { (c, ids) ->
                     val inside = if (q.isEmpty()) shown.filter { it.id in ids }
                     else if (ShelfSearch.matches(c.name, q)) pool.filter { it.id in ids } else emptyList()
@@ -331,7 +333,7 @@ fun LibraryScreen(
                     if (sort == ShelfSort.TITLE || sort == ShelfSort.AUTHOR) list.sortedWith { a, b -> ShelfSearch.naturalCompare(a.first.name, b.first.name) }
                     else list.sortedByDescending { (_, bs) -> bs.maxOf { it.lastReadAt ?: it.addedAt } }
                 }
-                val grpIds = if (groupMode == "series") inSeries else inAnyCol
+                val grpIds = if (groupMode == "series") inAnyCol + inSeries else inAnyCol
                 val loose = if (q.isEmpty()) shown.filter { it.id !in grpIds } else shown.filter { hitText(it) }
                 if (tiles) folders.map { (c, bs) -> ShelfEntry.Folder(c, bs) } + loose.map { ShelfEntry.Book(it) }
                 else folders.flatMap { (c, bs) ->
@@ -454,7 +456,7 @@ fun LibraryScreen(
                         onClick = { viewOpen = false; openFolder = null; setGroup(if (groupMode == "collection") "none" else "collection") },
                     )
                     DropdownMenuItem(
-                        text = { Text("🔗 시리즈별로 묶기 (자동)") }, leadingIcon = { CheckMark(groupMode == "series") },
+                        text = { Text("🔗 컬렉션 + 시리즈별로 묶기 (자동)") }, leadingIcon = { CheckMark(groupMode == "series") },
                         onClick = { viewOpen = false; openFolder = null; setGroup(if (groupMode == "series") "none" else "series") },
                     )
                     if (grouped && tiles) {
