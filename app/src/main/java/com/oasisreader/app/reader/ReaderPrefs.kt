@@ -99,6 +99,25 @@ class ReaderPrefs(context: Context, private val bookId: String? = null) {
         get() = prefs.getBoolean("keep_screen_on", true)
         set(v) = prefs.edit().putBoolean("keep_screen_on", v).apply()
 
+    /** books, comics, PDF: no Android status bar while one is open (the 서재 keeps it) */
+    var hideStatusBar: Boolean
+        get() = prefs.getBoolean("hide_status_bar", false)
+        set(v) = prefs.edit().putBoolean("hide_status_bar", v).apply()
+
+    /** the same for the navigation bar (gesture handle / buttons) */
+    var hideNavBar: Boolean
+        get() = prefs.getBoolean("hide_nav_bar", false)
+        set(v) = prefs.edit().putBoolean("hide_nav_bar", v).apply()
+
+    /** with the status bar hidden: a small clock (left) and battery (right) on the top line */
+    var showClock: Boolean
+        get() = prefs.getBoolean("show_clock", false)
+        set(v) = prefs.edit().putBoolean("show_clock", v).apply()
+
+    var showBattery: Boolean
+        get() = prefs.getBoolean("show_battery", false)
+        set(v) = prefs.edit().putBoolean("show_battery", v).apply()
+
     /** hide the top bar a few seconds after it appears */
     var autoHideBars: Boolean
         get() = prefs.getBoolean("auto_hide_bars", true)

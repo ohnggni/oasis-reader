@@ -160,6 +160,10 @@ private sealed interface LoadState {
 fun ReaderScreen(bookId: String, focusHighlight: Pair<Int, String>? = null, onBack: () -> Unit) {
     val app = LocalContext.current.applicationContext
     val prefs = remember(bookId) { ReaderPrefs(app, bookId) }
+    // 상태바·내비게이션 바 숨기기 (읽기 기본값), and the camera hole for the top line
+    val readingChrome = remember { ReadingChrome.of(prefs) }
+    ImmersiveBars(readingChrome)
+    val cut = rememberCutoutRoom()
     var theme by remember(bookId) { mutableStateOf(prefs.theme) }
     val rTheme = theme.resolve(isAppDark())
     com.oasisreader.app.ui.theme.OasisTheme(darkTheme = rTheme.dark) {
@@ -769,10 +773,10 @@ private fun ReaderBody(
     val showBars = barsVisible || state !is LoadState.Ready
 
     Box(Modifier.fillMaxSize().background(paper)) {
-        if (showBars) {
+        if (showBars && !readingChrome.hideStatus) {
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(barColor))
         }
-        Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Box(Modifier.fillMaxSize().readingInsets(readingChrome, cut)) {
             val s = state
             when {
                 missing -> MissingFiles(
@@ -986,12 +990,18 @@ private fun ReaderBody(
                 },
             )
 
+            // where the status bar was: clock (left) and battery (right) on the chapter-title line
+            if (state is LoadState.Ready && !showBars) StatusLine(readingChrome, cut, Color(rTheme.muted).copy(alpha = 0.8f), Modifier.align(Alignment.TopStart))
+
             // the running head (chapter title) is drawn inside the page, so it turns with it
             com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
 
             // compact overlay bar: it only ever covers the top margin, never text
             AnimatedVisibility(visible = showBars, enter = fadeIn(), exit = fadeOut()) {
-                Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    color = barColor, contentColor = chrome,
+                    modifier = Modifier.fillMaxWidth().let { if (readingChrome.hideStatus) it.padding(start = cut.left, end = cut.right) else it },
+                ) {
                     Column {
                         Row(
                             Modifier.height(BAR_DP.dp).padding(end = 10.dp),
@@ -1170,7 +1180,7 @@ private fun ReaderBody(
             // this page is bookmarked: a small ribbon in the top corner
             if (hereMark != null && state is LoadState.Ready && !showBars) BookmarkGlyph(
                 filled = true, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), width = 11.dp,
-                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 18.dp + sidePad),
+                modifier = Modifier.align(Alignment.TopEnd).let { if (readingChrome.hideStatus) it else it.statusBarsPadding() }.padding(end = 18.dp + sidePad),
             )
 
             // page indicator — book mode: "3 / 34 · 12%", scroll mode: "12%"

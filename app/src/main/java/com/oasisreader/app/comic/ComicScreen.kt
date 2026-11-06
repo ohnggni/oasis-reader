@@ -95,6 +95,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import com.oasisreader.app.reader.barTopInset
+import com.oasisreader.app.reader.readingInsets
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -279,6 +281,10 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
     val app = context.applicationContext
     val prefs = remember { app.getSharedPreferences("comic", android.content.Context.MODE_PRIVATE) }
     val readerPrefs = remember { com.oasisreader.app.reader.ReaderPrefs(app, book.id) }
+    // 상태바·내비게이션 바 숨기기 (읽기 기본값, shared with books)
+    val readingChrome = remember { com.oasisreader.app.reader.ReadingChrome.of(readerPrefs) }
+    com.oasisreader.app.reader.ImmersiveBars(readingChrome)
+    val cut = com.oasisreader.app.reader.rememberCutoutRoom()
     val scope = rememberCoroutineScope()
     val content = remember(book.id) { store.contentDir(book.id) }
     val pageCount = pkg.pages.size
@@ -454,9 +460,13 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
     val density = LocalDensity.current
     var label by remember { mutableStateOf("") }
 
+    // with a bar hidden: a band at the bottom for the page number, so it does not sit on the picture
+    // (not in the webtoon scroll, which runs under it as before), and the clock/battery line on top
+    val pageBand = (readingChrome.hideStatus || readingChrome.hideNav) && mode == ComicMode.PAGE
+    val topLine = if (readingChrome.statusLine) 22.dp else 0.dp
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(
-            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
+            Modifier.fillMaxSize().readingInsets(readingChrome, cut, topLine).padding(bottom = if (pageBand) 24.dp else 0.dp),
             contentAlignment = Alignment.TopCenter,
         ) {
             val wPx = with(density) { maxWidth.roundToPx() }
@@ -766,13 +776,17 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                 }
             },
         )
-        if (barsVisible) {
+        if (barsVisible && !readingChrome.hideStatus) {
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(barColor))
         }
+        if (!barsVisible) com.oasisreader.app.reader.StatusLine(
+            readingChrome, cut, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            Modifier.align(Alignment.TopStart).padding(top = cut.top), height = topLine,
+        )
         AnimatedVisibility(
             visible = barsVisible,
             enter = fadeIn(), exit = fadeOut(),
-            modifier = Modifier.statusBarsPadding(),
+            modifier = Modifier.barTopInset(readingChrome, cut),
         ) {
             Surface(color = barColor, contentColor = chrome) {
                 Column {
@@ -874,8 +888,8 @@ private fun ComicViewer(book: BookEntity, pkg: ComicPackage, store: BookStore, d
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 8.dp)
+                    .let { if (readingChrome.hideNav) it else it.navigationBarsPadding() }
+                    .padding(bottom = if (pageBand) 3.dp else 8.dp)
                     .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
                     .padding(horizontal = 10.dp, vertical = 3.dp),
             )
