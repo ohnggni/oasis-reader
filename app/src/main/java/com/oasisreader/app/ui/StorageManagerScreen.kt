@@ -179,7 +179,8 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                 if (t == StTab.PHONE) "폰에 받아 둔 책이 없습니다." else "서버에만 있는 책이 없습니다. 서재의 책은 모두 폰에 있습니다.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp),
             )
-            LazyColumn(Modifier.fillMaxSize()) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 groups.forEach { (name, list) ->
                     if (name.isNotEmpty()) item(key = "g_$name") {
                         val open = name !in closed
@@ -202,6 +203,7 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                     }
                 }
             }
+            FastScroller(listState.scrollTarget())
         }
         // actions on the chosen books
         if (chosen.isNotEmpty()) Surface(tonalElevation = 3.dp) {
@@ -257,68 +259,18 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
             dismissButton = { TextButton(onClick = { confirmRemoveFiles = false }) { Text("취소") } },
         )
     }
-    if (confirmDelete) {
-        var keepHl by remember { mutableStateOf(true) }
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("🗑️ 서재에서 지우기") },
-            text = {
-                Column {
-                    Text("${chosen.size}권을 서재에서 지웁니다. 파일도 폰에서 지워집니다.")
-                    Row(Modifier.fillMaxWidth().clickable { keepHl = !keepHl }.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = keepHl, onCheckedChange = { keepHl = it })
-                        Text("🖍️ 하이라이트·메모는 남기기", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDelete = false
-                    val list = chosen
-                    scope.launch {
-                        list.forEach { s ->
-                            if (s.audio) AudioDownloads.remove(app, s.book)
-                            store.delete(s.book.id, keepHl)
-                        }
-                        selected = emptySet(); refresh++
-                    }
-                }) { Text("지우기", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("취소") } },
-        )
+    if (confirmDelete) BulkDeleteDialog(chosen.map { it.book }, onDismiss = { confirmDelete = false }) { keepHl ->
+        confirmDelete = false
+        val list = chosen.map { it.book }
+        selected = emptySet()
+        ShelfActions.scope.launch { ShelfActions.delete(app, list, keepHl); refresh++ }
     }
-    if (pickCollection) {
-        var creating by remember { mutableStateOf(false) }
-        AlertDialog(
-            onDismissRequest = { pickCollection = false },
-            title = { Text("📚 ${chosen.size}권을 컬렉션에 넣기") },
-            text = {
-                Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                    collections.forEach { c ->
-                        Text(
-                            c.name, style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                pickCollection = false
-                                val ids = chosen.map { it.book.id }
-                                scope.launch { ids.forEach { ShelfCollections.set(db, c.id, it, true) }; selected = emptySet() }
-                                Toast.makeText(context, "📚 ${c.name}에 넣었습니다", Toast.LENGTH_SHORT).show()
-                            }.padding(vertical = 10.dp),
-                        )
-                    }
-                    TextButton(onClick = { creating = true }) { Text("➕ 새 컬렉션") }
-                }
-            },
-            confirmButton = { TextButton(onClick = { pickCollection = false }) { Text("닫기") } },
-        )
-        if (creating) CollectionNameDialog("새 컬렉션", onDismiss = { creating = false }) { name ->
-            creating = false; pickCollection = false
-            val ids = chosen.map { it.book.id }
-            scope.launch {
-                val c = ShelfCollections.create(db, name)
-                ids.forEach { ShelfCollections.set(db, c.id, it, true) }
-                selected = emptySet()
-            }
-        }
+    if (pickCollection) BulkCollectionDialog(chosen.size, collections, onDismiss = { pickCollection = false }) { c ->
+        pickCollection = false
+        val ids = chosen.map { it.book.id }
+        selected = emptySet()
+        ShelfActions.scope.launch { ShelfActions.addToCollection(app, c.id, ids) }
+        Toast.makeText(context, "📚 ${c.name}에 넣었습니다", Toast.LENGTH_SHORT).show()
     }
 }
 

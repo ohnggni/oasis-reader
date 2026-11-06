@@ -150,9 +150,15 @@ fun CollectionPickDialog(book: BookEntity, collections: List<CollectionEntity>, 
     }
 }
 
-/** Rename or delete 컬렉션 (the books stay in the 서재). */
+/** Rename or delete 컬렉션 (deleting asks whether the books inside leave the 서재 too). */
 @Composable
-fun CollectionEditDialog(collections: List<CollectionEntity>, counts: Map<String, Int>, onDismiss: () -> Unit) {
+fun CollectionEditDialog(
+    collections: List<CollectionEntity>,
+    counts: Map<String, Int>,
+    links: List<BookCollectionEntity> = emptyList(),
+    books: List<BookEntity> = emptyList(),
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val db = remember { AppDatabase.get(context.applicationContext) }
     val scope = rememberCoroutineScope()
@@ -180,12 +186,5 @@ fun CollectionEditDialog(collections: List<CollectionEntity>, counts: Map<String
             scope.launch { db.collections().rename(c.id, name) }
         }
     }
-    deleting?.let { c ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            text = { Text("「${c.name}」 컬렉션을 지울까요? 들어 있던 책은 서재에 그대로 남습니다.") },
-            confirmButton = { TextButton(onClick = { deleting = null; scope.launch { ShelfCollections.delete(db, c.id) } }) { Text("지우기", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("취소") } },
-        )
-    }
+    deleting?.let { c -> CollectionDeleteDialog(c, links, books) { deleting = null } }
 }

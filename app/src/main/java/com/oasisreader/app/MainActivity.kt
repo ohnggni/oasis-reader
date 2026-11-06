@@ -122,7 +122,8 @@ private fun App() {
     var route by rememberSaveable { mutableStateOf(Route.LIBRARY) }
     var serverReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
     var audioReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
-    var downloadsReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }   // where the full player goes back to
+    var downloadsReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
+    var storageReturn by rememberSaveable { mutableStateOf(Route.SETTINGS) }    // 📦 보관함 관리 opens from 설정 or the 서재 ☰   // where the full player goes back to
     var importing by remember { mutableStateOf(false) }
 
     val books by remember { db.books().observeAll() }.collectAsState(initial = null)
@@ -241,10 +242,10 @@ private fun App() {
             onDoc = { id -> route = Route.DOC + id },
             onReadingDefaults = { route = Route.READING_DEFAULTS },
             onDownloads = { downloadsReturn = Route.SETTINGS; route = Route.DOWNLOADS },
-            onStorage = { route = Route.STORAGE },
+            onStorage = { storageReturn = Route.SETTINGS; route = Route.STORAGE },
         )
         route == Route.STORAGE -> com.oasisreader.app.ui.StorageManagerScreen(
-            onBack = { route = Route.SETTINGS },
+            onBack = { route = storageReturn },
             onDownloads = { downloadsReturn = Route.STORAGE; route = Route.DOWNLOADS },
         )
         route == Route.READING_DEFAULTS -> com.oasisreader.app.reader.ReadingDefaultsScreen(onBack = { route = Route.SETTINGS })
@@ -326,6 +327,7 @@ private fun App() {
             onStats = { route = Route.STATS },
             onHighlights = { route = Route.HIGHLIGHTS },
             onDownloads = { downloadsReturn = Route.LIBRARY; route = Route.DOWNLOADS },
+            onStorage = { storageReturn = Route.LIBRARY; route = Route.STORAGE },
             onDelete = { b, keepHl -> scope.launch { store.delete(b.id, keepHl) } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
