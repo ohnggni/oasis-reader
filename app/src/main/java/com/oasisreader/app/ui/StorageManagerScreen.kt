@@ -203,7 +203,7 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                     }
                 }
             }
-            FastScroller(listState.scrollTarget())
+            FastScroller(remember(listState) { listState.scrollTarget() })
         }
         // actions on the chosen books
         if (chosen.isNotEmpty()) Surface(tonalElevation = 3.dp) {

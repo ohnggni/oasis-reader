@@ -123,6 +123,7 @@ private fun App() {
     var serverReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
     var audioReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
     var downloadsReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }
+    var librarySelecting by remember { mutableStateOf(false) }   // 서재 선택 모드: its action bar takes the bottom
     var storageReturn by rememberSaveable { mutableStateOf(Route.SETTINGS) }    // 📦 보관함 관리 opens from 설정 or the 서재 ☰   // where the full player goes back to
     var importing by remember { mutableStateOf(false) }
 
@@ -356,9 +357,10 @@ private fun App() {
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
             onSourceFolder = ::openOrigin,
+            onSelecting = { librarySelecting = it },
         )
             // an audiobook is loaded: a small player at the bottom of the library
-            com.oasisreader.app.audio.AudioMiniBar(
+            if (!librarySelecting) com.oasisreader.app.audio.AudioMiniBar(
                 onOpen = { audioReturn = Route.LIBRARY; route = Route.AUDIO_PLAYER },
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
             )

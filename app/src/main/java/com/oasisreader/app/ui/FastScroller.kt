@@ -73,10 +73,10 @@ fun LazyListState.scrollTarget() = ScrollTarget(
 @Composable
 fun BoxScope.FastScroller(target: ScrollTarget, label: (Int) -> String? = { null }, bottomPadding: androidx.compose.ui.unit.Dp = 16.dp) {
     val scope = rememberCoroutineScope()
-    val total by remember { derivedStateOf { target.total() } }
-    val visible by remember { derivedStateOf { target.visible().coerceAtLeast(1) } }
-    val first by remember { derivedStateOf { target.first() } }
-    val scrolling by remember { derivedStateOf { target.scrolling() } }
+    val total by remember(target) { derivedStateOf { target.total() } }
+    val visible by remember(target) { derivedStateOf { target.visible().coerceAtLeast(1) } }
+    val first by remember(target) { derivedStateOf { target.first() } }
+    val scrolling by remember(target) { derivedStateOf { target.scrolling() } }
     var dragging by remember { mutableStateOf(false) }
     var dragFrac by remember { mutableFloatStateOf(0f) }
     var shown by remember { mutableStateOf(false) }
@@ -106,7 +106,7 @@ fun BoxScope.FastScroller(target: ScrollTarget, label: (Int) -> String? = { null
             scope.launch { target.scrollTo(idx) }
         }
         Box(
-            Modifier.align(Alignment.TopEnd).fillMaxHeight().width(28.dp).pointerInput(total, visible, trackPx) {
+            Modifier.align(Alignment.TopEnd).fillMaxHeight().width(28.dp).pointerInput(target, total, visible, trackPx) {
                 detectVerticalDragGestures(
                     onDragStart = { o -> dragging = true; jump((o.y - thumbH.toPx() / 2) / trackPx) },
                     onDragEnd = { dragging = false },

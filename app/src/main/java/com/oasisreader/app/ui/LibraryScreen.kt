@@ -189,6 +189,7 @@ fun LibraryScreen(
     onRename: (BookEntity, String) -> Unit,
     onPin: (BookEntity, Boolean) -> Unit = { _, _ -> },
     onSourceFolder: ((BookEntity) -> Unit)? = null,
+    onSelecting: (Boolean) -> Unit = {},
 ) {
     var filterName by rememberSaveable { mutableStateOf(ShelfFilter.ALL.name) }
     val filter = ShelfFilter.valueOf(filterName)
@@ -284,6 +285,7 @@ fun LibraryScreen(
     var selected by remember { mutableStateOf(setOf<String>()) }
     val selecting = selected.isNotEmpty()
     BackHandler(enabled = selecting) { selected = emptySet() }
+    LaunchedEffect(selecting) { onSelecting(selecting) }
     BackHandler(enabled = !selecting && folder != null) { openFolder = null }
     fun toggle(ids: Collection<String>) {
         selected = if (ids.all { it in selected }) selected - ids.toSet() else selected + ids
@@ -563,7 +565,7 @@ fun LibraryScreen(
                         }
                     }
                 }
-                FastScroller(gridState.scrollTarget(), ::labelAt, bottomPadding = bottomPad)
+                FastScroller(remember(gridState) { gridState.scrollTarget() }, ::labelAt, bottomPadding = bottomPad)
             } else {
                 val listState = remember(tabKey, openFolder, useGroups) { LazyListState() }
                 LazyColumn(
@@ -591,7 +593,7 @@ fun LibraryScreen(
                         }
                     }
                 }
-                FastScroller(listState.scrollTarget(), ::labelAt, bottomPadding = bottomPad)
+                FastScroller(remember(listState) { listState.scrollTarget() }, ::labelAt, bottomPadding = bottomPad)
             }
         }
 
