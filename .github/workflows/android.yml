@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, release-1.2]   # TEMP: compile check on the feature branch
+    branches: [main]
     paths-ignore:
       - "**.md"
   workflow_dispatch:
