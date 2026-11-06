@@ -38,7 +38,7 @@ fun openNextVolume(context: Context, next: NextVolume, onOpenBook: (String) -> U
 suspend fun findAndOpenNext(context: Context, book: BookEntity?, known: NextVolume?, onOpenBook: (String) -> Unit) {
     val b = book ?: return
     val n = known ?: NextVolumes.find(context.applicationContext, b)
-    if (n == null) Toast.makeText(context, "다음 권을 찾지 못했습니다. 같은 컬렉션에 넣어 두거나 서버에서 받은 책이면 찾을 수 있습니다.", Toast.LENGTH_LONG).show()
+    if (n == null) com.oasisreader.app.ui.Notice.show(context, "다음 권을 찾지 못했습니다. 같은 컬렉션에 넣어 두거나 서버에서 받은 책이면 찾을 수 있습니다.")
     else openNextVolume(context, n, onOpenBook)
 }
 

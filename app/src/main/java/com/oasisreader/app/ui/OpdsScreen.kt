@@ -167,7 +167,7 @@ fun OpdsScreen(
             }
             if (pages >= MAX_SORT_PAGES) { sortCapped = true; nextUrl = next } else nextUrl = null
         } catch (e: Exception) {
-            android.widget.Toast.makeText(context, "목록 전체를 받지 못했습니다: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            com.oasisreader.app.ui.Notice.show(context, "목록 전체를 받지 못했습니다: ${e.message}")
         } finally {
             loadingAll = null
         }
@@ -229,7 +229,7 @@ fun OpdsScreen(
                 val books = (ready.feed.entries + extra).filter { it.isBook && it.readable != null }.distinctBy { it.id }
                 askFolder = labels.last() to books
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "목록 전체를 받지 못했습니다: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                com.oasisreader.app.ui.Notice.show(context, "목록 전체를 받지 못했습니다: ${e.message}")
             } finally { gatheringAll = false }
         }
     }
@@ -397,7 +397,7 @@ fun OpdsScreen(
                                                 val f = client.fetch(more)
                                                 extra.addAll(f.entries); nextUrl = f.next
                                             } catch (e: Exception) {
-                                                android.widget.Toast.makeText(context, e.message ?: "불러오기 실패", android.widget.Toast.LENGTH_SHORT).show()
+                                                com.oasisreader.app.ui.Notice.show(context, e.message ?: "불러오기 실패")
                                             } finally { loadingMore = false }
                                         }
                                     }) { Text("더 보기") }
@@ -431,7 +431,7 @@ fun OpdsScreen(
                                             val f = client.fetch(more)
                                             extra.addAll(f.entries); nextUrl = f.next
                                         } catch (e: Exception) {
-                                            android.widget.Toast.makeText(context, e.message ?: "불러오기 실패", android.widget.Toast.LENGTH_SHORT).show()
+                                            com.oasisreader.app.ui.Notice.show(context, e.message ?: "불러오기 실패")
                                         } finally { loadingMore = false }
                                     }
                                 }) { Text("더 보기") }

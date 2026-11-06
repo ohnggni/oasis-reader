@@ -78,7 +78,7 @@ fun rememberUpdateChecker(): Pair<Boolean, () -> Unit> {
                     if (Updater.isNewer(rel)) found = rel
                     else Toast.makeText(context, "최신 버전입니다 (${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
                 }.onFailure {
-                    Toast.makeText(context, "업데이트를 확인하지 못했습니다: ${it.message}", Toast.LENGTH_LONG).show()
+                    com.oasisreader.app.ui.Notice.show(context, "업데이트를 확인하지 못했습니다: ${it.message}")
                 }
             }
         }
@@ -103,7 +103,7 @@ fun UpdateDialog(r: AppRelease, onDismiss: () -> Unit) {
     fun start() {
         error = null
         if (!Updater.canInstall(app)) {
-            Toast.makeText(context, "\"이 출처 허용\"을 켠 뒤 돌아와서 다시 눌러 주세요.", Toast.LENGTH_LONG).show()
+            com.oasisreader.app.ui.Notice.show(context, "\"이 출처 허용\"을 켠 뒤 돌아와서 다시 눌러 주세요.")
             runCatching { context.startActivity(Updater.allowInstallIntent(app)) }
             return
         }

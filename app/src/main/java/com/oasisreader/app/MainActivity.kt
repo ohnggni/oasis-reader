@@ -85,6 +85,8 @@ class MainActivity : ComponentActivity() {
                     App()
                     // 오디오북: the phone's place or the server's, when that cannot be told
                     com.oasisreader.app.audio.PlaceChoiceDialog()
+                    // long messages (Toasts cut them to two lines)
+                    com.oasisreader.app.ui.NoticeHost()
                 }
             }
         }
@@ -150,7 +152,7 @@ private fun App() {
                 try {
                     store.importUri(u); ok++
                 } catch (e: Exception) {
-                    Toast.makeText(context, "가져오기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                    com.oasisreader.app.ui.Notice.show(context, "가져오기 실패: ${e.message}")
                 }
             }
             importing = false
@@ -167,7 +169,7 @@ private fun App() {
         scope.launch {
             runCatching { com.oasisreader.app.data.FolderImport.plan(context, uri) }
                 .onSuccess { folderPlan = it }
-                .onFailure { Toast.makeText(context, "폴더를 읽지 못했습니다: ${it.message}", Toast.LENGTH_LONG).show() }
+                .onFailure { com.oasisreader.app.ui.Notice.show(context, "폴더를 읽지 못했습니다: ${it.message}") }
             folderScanning = false
         }
     }
@@ -294,7 +296,7 @@ private fun App() {
                         audioReturn = Route.STATS
                         runCatching { com.oasisreader.app.audio.AudioLibraryLink.play(context, b) }
                             .onSuccess { route = Route.AUDIO_PLAYER }
-                            .onFailure { Toast.makeText(context, "열 수 없습니다: ${it.message}", Toast.LENGTH_LONG).show() }
+                            .onFailure { com.oasisreader.app.ui.Notice.show(context, "열 수 없습니다: ${it.message}") }
                     } else route = Route.READER + id
                 }
             })
@@ -336,7 +338,7 @@ private fun App() {
                         Toast.makeText(context, "오디오북을 여는 중…", Toast.LENGTH_SHORT).show()
                         runCatching { com.oasisreader.app.audio.AudioLibraryLink.play(context, b) }
                             .onSuccess { route = Route.AUDIO_PLAYER }
-                            .onFailure { Toast.makeText(context, "열 수 없습니다: ${it.message}", Toast.LENGTH_LONG).show() }
+                            .onFailure { com.oasisreader.app.ui.Notice.show(context, "열 수 없습니다: ${it.message}") }
                     }
                 } else route = Route.READER + b.id
             },

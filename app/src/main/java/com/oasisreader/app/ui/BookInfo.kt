@@ -108,6 +108,14 @@ fun BookInfoDialog(b: BookEntity, store: BookStore, onDismiss: () -> Unit) {
                     Line("파일명", m.fileName)
                 }
                 b.sourceUrl?.let { u -> Line("받은 곳", ServerSettings(context).forUrl(u)?.name ?: u.substringAfter("://").substringBefore('/')) }
+                // where on the server (or phone) it was, since 1.2: the folder path / category › series
+                com.oasisreader.app.data.BookOrigin.decode(b.origin)?.let { o ->
+                    Line("📁 있던 곳", when (o.type) {
+                        com.oasisreader.app.data.BookOrigin.OPDS -> o.labels.drop(1).joinToString(" › ").ifBlank { null }
+                        com.oasisreader.app.data.BookOrigin.META -> o.series
+                        else -> o.folder?.ifBlank { null } ?: "폰 폴더"
+                    })
+                }
                 epubMeta.filterKeys { it != "소개" }.forEach { (k, v) -> Line(k, v) }
 
                 // synopsis: the server's checked one first, the book's own description otherwise

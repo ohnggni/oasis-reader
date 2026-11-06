@@ -151,6 +151,8 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
     var savingPreset by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var active by remember { mutableStateOf("") }
+    // what the search looks in: bookoasis takes a prefix ("작가:", "주제:"); none = the title
+    var field by remember { mutableStateOf(prefs.getString("search_field", "title") ?: "title") }
     val items = remember(server) { mutableStateListOf<AudioItem>() }
     var page by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
@@ -183,7 +185,7 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
                 val o = web.get("/api/media/list", mapOf(
                     "type" to "audiobook",
                     "library_id" to (libIds.singleOrNull()?.toString() ?: "all"),
-                    "search" to active.ifBlank { null },
+                    "search" to searchWithField(active, field),
                     "sort" to sort.api(sortDesc), "page" to next, "limit" to 40,
                 ))
                 val list = o.firstList("items", "series", "data", "list", "books").mapNotNull { it.toItem() }
@@ -205,7 +207,7 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
             error = e.message ?: e.javaClass.simpleName
         } finally { loading = false }
     }
-    LaunchedEffect(server, libIds, readFilter, active, sort, sortDesc) { load(1) }
+    LaunchedEffect(server, libIds, readFilter, active, field, sort, sortDesc) { load(1) }
 
     BackHandler { if (open != null) open = null else onBack() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -229,6 +231,7 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
                     onDelete = null,
                     onDismiss = { savingPreset = false },
                 )
+                SearchFieldChip(field) { field = it; prefs.edit().putString("search_field", it).apply() }
                 CategoryChip(libraries, libIds) { setLibs(it) }
                 ReadStateChip(readFilter) { readFilter = it; prefs.edit().putString("read_${server.id}", it).apply() }
                 com.oasisreader.app.ui.SortChip(
@@ -263,7 +266,7 @@ private fun AudioShelf(
     Column {
         OutlinedTextField(
             value = query, onValueChange = onQuery, singleLine = true,
-            placeholder = { Text("제목·저자 검색") },
+            placeholder = { Text("검색 (🔍 칩에서 제목·작가·주제)") },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -359,7 +362,7 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                                 scope.launch {
                                     runCatching { AudioLibraryLink.add(context, web, b, pct, completed) }
                                         .onSuccess { android.widget.Toast.makeText(context, "서재에 담았습니다", android.widget.Toast.LENGTH_SHORT).show() }
-                                        .onFailure { android.widget.Toast.makeText(context, "담지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                                        .onFailure { com.oasisreader.app.ui.Notice.show(context, "담지 못했습니다: ${it.message}") }
                                 }
                             }, contentPadding = pad) { Text("📚 서재+", maxLines = 1, softWrap = false) }
                             else Text("📚 서재에 있음", maxLines = 1, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
@@ -382,9 +385,9 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                                         .onSuccess { row ->
                                             askNotif()
                                             AudioDownloads.enqueue(context, row, book = b)
-                                            android.widget.Toast.makeText(context, "받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
+                                            com.oasisreader.app.ui.Notice.show(context, "받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
                                         }
-                                        .onFailure { android.widget.Toast.makeText(context, "받지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                                        .onFailure { com.oasisreader.app.ui.Notice.show(context, "받지 못했습니다: ${it.message}") }
                                 }
                             }) { Text(if ((onShelf?.fileBytes ?: 0) > 0) "⬇️ 나머지 트랙도 받기" else "⬇️ 폰에 받기 (오프라인)") }
                         }
@@ -421,7 +424,7 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             scope.launch {
                                 runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
                                     .onSuccess { row -> AudioDownloads.enqueue(context, row, listOf(t.id), book = b) }
-                                    .onFailure { android.widget.Toast.makeText(context, "받지 못했습니다: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                                    .onFailure { com.oasisreader.app.ui.Notice.show(context, "받지 못했습니다: ${it.message}") }
                             }
                         },
                         onCancel = { AudioDownloads.dequeueTrack(context, rowId, t.id) },
@@ -704,4 +707,43 @@ fun PlaceChoiceDialog() {
         confirmButton = { TextButton(onClick = { AudioPlayback.choosePlace(useServer = false) }) { Text("이 폰 위치") } },
         dismissButton = { TextButton(onClick = { AudioPlayback.choosePlace(useServer = true) }) { Text("북오아시스 위치") } },
     )
+}
+
+private val SEARCH_FIELDS = listOf("title" to "제목", "author" to "작가", "topic" to "주제")
+
+/**
+ * bookoasis searches the title unless the text starts with a prefix (작가: / 주제: / author: …),
+ * so the chosen field becomes that prefix; a prefix typed by hand is left as it is.
+ */
+internal fun searchWithField(text: String, field: String): String? {
+    val t = text.trim()
+    if (t.isEmpty()) return null
+    val typed = Regex("^[^\\s:：]{1,8}[:：]").containsMatchIn(t)
+    return when {
+        typed || field == "title" -> t
+        field == "author" -> "작가:$t"
+        field == "topic" -> "주제:$t"
+        else -> t
+    }
+}
+
+/** 🔍 제목 / 작가 / 주제: where the search looks. */
+@Composable
+private fun SearchFieldChip(field: String, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        com.oasisreader.app.ui.MiniChip(
+            "🔍 " + (SEARCH_FIELDS.firstOrNull { it.first == field }?.second ?: "제목"),
+            onClick = { open = true }, selected = field != "title", description = "검색 대상",
+        )
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            SEARCH_FIELDS.forEach { (k, label) ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(label + "에서 찾기") },
+                    leadingIcon = { com.oasisreader.app.ui.CheckMark(k == field) },
+                    onClick = { open = false; onPick(k) },
+                )
+            }
+        }
+    }
 }

@@ -60,7 +60,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 val m = Backup.export(app, uri, withBooks)
                 Toast.makeText(context, "백업했습니다: 책 ${m.books}권" + if (m.includesBookFiles) " (파일 포함)" else "", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "백업 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                com.oasisreader.app.ui.Notice.show(context, "백업 실패: ${e.message}")
             } finally {
                 busy = null
             }
@@ -215,7 +215,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                             Backup.restartApp(app)
                         } catch (e: Exception) {
                             busy = null
-                            Toast.makeText(context, "복원 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                            com.oasisreader.app.ui.Notice.show(context, "복원 실패: ${e.message}")
                         }
                     }
                 }) { Text("복원") }

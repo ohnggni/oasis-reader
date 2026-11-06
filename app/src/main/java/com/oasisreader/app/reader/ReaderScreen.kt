@@ -181,7 +181,6 @@ private fun ReaderBody(
     // 상태바·내비게이션 바 숨기기 (읽기 기본값), and the camera hole for the top line
     var readingChrome by remember { mutableStateOf(ReadingChrome.of(prefs)) }
     fun setChrome(c: ReadingChrome) { readingChrome = c; prefs.saveChrome(c) }
-    ImmersiveBars(readingChrome)
     val cut = rememberCutoutRoom()
     val app = context.applicationContext
     val store = remember { BookStore.get(app) }
@@ -432,7 +431,7 @@ private fun ReaderBody(
 
     fun saveAsDefaults() {
         prefs.saveAsDefaults()
-        Toast.makeText(context, "이 책의 글꼴·크기·여백·배경·넘김 설정을 기본값으로 저장했습니다.", Toast.LENGTH_SHORT).show()
+        com.oasisreader.app.ui.Notice.show(context, "이 책의 글꼴·크기·여백·배경·넘김 설정을 기본값으로 저장했습니다.")
     }
 
     /**
@@ -555,7 +554,7 @@ private fun ReaderBody(
     }
     readAloud.onUnavailable = {
         stopAloud()
-        Toast.makeText(context, "소리 내 읽기를 쓸 수 없습니다. 휴대폰 설정의 '텍스트 음성 변환'에서 엔진을 확인해 주세요.", Toast.LENGTH_LONG).show()
+        com.oasisreader.app.ui.Notice.show(context, "소리 내 읽기를 쓸 수 없습니다. 휴대폰 설정의 '텍스트 음성 변환'에서 엔진을 확인해 주세요.")
     }
     // back in front after reading on with the screen off: open the page where the voice is
     DisposableEffect(lifecycleOwner) {
@@ -652,7 +651,7 @@ private fun ReaderBody(
                 applyFont(f)
                 Toast.makeText(context, "「${f.label}」 글꼴을 추가했습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "글꼴 추가 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                com.oasisreader.app.ui.Notice.show(context, "글꼴 추가 실패: ${e.message}")
             }
         }
     }
@@ -666,7 +665,7 @@ private fun ReaderBody(
                 fonts.download(f) { d, t -> fontProgress = d.toFloat() / t }
                 applyFont(f)
             } catch (e: Exception) {
-                Toast.makeText(context, "글꼴 받기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                com.oasisreader.app.ui.Notice.show(context, "글꼴 받기 실패: ${e.message}")
             } finally {
                 fontBusy = null
             }
@@ -821,7 +820,7 @@ private fun ReaderBody(
                                 store.rebuild(bookId, tmp)
                                 openAttempt++
                             } catch (e: Exception) {
-                                Toast.makeText(context, "다시 받기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                                com.oasisreader.app.ui.Notice.show(context, "다시 받기 실패: ${e.message}")
                             } finally {
                                 tmp.delete()
                                 refetching = false
@@ -1018,10 +1017,14 @@ private fun ReaderBody(
             )
 
             // where the status bar was: clock (left) and battery (right) on the chapter-title line
-            if (state is LoadState.Ready && !showBars) StatusLine(
-                readingChrome, cut, chrome.copy(alpha = 0.6f), Modifier.align(Alignment.TopStart),
-                title = chapterTitle.ifBlank { title },
-            )
+            // (it appears only once the bar has gone, not under it while it fades)
+            AnimatedVisibility(
+                visible = state is LoadState.Ready && !showBars,
+                enter = fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 250)), exit = fadeOut(androidx.compose.animation.core.tween(0)),
+                modifier = Modifier.align(Alignment.TopStart),
+            ) {
+                StatusLine(readingChrome, cut, chrome.copy(alpha = 0.6f), title = chapterTitle.ifBlank { title })
+            }
 
             // with the bars up, a tap or swipe on the page only puts them away (no page turn)
             if (panel == Panel.NONE && barsVisible && state is LoadState.Ready) Box(
@@ -1036,6 +1039,7 @@ private fun ReaderBody(
 
             // the running head (chapter title) is drawn inside the page, so it turns with it
             com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
+            ImmersiveBars(readingChrome, appBarsUp = barsVisible)
 
             // compact overlay bar: it only ever covers the top margin, never text
             AnimatedVisibility(visible = showBars, enter = fadeIn(), exit = fadeOut()) {
@@ -1103,6 +1107,9 @@ private fun ReaderBody(
                                                     autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
                                                 }, Modifier.weight(1f))
                                             }
+                                            // 🔊 볼륨 버튼으로 쪽 넘기기 (the same setting as in 설정, easier to find here)
+                                            var volKeys by remember { mutableStateOf(com.oasisreader.app.ui.PageKeys.volumeKeys(context)) }
+                                            com.oasisreader.app.ui.PanelSwitch("🔊 볼륨 버튼으로 쪽 넘기기", null, volKeys, { volKeys = it; com.oasisreader.app.ui.PageKeys.setVolumeKeys(context, it) })
                                         }
                                         Panel.TEXT -> {
                                             FontPanel(
@@ -1390,6 +1397,7 @@ private fun ReaderSeekBar(
                 )
                 Text("${(v * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = chrome)
             }
+            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
             // − + : 1% of the book back / on (no repeat: each one opens the place)
             com.oasisreader.app.ui.StepButtons(

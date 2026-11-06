@@ -86,6 +86,14 @@ internal fun metaDate(s: String?): String? {
     }.getOrNull()
 }
 
+/** 📖 book · 🖼️ comic · 📄 PDF, from the file format. */
+internal fun formatEmoji(format: String?): String = when (format?.lowercase()) {
+    "cbz", "zip", "cbr", "rar", "cb7", "7z" -> "🖼️"
+    "pdf" -> "📄"
+    null, "" -> "📦"
+    else -> "📖"
+}
+
 private fun mb(bytes: Long) = if (bytes <= 0) null else "%.0f MB".format(bytes / 1048576.0)
 
 /**
@@ -115,6 +123,7 @@ fun MetaCatalogScreen(
     val db = remember { AppDatabase.get(app) }
 
     var libraries by remember { mutableStateOf<List<MetaLibrary>?>(null) }
+    val libNames: Map<Int, String> = libraries.orEmpty().associate { it.id to it.name }
     var libError by remember { mutableStateOf<String?>(null) }
     // chosen categories (none = 전체); older versions kept a single one under library_<server>
     var libIds by remember {
@@ -265,6 +274,7 @@ fun MetaCatalogScreen(
             BookDetail(
                 b, api, opds, owned = api.downloadUrl(b) in ownedSet, pinned = api.downloadUrl(b) in pinnedSet,
                 progress = progress[api.key(b)],
+                library = b.libraryId?.let { libNames[it] },
                 onBack = { openBook = null },
                 onRead = { readNow(b) },
                 onKeep = { keep(b) },
@@ -412,6 +422,14 @@ fun MetaCatalogScreen(
 
         val err = error ?: libError
         // how many match: from the server when it says, else what is loaded so far
+        // where the search looked: the chosen categories, or all of them (same-named books, e.g. a novel
+        // and a comic, are told apart by the 📁 line; narrowing to one category finds only that one)
+        if (activeQuery.isNotBlank()) Text(
+            if (libIds.isEmpty()) "📁 모든 카테고리에서 찾았습니다 · 카테고리 칩으로 좁힐 수 있습니다"
+            else "📁 " + libIds.mapNotNull { libNames[it] }.joinToString(", ").ifBlank { "고른 카테고리" } + " 안에서 찾았습니다",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2, modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+        )
         val booksMode = activeQuery.isNotBlank() && searchBooks
         com.oasisreader.app.ui.CountLine(
             when {
@@ -438,6 +456,7 @@ fun MetaCatalogScreen(
                 items(bookItems, key = { it.id }) { b ->
                     val href = api.downloadUrl(b)
                     BookRow(b, api, opds, owned = href in ownedSet, progress = progress[api.key(b)], showSeries = true,
+                        library = b.libraryId?.let { libNames[it] },
                         onClick = { openBook = b }, onAction = { openOrDownload(b) })
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -455,7 +474,7 @@ fun MetaCatalogScreen(
                         Column(Modifier.weight(1f)) {
                             Text(s.seriesName, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(
-                                listOfNotNull("${s.bookCount}권", metaDate(s.latestMtime)).joinToString(" · "),
+                                listOfNotNull(libNames[s.libraryId]?.let { "📁 $it" }, "${s.bookCount}권", metaDate(s.latestMtime)).joinToString(" · "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -583,6 +602,7 @@ private fun BookRow(
     owned: Boolean,
     progress: Float?,
     showSeries: Boolean,
+    library: String? = null, // shown with the series: "📁 만화 › 괴력난신" (so same-named books can be told apart)
     onClick: () -> Unit,     // details
     onAction: () -> Unit,    // download / open
 ) {
@@ -593,9 +613,9 @@ private fun BookRow(
         MetaCover(api, opds, b.coverUrl, b.id, b.name, modifier = Modifier.width(48.dp).height(70.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(b.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(formatEmoji(b.fileFormat) + " " + b.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val sub = listOfNotNull(
-                if (showSeries) b.seriesName else null,
+                if (showSeries) listOfNotNull(library, b.seriesName).joinToString(" › ").ifBlank { null }?.let { "📁 $it" } else null,
                 metaDate(b.fileMtime),
                 b.fileFormat?.uppercase(),
                 mb(b.fileSize),
@@ -641,6 +661,7 @@ private fun BookDetail(
     owned: Boolean,
     pinned: Boolean,
     progress: Float?,
+    library: String? = null,
     onBack: () -> Unit,
     onRead: () -> Unit,
     onKeep: () -> Unit,
@@ -690,6 +711,7 @@ private fun BookDetail(
             HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(8.dp))
             InfoLine("저자", b.author?.ifBlank { null }?.let { "$it  (서버 데이터라 틀릴 수 있습니다)" })
+            InfoLine("📁 위치", listOfNotNull(library, b.seriesName).joinToString(" › ").ifBlank { null })
             InfoLine("형식", b.fileFormat?.uppercase())
             InfoLine("용량", mb(b.fileSize))
             InfoLine("쪽수", b.pageCount?.let { "${it}쪽" })

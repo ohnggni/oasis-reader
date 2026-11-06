@@ -220,7 +220,7 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
                                 store.rebuild(bookId, tmp)
                                 attempt++
                             } catch (e: Exception) {
-                                Toast.makeText(context, "다시 받기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                                com.oasisreader.app.ui.Notice.show(context, "다시 받기 실패: ${e.message}")
                             } finally {
                                 tmp.delete(); refetching = false
                             }
@@ -287,7 +287,6 @@ private fun ComicViewer(
     val readerPrefs = remember { com.oasisreader.app.reader.ReaderPrefs(app, book.id) }
     // 상태바·내비게이션 바 숨기기 (읽기 기본값, shared with books)
     var readingChrome by remember { mutableStateOf(com.oasisreader.app.reader.ReadingChrome.of(readerPrefs)) }
-    com.oasisreader.app.reader.ImmersiveBars(readingChrome)
     val cut = com.oasisreader.app.reader.rememberCutoutRoom()
     val scope = rememberCoroutineScope()
     val content = remember(book.id) { store.contentDir(book.id) }
@@ -423,6 +422,7 @@ private fun ComicViewer(
 
     // keep the screen on while reading (released after 10 minutes idle)
     com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
+    com.oasisreader.app.reader.ImmersiveBars(readingChrome, appBarsUp = barsVisible)
     val window = remember(context) {
         var c: android.content.Context? = context
         while (c is android.content.ContextWrapper && c !is Activity) c = c.baseContext
@@ -797,10 +797,13 @@ private fun ComicViewer(
         if (barsVisible && !readingChrome.hideStatus) {
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(barColor))
         }
-        if (!barsVisible) com.oasisreader.app.reader.StatusLine(
-            readingChrome, cut, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            Modifier.align(Alignment.TopStart), title = book.title,
-        )
+        AnimatedVisibility(
+            visible = !barsVisible,
+            enter = fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 250)), exit = fadeOut(androidx.compose.animation.core.tween(0)),
+            modifier = Modifier.align(Alignment.TopStart),
+        ) {
+            com.oasisreader.app.reader.StatusLine(readingChrome, cut, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), title = book.title)
+        }
         AnimatedVisibility(
             visible = barsVisible,
             enter = fadeIn(), exit = fadeOut(),
@@ -850,6 +853,9 @@ private fun ComicViewer(
                                             autoHide = it; readerPrefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
                                         }, Modifier.weight(1f))
                                     }
+                                    // 🔊 볼륨 버튼으로 쪽 넘기기 (the same setting as in 설정, easier to find here)
+                                    var volKeys by remember { mutableStateOf(com.oasisreader.app.ui.PageKeys.volumeKeys(context)) }
+                                    com.oasisreader.app.ui.PanelSwitch("🔊 볼륨 버튼으로 쪽 넘기기", null, volKeys, { volKeys = it; com.oasisreader.app.ui.PageKeys.setVolumeKeys(context, it) })
                                     // 이 책만 (책별 설정, 기본값은 읽기 기본값)
                                     com.oasisreader.app.reader.ChromeSwitches(readingChrome, comic = true) { c ->
                                         readingChrome = c
@@ -929,7 +935,20 @@ private fun ComicViewer(
             )
         }
 
-        if (label.isNotEmpty() && readingChrome.pageNum) {
+        // the bottom bar with the top bar: title · page, −/+ (one page) and a slider to jump
+        AnimatedVisibility(
+            visible = barsVisible && panel == com.oasisreader.app.ui.ReadPanel.NONE && pageCount > 1,
+            enter = fadeIn(), exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            ComicSeekBar(
+                title = book.title, page = lastPageShown.coerceIn(0, pageCount - 1), count = pageCount, rtl = rtl,
+                barColor = barColor, chrome = chrome, navPad = !readingChrome.hideNav,
+                onTouch = { barsShownAt = System.currentTimeMillis() },
+            ) { p -> curPage = p; curFrac = 0f; lastPageShown = p; viewKey++ }
+        }
+
+        if (label.isNotEmpty() && readingChrome.pageNum && !barsVisible) {
             Text(
                 "$label  ·  ${(progress * 100).roundToInt()}%",
                 style = MaterialTheme.typography.labelSmall,
@@ -942,6 +961,53 @@ private fun ComicViewer(
                     .padding(horizontal = 10.dp, vertical = 3.dp),
             )
         }
+    }
+}
+
+/**
+ * 만화·PDF 하단바 (like the book's): the title and "12 / 180" on top, −/+ (one page) and a slider
+ * below. While dragging only the number changes; letting go opens that page. Right-to-left books
+ * run the slider the other way.
+ */
+@Composable
+private fun ComicSeekBar(
+    title: String, page: Int, count: Int, rtl: Boolean, barColor: Color, chrome: Color, navPad: Boolean,
+    onTouch: () -> Unit, onJump: (Int) -> Unit,
+) {
+    var drag by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(page) { drag = null }
+    val p = drag ?: page
+    val last = (count - 1).coerceAtLeast(1)
+    fun go(t: Int) { val c = t.coerceIn(0, count - 1); drag = c; onTouch(); onJump(c) }
+    Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.let { if (navPad) it.navigationBarsPadding() else it }
+                .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 30.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.labelMedium, color = chrome, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${p + 1} / $count", style = MaterialTheme.typography.labelMedium, color = chrome)
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // − + : one page back / on (in reading order)
+                com.oasisreader.app.ui.StepButtons(onMinus = { go(p - 1) }, onPlus = { go(p + 1) }, repeat = false)
+                Spacer(Modifier.width(8.dp))
+                val v = p.toFloat() / last
+                com.oasisreader.app.ui.ThinSlider(
+                    value = if (rtl) 1f - v else v, range = 0f..1f,
+                    onChange = { f -> drag = ((if (rtl) 1f - f else f) * last).roundToInt().coerceIn(0, count - 1); onTouch() },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+    // let go: open the page the slider rests on
+    LaunchedEffect(drag) {
+        val d = drag ?: return@LaunchedEffect
+        if (d == page) return@LaunchedEffect
+        kotlinx.coroutines.delay(350)
+        onJump(d)
     }
 }
 

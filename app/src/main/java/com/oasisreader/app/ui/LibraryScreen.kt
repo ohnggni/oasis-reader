@@ -516,8 +516,11 @@ fun LibraryScreen(
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = { openFolder = null }) { Text("← 📚 ${folder.name} · ${entries.size}권", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            Spacer(Modifier.weight(1f))
+            EmojiButton("⬅️", "컬렉션에서 나가기") { openFolder = null }
+            Text(
+                "📚 ${folder.name} · ${entries.size}권", style = MaterialTheme.typography.titleSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
             CollectionMenuButton(
                 onRename = { renameCol = folder }, onDelete = { deleteCol = folder },
                 onSelectAll = { selected = selected + visibleIds },
@@ -749,7 +752,7 @@ fun LibraryScreen(
                             menuFor = null
                             askNotif()
                             ad.enqueue(ctx, b)
-                            android.widget.Toast.makeText(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.", android.widget.Toast.LENGTH_LONG).show()
+                            com.oasisreader.app.ui.Notice.show(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
                         }
                         err?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
                         val paused = remember(b.id, ad.version) { ad.isPaused(ctx, b.id) }

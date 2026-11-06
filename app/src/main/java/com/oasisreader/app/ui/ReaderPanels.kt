@@ -1,5 +1,6 @@
 package com.oasisreader.app.ui
 
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,10 +61,17 @@ fun PanelTitle(text: String) {
 
 /** One on/off setting in a single short line (hints stay out: panels must leave the page visible). */
 @Composable
-fun PanelSwitch(label: String, @Suppress("UNUSED_PARAMETER") hint: String?, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier.fillMaxWidth()) {
-    Row(modifier.height(36.dp).clickable { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) {
+fun PanelSwitch(
+    label: String, @Suppress("UNUSED_PARAMETER") hint: String?, checked: Boolean, onChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(), enabled: Boolean = true,
+) {
+    Row(
+        modifier.height(36.dp).clickable(enabled = enabled) { onChange(!checked) }
+            .let { if (enabled) it else it.alpha(0.45f) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.scale(0.75f))
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled, modifier = Modifier.scale(0.75f))
     }
 }
 

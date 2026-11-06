@@ -185,7 +185,7 @@ fun LookupDialog(text: String, onDismiss: () -> Unit) {
                                 Modifier.fillMaxWidth().clickable {
                                     Lookup.remember(context, t)
                                     runCatching { t.open(context, text) }
-                                        .onFailure { Toast.makeText(context, "열지 못했습니다: ${it.message}", Toast.LENGTH_SHORT).show() }
+                                        .onFailure { com.oasisreader.app.ui.Notice.show(context, "열지 못했습니다: ${it.message}") }
                                     onDismiss()
                                 }.padding(vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,

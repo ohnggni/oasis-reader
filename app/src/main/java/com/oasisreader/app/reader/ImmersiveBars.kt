@@ -101,17 +101,21 @@ private fun Context.activity(): Activity? {
  * edge shows them for a moment, over the page, without moving it). Leaving shows them again.
  */
 @Composable
-fun ImmersiveBars(chrome: ReadingChrome) {
+fun ImmersiveBars(chrome: ReadingChrome, appBarsUp: Boolean = false) {
     val view = LocalView.current
     val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-    DisposableEffect(chrome.hideStatus, chrome.hideNav, owner) {
+    // the navigation bar is hidden only when that gains something: not when the phone itself already
+    // hides it (gesture navigation without the hint — hiding it again only makes "back" take two
+    // swipes), and not while the app's own bars are up (so one swipe goes back from there)
+    val navHidden = chrome.hideNav && !appBarsUp && !navBarAlreadyHidden(view)
+    DisposableEffect(chrome.hideStatus, navHidden, owner) {
         val window = view.context.activity()?.window
         val ctl = window?.let { WindowCompat.getInsetsController(it, view) }
         fun apply() {
             ctl ?: return
             ctl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             if (chrome.hideStatus) ctl.hide(WindowInsetsCompat.Type.statusBars()) else ctl.show(WindowInsetsCompat.Type.statusBars())
-            if (chrome.hideNav) ctl.hide(WindowInsetsCompat.Type.navigationBars()) else ctl.show(WindowInsetsCompat.Type.navigationBars())
+            if (navHidden) ctl.hide(WindowInsetsCompat.Type.navigationBars()) else ctl.show(WindowInsetsCompat.Type.navigationBars())
         }
         apply()
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) apply() }
@@ -126,6 +130,17 @@ fun ImmersiveBars(chrome: ReadingChrome) {
             ctl?.show(WindowInsetsCompat.Type.systemBars())
         }
     }
+}
+
+/**
+ * The phone shows no navigation bar of its own (gesture navigation with the hint hidden): its size,
+ * even while hidden, is under 16dp. Then the app's "내비게이션 바 숨기기" has nothing to hide.
+ */
+fun navBarAlreadyHidden(view: android.view.View): Boolean {
+    val insets = ViewCompat.getRootWindowInsets(view) ?: return false
+    val nav = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars())
+    val px = maxOf(nav.bottom, nav.left, nav.right)
+    return px < 16 * view.resources.displayMetrics.density
 }
 
 /**
@@ -233,8 +248,19 @@ fun ChromeSwitches(c: ReadingChrome, comic: Boolean = false, withNav: Boolean = 
         }
         androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
             com.oasisreader.app.ui.PanelSwitch("아래 쪽 번호", null, c.pageNum, { onChange(c.copy(pageNum = it)) }, w.weight(1f))
-            if (withNav) com.oasisreader.app.ui.PanelSwitch("내비게이션 바 숨기기", null, c.hideNav, { onChange(c.copy(hideNav = it)) }, w.weight(1f))
+            if (withNav) {
+                val navNeeded = !navBarAlreadyHidden(LocalView.current)
+                com.oasisreader.app.ui.PanelSwitch(
+                    "내비게이션 바 숨기기", if (navNeeded) null else "이 폰은 이미 숨겨져 있어 필요 없습니다",
+                    c.hideNav && navNeeded, { onChange(c.copy(hideNav = it)) }, w.weight(1f), enabled = navNeeded,
+                )
+            }
             else androidx.compose.foundation.layout.Spacer(w.weight(1f))
         }
+        if (withNav && navBarAlreadyHidden(LocalView.current)) Text(
+            "이 폰은 내비게이션 바가 이미 숨겨져 있어(제스처 힌트 숨김) 이 설정이 필요 없습니다.",
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

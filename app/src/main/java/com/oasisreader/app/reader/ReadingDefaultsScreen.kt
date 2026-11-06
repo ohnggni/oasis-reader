@@ -88,7 +88,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
                 fonts.download(f) { d, t -> fontProgress = d.toFloat() / t }
                 fontId = f.id; prefs.fontId = f.id
             } catch (e: Exception) {
-                Toast.makeText(context, "글꼴 받기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                com.oasisreader.app.ui.Notice.show(context, "글꼴 받기 실패: ${e.message}")
             } finally { fontBusy = null }
         }
     }
@@ -99,7 +99,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
         scope.launch {
             runCatching { fonts.importFont(app, uri) }
                 .onSuccess { fontId = it.id; prefs.fontId = it.id }
-                .onFailure { Toast.makeText(context, "글꼴 추가 실패: ${it.message}", Toast.LENGTH_LONG).show() }
+                .onFailure { com.oasisreader.app.ui.Notice.show(context, "글꼴 추가 실패: ${it.message}") }
         }
     }
 
