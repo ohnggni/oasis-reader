@@ -41,11 +41,25 @@ data class AudioBook(
     val serverId: String = "",      // the catalog it came from (서재 row: ab_<server>_<id>)
     val libraryId: String? = null,
     val artworkFile: String? = null,   // the 서재 cover on the phone (notification / lock screen, offline too)
+    // 소장 오디오북 (TODO 30): files from a 🗄️ 파일 서버 or a phone folder, not bookoasis — no server place
+    val own: Boolean = false,
+    val shelfId: String = "",          // the 서재 row (소장: "ao_…"; bookoasis: ab_<server>_<id>)
+    val chapters: List<AudioChapter> = emptyList(),   // 장 표시: inside the tracks (m4b, metadata.json)
 )
 
-/** [localPath]: the track kept on the phone (오프라인), played instead of the stream. */
+/** The 서재 row of [this] book. */
+fun AudioBook.rowId(): String = shelfId.ifEmpty { if (serverId.isEmpty()) "" else AudioLibraryLink.bookId(serverId, id) }
+
+/**
+ * [localPath]: the track kept on the phone (오프라인), played instead of the stream.
+ * [uri]: where a 소장 track plays from otherwise (remote://… 파일 서버, content://… 폰 폴더).
+ */
 @kotlinx.serialization.Serializable
-data class AudioTrack(val id: Int, val title: String, val durationSec: Double, val localPath: String? = null)
+data class AudioTrack(val id: Int, val title: String, val durationSec: Double, val localPath: String? = null, val uri: String? = null)
+
+/** One 장 (chapter): it starts in track [track] (index) at [startSec]. */
+@kotlinx.serialization.Serializable
+data class AudioChapter(val track: Int, val startSec: Double, val title: String)
 
 /**
  * The one audiobook player of the app: an ExoPlayer streaming the tracks from bookoasis with the
@@ -85,15 +99,16 @@ object AudioPlayback {
     private var listenedMs = 0L
     private var lastTickAt = 0L
 
-    private fun ensurePlayer(context: Context, w: BookOasisWeb): ExoPlayer {
+    private fun ensurePlayer(context: Context, w: BookOasisWeb?): ExoPlayer {
         val existing = player
-        if (existing != null && web === w) return existing
+        // 소장 오디오북 need no bookoasis session: any player plays them
+        if (existing != null && (w == null || web === w)) return existing
         existing?.release()
         val app = context.applicationContext
         speed = app.getSharedPreferences("audio", Context.MODE_PRIVATE).getFloat("speed", 1f)
         val p = ExoPlayer.Builder(app)
             // files on the phone (오프라인, encrypted) and the server's stream with the web session
-            .setMediaSourceFactory(DefaultMediaSourceFactory(MediaDataSourceFactory(app, androidx.media3.datasource.DefaultDataSource.Factory(app, OkHttpDataSource.Factory(w.client)))))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(MediaDataSourceFactory(app, androidx.media3.datasource.DefaultDataSource.Factory(app, OkHttpDataSource.Factory(w?.client ?: com.oasisreader.app.data.Http.client)))))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_SPEECH).build(),
                 /* handleAudioFocus = */ true,
@@ -127,7 +142,7 @@ object AudioPlayback {
                 error = "재생할 수 없습니다: " + (e.cause?.message ?: e.errorCodeName)
             }
         })
-        player = p; web = w
+        player = p; if (w != null) web = w
         return p
     }
 
@@ -150,13 +165,13 @@ object AudioPlayback {
      * Opens [b] at the phone's place, paused, and asks which place to go on from (the server's
      * place looks like a player that started over elsewhere).
      */
-    fun openAsking(context: Context, w: BookOasisWeb, b: AudioBook, phoneIdx: Int, phoneSec: Double) {
+    fun openAsking(context: Context, w: BookOasisWeb?, b: AudioBook, phoneIdx: Int, phoneSec: Double) {
         val serverIdx = b.tracks.indexOfFirst { it.id == b.startTrackId }
         open(context, w, b, phoneIdx, phoneSec, autoPlay = false)
         placeChoice = PlaceChoice(b.title, serverIdx, b.startSeconds, phoneIdx, phoneSec)
     }
 
-    fun open(context: Context, w: BookOasisWeb, b0: AudioBook, startIndex: Int? = null, startSec: Double? = null, autoPlay: Boolean = true) {
+    fun open(context: Context, w: BookOasisWeb?, b0: AudioBook, startIndex: Int? = null, startSec: Double? = null, autoPlay: Boolean = true) {
         var play = autoPlay
         val b = AudioDownloads.withLocal(context, b0)
         val p = ensurePlayer(context, w)
@@ -168,7 +183,10 @@ object AudioPlayback {
             p.setMediaItems(b.tracks.mapIndexed { i, t ->
                 MediaItem.Builder()
                     .setMediaId("${b.id}:${t.id}")
-                    .setUri(t.localPath?.let { Uri.fromFile(java.io.File(it)) } ?: Uri.parse(w.absolute("/api/media/audiobooks/${b.id}/tracks/${t.id}/stream")))
+                    .setUri(
+                        t.localPath?.let { Uri.fromFile(java.io.File(it)) } ?: t.uri?.let { Uri.parse(it) }
+                            ?: w?.let { Uri.parse(it.absolute("/api/media/audiobooks/${b.id}/tracks/${t.id}/stream")) } ?: Uri.EMPTY,
+                    )
                     .setMediaMetadata(
                         MediaMetadata.Builder()
                             .setTitle(t.title.ifBlank { "${i + 1}" })
@@ -190,7 +208,7 @@ object AudioPlayback {
             p.prepare()
         } else if (startIndex != null) {
             p.seekTo(startIndex, ((startSec ?: 0.0) * 1000).toLong())
-        } else if (!p.isPlaying) {
+        } else if (!p.isPlaying && !b.own) {
             // the same book is still loaded (paused): go to the server's place when it was saved
             // elsewhere after ours (the web or another phone) — AudioProgressSync.decide
             val idx = b.tracks.indexOfFirst { it.id == b.startTrackId }
@@ -207,7 +225,7 @@ object AudioPlayback {
         context.startService(Intent(context, AudioService::class.java))
         tick()
         // listening puts the book on the 서재 (like 바로 읽기 does for books)
-        if (b.serverId.isNotEmpty()) scope.launch {
+        if (b.serverId.isNotEmpty() && !b.own && w != null) scope.launch {
             runCatching { AudioLibraryLink.add(context.applicationContext, w, b, 0.0, false) }
         }
     }
@@ -216,8 +234,35 @@ object AudioPlayback {
     fun seekTo(ms: Long) { player?.seekTo(ms.coerceAtLeast(0)); tick() }
     fun seekBy(ms: Long) { player?.let { it.seekTo((it.currentPosition + ms).coerceIn(0, it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)) }; tick() }
     fun track(i: Int) { player?.let { if (i in 0 until it.mediaItemCount) { it.seekTo(i, 0); it.play() } }; tick() }
-    fun next() = player?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
-    fun previous() = player?.let { if (it.currentPosition > 5_000 || !it.hasPreviousMediaItem()) it.seekTo(0) else it.seekToPreviousMediaItem() }
+    fun next() {
+        val p = player ?: return
+        val cs = book?.chapters.orEmpty()
+        if (cs.isNotEmpty()) { val i = chapterIndex(); if (i + 1 < cs.size) goChapter(i + 1); return }
+        if (p.hasNextMediaItem()) p.seekToNextMediaItem()
+    }
+    fun previous() {
+        val p = player ?: return
+        val cs = book?.chapters.orEmpty()
+        if (cs.isNotEmpty()) {
+            val i = chapterIndex()
+            val c = cs.getOrNull(i)
+            val into = if (c != null && c.track == p.currentMediaItemIndex) p.currentPosition / 1000.0 - c.startSec else 99.0
+            goChapter(if (into > 5 || i <= 0) i.coerceAtLeast(0) else i - 1)
+            return
+        }
+        if (p.currentPosition > 5_000 || !p.hasPreviousMediaItem()) p.seekTo(0) else p.seekToPreviousMediaItem()
+    }
+
+    // ── 장 (chapters inside the tracks: m4b, metadata.json) ──
+    /** The chapter at [track] / [posSec] (-1 before the first). */
+    fun chapterAt(b: AudioBook, track: Int, posSec: Double): Int =
+        b.chapters.indexOfLast { it.track < track || (it.track == track && it.startSec <= posSec + 0.5) }
+    fun chapterIndex(): Int { val b = book ?: return -1; return chapterAt(b, trackIndex, positionMs / 1000.0) }
+    fun goChapter(i: Int) {
+        val c = book?.chapters?.getOrNull(i) ?: return
+        player?.let { it.seekTo(c.track, (c.startSec * 1000).toLong().coerceAtLeast(0)); it.play() }
+        tick()
+    }
 
     fun changeSpeed(context: Context, s: Float) {
         speed = s
@@ -268,10 +313,34 @@ object AudioPlayback {
         }
     }
 
+    /** 소장 오디오북: the place on the 서재 row only (no server), the listening time, a track length learnt. */
+    private fun saveOwn(p: ExoPlayer, b: AudioBook, completed: Boolean) {
+        if (p.mediaItemCount != b.tracks.size || p.playbackState == Player.STATE_IDLE) return
+        lastSaved = System.currentTimeMillis()
+        val idx = p.currentMediaItemIndex
+        val sec = p.currentPosition / 1000.0
+        val dur = p.duration.takeIf { it > 0 }?.let { it / 1000.0 } ?: 0.0
+        val ctx = app ?: return
+        val heard = listenedMs / 1000
+        listenedMs -= heard * 1000
+        scope.launch {
+            runCatching { AudioLibraryLink.savePlace(ctx, b, idx, sec, completed, dur) }
+            if (heard > 0) runCatching {
+                val dao = com.oasisreader.app.data.db.AppDatabase.get(ctx).readingTime()
+                val day = java.time.LocalDate.now().toString()
+                val id = b.rowId()
+                val cur = dao.get(day, id)?.seconds ?: 0L
+                dao.upsert(com.oasisreader.app.data.db.ReadingTimeEntity(day, id, cur + heard))
+            }
+            if (dur > 0 && (b.tracks.getOrNull(idx)?.durationSec ?: 1.0) <= 0) runCatching { kotlinx.coroutines.withContext(Dispatchers.IO) { OwnAudio.learnDuration(ctx, b.rowId(), idx, dur) } }
+        }
+    }
+
     /** The listening place back to bookoasis (the web player continues from it). */
     fun save(completed: Boolean = false) {
         val p = player ?: return
         val b = book ?: return
+        if (b.own) { saveOwn(p, b, completed); return }
         val w = web ?: return
         // an empty or not yet loaded player has no place to keep
         if (p.mediaItemCount != b.tracks.size || p.playbackState == Player.STATE_IDLE) return
@@ -291,7 +360,7 @@ object AudioPlayback {
                 runCatching {
                     val dao = com.oasisreader.app.data.db.AppDatabase.get(c).readingTime()
                     val day = java.time.LocalDate.now().toString()
-                    val id = AudioLibraryLink.bookId(b.serverId, b.id)
+                    val id = b.rowId()
                     val cur = dao.get(day, id)?.seconds ?: 0L
                     dao.upsert(com.oasisreader.app.data.db.ReadingTimeEntity(day, id, cur + heard))
                 }

@@ -91,7 +91,8 @@ fun BookInfoDialog(b: BookEntity, store: BookStore, onDismiss: () -> Unit) {
                     BookStore.FORMAT_COMIC -> "만화 (CBZ/ZIP)"
                     BookStore.FORMAT_PDF -> "PDF"
                     BookStore.FORMAT_TXT -> "TXT"
-                    com.oasisreader.app.audio.AudioLibraryLink.FORMAT -> "오디오북 (서버에서 스트리밍)"
+                    com.oasisreader.app.audio.AudioLibraryLink.FORMAT ->
+                        if (com.oasisreader.app.audio.OwnAudio.isOwn(b)) "소장 오디오북 (파일 서버 · 폰 폴더)" else "오디오북 (서버에서 스트리밍)"
                     else -> "EPUB"
                 })
                 Line("용량", when {

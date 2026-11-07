@@ -69,16 +69,23 @@ class EncryptedFileDataSource(private val key: ByteArray) : BaseDataSource(/* is
 class MediaDataSourceFactory(context: Context, private val default: DataSource.Factory) : DataSource.Factory {
     private val key = MediaCrypt.key(context)
 
-    override fun createDataSource(): DataSource = Routing(EncryptedFileDataSource(key), default.createDataSource())
+    private val app = context.applicationContext
 
-    private class Routing(private val enc: DataSource, private val other: DataSource) : DataSource {
+    override fun createDataSource(): DataSource = Routing(EncryptedFileDataSource(key), default.createDataSource(), RemoteDataSource(app))
+
+    // remote://: 소장 오디오북 streamed from a 🗄️ 파일 서버 (TODO 30)
+    private class Routing(private val enc: DataSource, private val other: DataSource, private val remote: DataSource) : DataSource {
         private var current: DataSource? = null
         override fun addTransferListener(transferListener: TransferListener) {
-            enc.addTransferListener(transferListener); other.addTransferListener(transferListener)
+            enc.addTransferListener(transferListener); other.addTransferListener(transferListener); remote.addTransferListener(transferListener)
         }
         override fun open(dataSpec: DataSpec): Long {
             val u = dataSpec.uri
-            val ds = if (u.scheme == "file" && u.path?.endsWith("." + MediaCrypt.EXT) == true) enc else other
+            val ds = when {
+                u.scheme == "file" && u.path?.endsWith("." + MediaCrypt.EXT) == true -> enc
+                u.scheme == "remote" -> remote
+                else -> other
+            }
             current = ds
             return ds.open(dataSpec)
         }

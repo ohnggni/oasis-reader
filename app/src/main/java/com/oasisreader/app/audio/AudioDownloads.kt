@@ -109,8 +109,8 @@ object AudioDownloads {
 
     /** [b] with the phone's files and cover where there are some (stream otherwise). */
     fun withLocal(context: Context, b: AudioBook): AudioBook {
-        if (b.serverId.isEmpty()) return b
-        val id = AudioLibraryLink.bookId(b.serverId, b.id)
+        val id = b.rowId()
+        if (id.isEmpty()) return b
         val cover = BookStore.get(context.applicationContext).coverFile(id).takeIf { it.isFile }?.path
         val kept = local(context, id)?.tracks?.associateBy { it.id }.orEmpty()
         return b.copy(

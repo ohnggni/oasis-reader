@@ -64,6 +64,17 @@ class FtpFs(server: Server, tls: Boolean) : RemoteFs {
         return ok
     }
 
+    override fun openRead(path: String, offset: Long): RemoteRead {
+        val p = Remote.norm(path)
+        val total = runCatching { ftp.getSize(p)?.trim()?.toLongOrNull() }.getOrNull() ?: -1L
+        ftp.restartOffset = offset
+        val input = try {
+            ftp.retrieveFileStream(p) ?: throw IOException("열기 실패: ${ftp.replyString?.trim()}")
+        } finally { ftp.restartOffset = 0 }
+        // closing early: the server answers the aborted transfer; the connection is dropped anyway
+        return RemoteRead(input, total, offset) { runCatching { ftp.completePendingCommand() } }
+    }
+
     override fun close() {
         runCatching { if (ftp.isConnected) { ftp.logout(); ftp.disconnect() } }
     }

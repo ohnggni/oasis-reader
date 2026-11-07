@@ -1,5 +1,6 @@
 package com.oasisreader.app
 
+import com.oasisreader.app.audio.rowId
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -163,6 +164,16 @@ private fun App() {
     // 폴더에서 가져오기: pick a folder → look through it → confirm → import in the background
     var folderScanning by remember { mutableStateOf(false) }
     var folderPlan by remember { mutableStateOf<com.oasisreader.app.data.FolderImport.Plan?>(null) }
+    // 🎧 소장 오디오북 (TODO 30): a phone folder → in place / copy → the audiobooks in it on the 서재
+    var audioTree by remember { mutableStateOf<android.net.Uri?>(null) }
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> audioTree = uri }
+    audioTree?.let { tree ->
+        com.oasisreader.app.audio.OwnAudioChoiceDialog(
+            remote = false, what = "고른 폴더",
+            onPick = { copy -> audioTree = null; com.oasisreader.app.audio.OwnAudioImport.fromFolder(context, tree, copy) },
+            onDismiss = { audioTree = null },
+        )
+    }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         folderScanning = true
@@ -190,8 +201,7 @@ private fun App() {
                 // playing it right now: straight to the player; paused or not loaded: ask the
                 // server for its place first (it may have been listened to elsewhere)
                 val already = com.oasisreader.app.audio.AudioPlayback.playing &&
-                    com.oasisreader.app.audio.AudioPlayback.book?.let { it.serverId to it.id } ==
-                    com.oasisreader.app.audio.AudioLibraryLink.parse(b)
+                    com.oasisreader.app.audio.AudioPlayback.book?.rowId() == b.id
                 audioReturn = Route.LIBRARY
                 if (already) route = Route.AUDIO_PLAYER
                 else scope.launch {
@@ -369,12 +379,18 @@ private fun App() {
                 ))
             },
             onImportFolder = { runCatching { folderPicker.launch(null) } },
+            onImportAudio = { runCatching { audioPicker.launch(null) } },
             onSettings = { route = Route.SETTINGS },
             onStats = { route = Route.STATS },
             onHighlights = { route = Route.HIGHLIGHTS },
             onDownloads = { downloadsReturn = Route.LIBRARY; route = Route.DOWNLOADS },
             onStorage = { storageReturn = Route.LIBRARY; route = Route.STORAGE },
-            onDelete = { b, keepHl -> scope.launch { store.delete(b.id, keepHl) } },
+            onDelete = { b, keepHl -> scope.launch {
+                if (com.oasisreader.app.audio.OwnAudio.isOwn(b)) {
+                    com.oasisreader.app.audio.AudioDownloads.remove(context, b); com.oasisreader.app.audio.OwnAudio.forget(context, b.id)
+                }
+                store.delete(b.id, keepHl)
+            } },
             onRename = { b, t -> scope.launch { db.books().rename(b.id, t) } },
             onPin = { b, pin -> scope.launch { db.books().setPinned(b.id, pin) } },
             onSourceFolder = ::openOrigin,

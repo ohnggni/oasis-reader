@@ -85,6 +85,7 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
     private suspend fun book(app: Context, bookId: String) {
         val dao = AppDatabase.get(app).books()
         val row = dao.get(bookId) ?: run { AudioDownloads.writeQueue(app, bookId, AudioDownloads.Queue()); return }
+        if (OwnAudio.isOwn(row)) { ownBook(app, row); return }
         val (sid, aid) = AudioLibraryLink.parse(row) ?: throw Refused("오디오북 정보가 없습니다")
         val server = ServerSettings(app).get(sid) ?: throw Refused("이 오디오북의 서버 설정이 지워졌습니다")
         val web = BookOasisWeb.of(server)
@@ -135,6 +136,95 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
         AudioDownloads.refreshRow(app, bookId)
         if (scope.isNotEmpty() && scope.all { it in AudioDownloads.keptTracks(app, bookId) }) done(app, row.title, scope.size)
+    }
+
+    /** 소장 오디오북 (TODO 30): the tracks from the 파일 서버 / 폰 폴더 into the phone, encrypted like the others. */
+    private suspend fun ownBook(app: Context, row: com.oasisreader.app.data.db.BookEntity) {
+        val bookId = row.id
+        val own = OwnAudio.read(app, bookId) ?: throw Refused("이 오디오북의 정보 파일이 없습니다")
+        val book = own.book
+        if (book.tracks.isEmpty()) throw Refused("트랙이 없습니다")
+        AudioDownloads.writeManifest(app, bookId, book)
+        AudioDownloads.errors.remove(bookId)
+        val opener = try { OwnAudio.opener(app, own) } catch (e: IllegalStateException) { throw Refused(e.message ?: "열 수 없습니다") }
+        try {
+            val scope = HashSet<Int>()
+            while (true) {
+                val q = AudioDownloads.readQueue(app, bookId)
+                if (q.paused) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return }
+                val all = AudioDownloads.ALL in q.wanted
+                val kept = AudioDownloads.keptTracks(app, bookId)
+                val wanted = book.tracks.filter { all || it.id in q.wanted }
+                scope += wanted.map { it.id }
+                val next = wanted.firstOrNull { it.id !in kept }
+                if (next == null) { AudioDownloads.writeQueue(app, bookId, AudioDownloads.Queue()); break }
+                val index = book.tracks.indexOf(next)
+                val doneInScope = scope.count { it in kept }
+                fun report(frac: Float) {
+                    val overall = ((doneInScope + frac) / scope.size.coerceAtLeast(1)).coerceIn(0f, 1f)
+                    AudioDownloads.progress[bookId] = overall
+                    AudioDownloads.current[bookId] = next.id to frac
+                    val now = System.currentTimeMillis()
+                    if (now - lastNote > 1000) {
+                        lastNote = now
+                        val text = "트랙 ${index + 1}/${book.tracks.size} · ${(overall * 100).toInt()}%"
+                        runCatching { setForegroundAsync(info(app, row.title, text, (overall * 100).toInt())) }
+                    }
+                }
+                report(0f)
+                try {
+                    ownTrack(app, opener, bookId, next) { report(it) }
+                } catch (e: Unwanted) {
+                    continue
+                } catch (e: Paused) {
+                    AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
+                    return
+                }
+                if (!all) AudioDownloads.updateQueue(app, bookId) { it.copy(wanted = it.wanted - next.id) }
+                AudioDownloads.refreshRow(app, bookId)
+            }
+            AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
+            AudioDownloads.refreshRow(app, bookId)
+            if (scope.isNotEmpty() && scope.all { it in AudioDownloads.keptTracks(app, bookId) }) done(app, row.title, scope.size)
+        } finally { runCatching { opener.close() } }
+    }
+
+    private fun ownTrack(app: Context, opener: OwnAudio.Opener, bookId: String, t: AudioTrack, onFrac: (Float) -> Unit) {
+        val part = AudioDownloads.partFile(app, bookId, t.id)
+        val key = MediaCrypt.key(app)
+        var offset = 0L
+        var nonce: ByteArray? = null
+        if (part.length() > MediaCrypt.HEADER) {
+            val head = ByteArray(MediaCrypt.HEADER)
+            RandomAccessFile(part, "r").use { it.readFully(head) }
+            nonce = MediaCrypt.nonceOf(head)
+            if (nonce != null) offset = part.length() - MediaCrypt.HEADER else part.delete()
+        } else part.delete()
+        val read = try { opener.open(t, offset) } catch (e: IllegalStateException) { throw Refused(e.message ?: "열 수 없습니다") }
+        read.use { rd ->
+            val append = offset > 0 && rd.start == offset && nonce != null
+            if (!append) { offset = 0; nonce = MediaCrypt.newNonce() }
+            val len = rd.total
+            var got = offset
+            var sinceCheck = 0L
+            FileOutputStream(part, append).buffered(256 * 1024).use { out ->
+                MediaCrypt.encrypt(key, nonce!!, rd.input, out, position = offset) { n ->
+                    got += n; sinceCheck += n
+                    if (sinceCheck >= 512 * 1024) {
+                        sinceCheck = 0
+                        if (isStopped) throw CancellationException("stopped")
+                        val q = AudioDownloads.readQueue(app, bookId)
+                        if (AudioDownloads.ALL !in q.wanted && t.id !in q.wanted) throw Unwanted()
+                        if (q.paused) throw Paused()
+                        if (len > 0) onFrac((got.toFloat() / len).coerceIn(0f, 1f))
+                    }
+                }
+            }
+            if (len > 0 && got < len) throw IOException("연결이 끊겼습니다")
+        }
+        val target = AudioDownloads.trackFile(app, bookId, t.id)
+        if (!part.renameTo(target)) throw IOException("파일을 저장하지 못했습니다")
+        onFrac(1f)
     }
 
     /** One track into <track>.part (going on from what is there), then renamed to <track>.ogr. */

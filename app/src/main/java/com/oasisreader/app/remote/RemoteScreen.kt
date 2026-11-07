@@ -113,6 +113,9 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
     val selected = remember { mutableStateListOf<RemoteFile>() }
     var ask by remember { mutableStateOf<List<RemoteFile>?>(null) }
     var gathering by remember { mutableStateOf(false) }
+    // 🎧 소장 오디오북 (TODO 30): sound files here, and the folder(s) to take as audiobooks
+    var audioHere by remember { mutableStateOf(0) }
+    var audioAsk by remember { mutableStateOf<List<String>?>(null) }
     val progress by Downloads.progress.collectAsState()
     val owned by remember { db.books().observeOpdsIds() }.collectAsState(initial = emptyList())
     val ownedSet = remember(owned) { owned.toHashSet() }
@@ -132,7 +135,9 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
         val d = dir ?: return@LaunchedEffect
         items = null; error = null
         try {
-            items = conn.use { it.list(d) }
+            val all = conn.use { it.list(d) }
+            audioHere = all.count { !it.isDir && Remote.isAudioName(it.name) }
+            items = all
                 .filter { it.isDir || it.isBook }
                 .filterNot { it.name.startsWith(".") }
                 .sortedWith(compareBy<RemoteFile> { !it.isDir }.thenComparator { a, b -> ShelfSearch.naturalCompare(a.name, b.name) })
@@ -250,7 +255,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
         }
         val list = items
         val books = list.orEmpty().count { it.isBook }
-        if (selected.isEmpty() && list != null && list.any { it.isDir || it.isBook }) Row(
+        if (selected.isEmpty() && list != null && (list.any { it.isDir || it.isBook } || audioHere > 0)) Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -258,12 +263,16 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                 listOfNotNull(
                     list.count { it.isDir }.takeIf { it > 0 }?.let { "📁 ${it}개" },
                     books.takeIf { it > 0 }?.let { "📖 ${it}권" },
+                    audioHere.takeIf { it > 0 }?.let { "🎧 트랙 ${it}개" },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            if (gathering) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            // 🎧: this folder as an audiobook (it holds sound files) or the audiobooks under it
+            if (audioHere > 0 || list.any { it.isDir }) MiniChip("🎧 오디오북", onClick = { audioAsk = listOfNotNull(d) })
+            if (books == 0 && list.none { it.isDir }) {}
+            else if (gathering) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             else MiniChip("⬇️ 이 폴더 모두 담기", onClick = {
                 val here = d ?: return@MiniChip
                 ask = listOf(RemoteFile(Remote.nameOf(here).ifBlank { server.name }, here, true))
@@ -281,7 +290,8 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                 }
                 list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 list.isEmpty() -> Text(
-                    "이 폴더에는 하위 폴더나 책(epub · cbz · zip · pdf · txt)이 없습니다.",
+                    if (audioHere > 0) "이 폴더는 오디오북(트랙 ${audioHere}개)입니다. 위 🎧 오디오북으로 서재에 담습니다."
+                    else "이 폴더에는 하위 폴더나 책(epub · cbz · zip · pdf · txt)이 없습니다.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(24.dp),
                 )
@@ -344,9 +354,24 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                     modifier = Modifier.weight(1f),
                 )
                 if (gathering) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else MiniChip("⬇️ 서재에 담기", onClick = { ask = selected.toList() })
+                else {
+                    if (selected.any { it.isDir }) MiniChip("🎧 오디오북", onClick = { audioAsk = selected.filter { it.isDir }.map { it.path } })
+                    MiniChip("⬇️ 서재에 담기", onClick = { ask = selected.toList() })
+                }
             }
         }
+    }
+
+    audioAsk?.let { dirs ->
+        com.oasisreader.app.audio.OwnAudioChoiceDialog(
+            remote = true,
+            what = if (dirs.size == 1) "「${Remote.nameOf(dirs[0]).ifBlank { server.name }}」" else "고른 폴더 ${dirs.size}개",
+            onPick = { keep ->
+                audioAsk = null; selected.clear()
+                dirs.forEach { com.oasisreader.app.audio.OwnAudioImport.fromRemote(context, server, it, keep) }
+            },
+            onDismiss = { audioAsk = null },
+        )
     }
 
     ask?.let { picked ->

@@ -61,6 +61,12 @@ class SftpFs(context: Context, server: Server) : RemoteFs {
         }
     }
 
+    override fun openRead(path: String, offset: Long): RemoteRead {
+        val rf = sftp.open(Remote.norm(path))
+        val total = runCatching { rf.length() }.getOrDefault(-1L)
+        return RemoteRead(rf.RemoteFileInputStream(offset), total, offset) { runCatching { rf.close() } }
+    }
+
     override fun close() {
         runCatching { sftp.close() }
         runCatching { ssh.disconnect() }

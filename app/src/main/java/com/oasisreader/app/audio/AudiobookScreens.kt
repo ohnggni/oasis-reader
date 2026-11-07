@@ -503,18 +503,29 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
                 awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() }
             })
         }
-        if (b == null || web == null) Text("재생 중인 오디오북이 없습니다.", modifier = Modifier.padding(24.dp))
+        if (b == null) Text("재생 중인 오디오북이 없습니다.", modifier = Modifier.padding(24.dp))
         else Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(16.dp))
-            RemoteCover(b.coverUrl, b.title, { u -> web.bytes(u) }, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(1f))
+            val coverMod = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(1f)
+            val localCover = b.artworkFile?.let { java.io.File(it) }?.takeIf { it.isFile }
+            when {
+                // 소장 오디오북 (and books with a 서재 cover): the phone's copy
+                localCover != null && (b.own || web == null) -> com.oasisreader.app.ui.BookCover(localCover, b.title, coverMod)
+                web != null -> RemoteCover(b.coverUrl, b.title, { u -> web.bytes(u) }, coverMod)
+                else -> Box(coverMod, contentAlignment = Alignment.Center) { Text("🎧", fontSize = 64.sp) }
+            }
             Spacer(Modifier.height(16.dp))
             Text(b.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val t = b.tracks.getOrNull(AudioPlayback.trackIndex)
+            // 장 표시: the chapter inside the track (m4b, metadata.json), else the track
+            val ci = if (b.chapters.isNotEmpty()) AudioPlayback.chapterIndex() else -1
+            val ch = b.chapters.getOrNull(ci)
             Text(
-                "${AudioPlayback.trackIndex + 1} / ${b.tracks.size}" + (t?.title?.let { " · $it" } ?: ""),
+                if (ch != null) "${ci + 1}장 / ${b.chapters.size} · ${ch.title}"
+                else "${AudioPlayback.trackIndex + 1} / ${b.tracks.size}" + (t?.title?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             AudioPlayback.error?.let { Text("⚠️ $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -537,7 +548,7 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Big("⏮", "이전 트랙", 22) { AudioPlayback.previous() }
+                Big("⏮", if (b.chapters.isNotEmpty()) "이전 장" else "이전 트랙", 22) { AudioPlayback.previous() }
                 Big("↺15", "15초 뒤로", 16) { AudioPlayback.seekBy(-15_000) }
                 // ⏯: a plain high-contrast disc (dark on light, light on dark) with a drawn icon
                 Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.onSurface, shadowElevation = 2.dp) {
@@ -549,7 +560,7 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
                     }
                 }
                 Big("30↻", "30초 앞으로", 16) { AudioPlayback.seekBy(30_000) }
-                Big("⏭", "다음 트랙", 22) { AudioPlayback.next() }
+                Big("⏭", if (b.chapters.isNotEmpty()) "다음 장" else "다음 트랙", 22) { AudioPlayback.next() }
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -575,7 +586,18 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(14.dp))
             HorizontalDivider(thickness = 0.5.dp)
-            b.tracks.forEachIndexed { i, tr ->
+            if (b.chapters.isNotEmpty()) b.chapters.forEachIndexed { i, c ->
+                val now = i == ci
+                Row(
+                    Modifier.fillMaxWidth().clickable { AudioPlayback.goChapter(i) }.padding(vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(if (now) "▶" else "${i + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.widthIn(min = 28.dp))
+                    Text(c.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                        fontWeight = if (now) FontWeight.Bold else FontWeight.Normal)
+                    Text(hms(c.startSec), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else b.tracks.forEachIndexed { i, tr ->
                 val now = i == AudioPlayback.trackIndex
                 Row(
                     Modifier.fillMaxWidth().clickable { AudioPlayback.track(i) }.padding(vertical = 9.dp),

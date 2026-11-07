@@ -107,5 +107,23 @@ class WebDavFs(private val server: Server) : RemoteFs {
         }
     }
 
+    override fun openRead(path: String, offset: Long): RemoteRead {
+        val r = req(urlOf(path, false)).apply { if (offset > 0) header("Range", "bytes=$offset-") }.build()
+        val res = Http.client.newCall(r).execute()
+        if (res.code == 401) { res.close(); throw HttpException(401, "로그인 실패 (아이디·비밀번호 확인)") }
+        if (!res.isSuccessful) { res.close(); throw HttpException(res.code, "열기 실패 (${res.code})") }
+        val body = res.body ?: run { res.close(); throw IOException("빈 응답") }
+        val input = body.byteStream()
+        val len = body.contentLength()
+        return if (res.code == 206 || offset == 0L) {
+            RemoteRead(input, if (len >= 0) len + offset else -1L, offset) { res.close() }
+        } else {
+            // the server sent the whole file: skip to the place
+            var left = offset
+            while (left > 0) { val n = input.skip(left); if (n <= 0) break; left -= n }
+            RemoteRead(input, len, offset) { res.close() }
+        }
+    }
+
     override fun close() {}
 }

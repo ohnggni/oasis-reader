@@ -97,6 +97,29 @@ class SmbFs(server: Server) : RemoteFs {
         }
     }
 
+    override fun openRead(path: String, offset: Long): RemoteRead {
+        val (share, inner) = split(path)
+        val f = share.openFile(
+            inner, EnumSet.of(AccessMask.GENERIC_READ), null, SMB2ShareAccess.ALL, SMB2CreateDisposition.FILE_OPEN, null,
+        )
+        val total = runCatching { f.fileInformation.standardInformation.endOfFile }.getOrDefault(-1L)
+        val input = object : java.io.InputStream() {
+            var pos = offset
+            override fun read(): Int {
+                val one = ByteArray(1)
+                return if (read(one, 0, 1) <= 0) -1 else one[0].toInt() and 0xff
+            }
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (total in 0..pos) return -1
+                val n = f.read(b, pos, off, len)
+                if (n <= 0) return -1
+                pos += n
+                return n
+            }
+        }
+        return RemoteRead(input, total, offset) { runCatching { f.close() } }
+    }
+
     override fun close() {
         shares.values.forEach { runCatching { it.close() } }
         runCatching { session.close() }

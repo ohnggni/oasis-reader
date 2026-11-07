@@ -28,6 +28,29 @@ interface RemoteFs : Closeable {
      * Returns false when [stop] said so (the part stays).
      */
     fun download(path: String, part: File, onProgress: (Long, Long) -> Unit, stop: () -> Boolean): Boolean
+
+    /**
+     * Reads [path] from byte [offset] (오디오북 스트리밍, metadata.json, 장 표시). [RemoteRead.total] is the
+     * whole file's size (-1 when unknown). Closing the read frees what it holds (not the connection).
+     */
+    fun openRead(path: String, offset: Long): RemoteRead
+}
+
+/** An open read of a file-server file, from [start]. */
+class RemoteRead(val input: InputStream, val total: Long, val start: Long, private val onClose: () -> Unit = {}) : Closeable {
+    override fun close() { try { input.close() } finally { onClose() } }
+
+    /** Up to [max] bytes (the rest of the file when smaller). */
+    fun readUpTo(max: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (out.size() < max) {
+            val n = input.read(buf, 0, minOf(buf.size, max - out.size()))
+            if (n < 0) break
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
+    }
 }
 
 /** "scheme://host:port/path" (the path may hold Korean letters and spaces as they are). */
@@ -61,6 +84,10 @@ object Remote {
 
     private val BOOK_EXT = setOf("epub", "txt", "pdf", "cbz", "zip")
     fun isBookName(name: String) = name.substringAfterLast('.', "").lowercase() in BOOK_EXT
+
+    // 소장 오디오북 (TODO 30): a folder holding these is one audiobook
+    val AUDIO_EXT = setOf("mp3", "m4a", "m4b", "aac", "ogg", "oga", "opus", "flac", "wav")
+    fun isAudioName(name: String) = !name.startsWith("._") && name.substringAfterLast('.', "").lowercase() in AUDIO_EXT
 
     fun label(proto: String) = when (proto) {
         WEBDAV -> "WebDAV"; SFTP -> "SFTP"; SMB -> "SMB"; FTP -> "FTP"; FTPS -> "FTPS"; else -> proto

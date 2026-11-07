@@ -29,8 +29,8 @@ object AudioLibraryLink {
 
     /** (server id, audiobook id) of a library row, or null for other books. */
     fun parse(b: BookEntity): Pair<String, Int>? {
-        if (b.format != FORMAT) return null
-        val p = b.opdsId?.removePrefix("audiobook:")?.split(':') ?: return null
+        if (b.format != FORMAT || b.opdsId?.startsWith("audiobook:") != true) return null
+        val p = (b.opdsId ?: return null).removePrefix("audiobook:").split(':')
         val aid = p.lastOrNull()?.toIntOrNull() ?: return null
         return p.dropLast(1).joinToString(":") to aid
     }
@@ -111,16 +111,20 @@ object AudioLibraryLink {
     }
 
     /** The listening place on the 서재 row (no row: nothing happens). */
-    suspend fun savePlace(context: Context, b: AudioBook, trackIndex: Int, positionSec: Double, completed: Boolean) {
-        if (b.serverId.isEmpty()) return
-        val total = b.tracks.sumOf { it.durationSec }
-        val before = b.tracks.take(trackIndex).sumOf { it.durationSec }
+    suspend fun savePlace(context: Context, b: AudioBook, trackIndex: Int, positionSec: Double, completed: Boolean, trackSec: Double = 0.0) {
+        val id = b.rowId()
+        if (id.isEmpty()) return
+        // unknown lengths (소장 files before they are played): the playing track's own, else the average
+        val durs = b.tracks.mapIndexed { i, t -> if (t.durationSec <= 0 && i == trackIndex && trackSec > 0) trackSec else t.durationSec }
+        val avg = durs.filter { it > 0 }.takeIf { it.isNotEmpty() }?.average() ?: 0.0
+        val known = durs.map { if (it > 0) it else avg }
+        val total = known.sum()
+        val before = known.take(trackIndex).sum()
         val overall = if (completed) 1f else if (total > 0) ((before + positionSec) / total).toFloat().coerceIn(0f, 1f) else 0f
         // audiobook rows keep the seconds into the track here (chapterFraction; the reader never opens them):
         // track lengths are often unknown until played
         val inTrack = positionSec.toFloat().coerceAtLeast(0f)
         val dao = AppDatabase.get(context.applicationContext).books()
-        val id = bookId(b.serverId, b.id)
         dao.savePosition(id, trackIndex, inTrack, overall, System.currentTimeMillis())
         if (completed) dao.setFinished(id, System.currentTimeMillis())
     }
@@ -143,6 +147,7 @@ object AudioLibraryLink {
 
     /** Opens a 서재 row: the server's tracks and place, then plays. Throws when the server cannot be reached. */
     suspend fun play(context: Context, b: BookEntity) {
+        if (OwnAudio.isOwn(b)) { OwnAudio.play(context, b); return }
         val (sid, aid) = parse(b) ?: throw IllegalStateException("오디오북 정보가 없습니다")
         val server: Server = ServerSettings(context.applicationContext).get(sid)
             ?: throw IllegalStateException("이 오디오북의 서버 설정이 지워졌습니다")

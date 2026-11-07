@@ -60,6 +60,7 @@ object ShelfActions {
         val store = BookStore.get(app)
         books.forEach { b ->
             if (isAudio(b)) AudioDownloads.remove(app, b)
+            if (com.oasisreader.app.audio.OwnAudio.isOwn(b)) com.oasisreader.app.audio.OwnAudio.forget(app, b.id)
             store.delete(b.id, keepHighlights)
         }
     }
