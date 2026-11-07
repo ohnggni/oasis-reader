@@ -235,7 +235,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
             ) {
                 Text(server.name, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.combinedClickable(onClick = { dir = r }))
-                var at = r
+                var at: String = r
                 parts.forEachIndexed { i, p ->
                     at = Remote.child(at, p)
                     val target = at
