@@ -288,10 +288,13 @@ fun LibraryScreen(
     // once the volume number is taken off; same kind only; two or more. Shown like 컬렉션 folders
     // (ids "s:…", not saved anywhere).
     // 컬렉션 stay as they are: only books on no 컬렉션 are grouped by series
-    val seriesGroups: List<Pair<CollectionEntity, List<BookEntity>>> = remember(base, groupMode, inAnyCol) {
+    // 🔓 이 묶음 풀기: series keys the user took apart (kept, so they stay apart)
+    var ungrouped by remember { mutableStateOf(shelfPrefs.getStringSet("ungrouped_series", emptySet()).orEmpty().toSet()) }
+    fun setUngrouped(v: Set<String>) { ungrouped = v; shelfPrefs.edit().putStringSet("ungrouped_series", v).apply() }
+    val seriesGroups: List<Pair<CollectionEntity, List<BookEntity>>> = remember(base, groupMode, inAnyCol, ungrouped) {
         if (groupMode != "series") emptyList()
         else base.filter { it.id !in inAnyCol }.groupBy { seriesKeyOf(it) }.mapNotNull { (k, bs) ->
-            if (k == null || bs.size < 2) null
+            if (k == null || bs.size < 2 || k in ungrouped) null
             else CollectionEntity("s:$k", seriesNameOf(bs), 0L, 0) to bs
         }
     }
@@ -459,6 +462,10 @@ fun LibraryScreen(
                         text = { Text("🔗 컬렉션 + 시리즈별로 묶기 (자동)") }, leadingIcon = { CheckMark(groupMode == "series") },
                         onClick = { viewOpen = false; openFolder = null; setGroup(if (groupMode == "series") "none" else "series") },
                     )
+                    if (groupMode == "series" && ungrouped.isNotEmpty()) DropdownMenuItem(
+                        text = { Text("🔗 풀어 둔 묶음 ${ungrouped.size}개 다시 묶기") },
+                        onClick = { viewOpen = false; setUngrouped(emptySet()) },
+                    )
                     if (grouped && tiles) {
                         HorizontalDivider()
                         Text("폴더 모양", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
@@ -561,6 +568,7 @@ fun LibraryScreen(
                 onRename = { renameCol = folder }, onDelete = { deleteCol = folder },
                 onSelectAll = { selected = selected + visibleIds },
                 onMakeCollection = if (auto) ({ makeCollection(folder.name, visibleIds) }) else null,
+                onUngroup = if (auto) ({ openFolder = null; setUngrouped(ungrouped + folder.id.removePrefix("s:")) }) else null,
             )
         }
 
@@ -624,6 +632,7 @@ fun LibraryScreen(
                                 onLongClick = { toggle(e.bookIds()) },
                                 onRename = { renameCol = e.c }, onDelete = { deleteCol = e.c },
                                 onMakeCollection = if (e.c.id.startsWith("s:")) ({ makeCollection(e.c.name, e.bookIds()) }) else null,
+                                onUngroup = if (e.c.id.startsWith("s:")) ({ setUngrouped(ungrouped + e.c.id.removePrefix("s:")) }) else null,
                             )
                             is ShelfEntry.Head -> {}
                         }
@@ -653,6 +662,7 @@ fun LibraryScreen(
                                 onLongClick = { toggle(e.bookIds()) },
                                 onRename = { renameCol = e.c }, onDelete = { deleteCol = e.c },
                                 onMakeCollection = if (e.c.id.startsWith("s:")) ({ makeCollection(e.c.name, e.bookIds()) }) else null,
+                                onUngroup = if (e.c.id.startsWith("s:")) ({ setUngrouped(ungrouped + e.c.id.removePrefix("s:")) }) else null,
                             )
                             is ShelfEntry.Folder -> {}
                         }
@@ -894,7 +904,7 @@ private fun SelectionBar(count: Int, allSelected: Boolean, onClose: () -> Unit, 
 
 /** ⋮ on a 컬렉션 folder or head: 이름 바꾸기 · 컬렉션 지우기 (and 모두 고르기). */
 @Composable
-private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onSelectAll: () -> Unit, size: Dp = 36.dp, onMakeCollection: (() -> Unit)? = null) {
+private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onSelectAll: () -> Unit, size: Dp = 36.dp, onMakeCollection: (() -> Unit)? = null, onUngroup: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.size(size)) {
@@ -905,6 +915,7 @@ private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onS
             if (onMakeCollection != null) {
                 // an automatic series group: nothing to rename or delete; it can become a 컬렉션
                 DropdownMenuItem(text = { Text("📚 컬렉션으로 만들기") }, onClick = { open = false; onMakeCollection() })
+                if (onUngroup != null) DropdownMenuItem(text = { Text("🔓 이 묶음 풀기") }, onClick = { open = false; onUngroup() })
             } else {
                 DropdownMenuItem(text = { Text("✏️ 이름 바꾸기") }, onClick = { open = false; onRename() })
                 DropdownMenuItem(text = { Text("🗑️ 컬렉션 지우기…", color = MaterialTheme.colorScheme.error) }, onClick = { open = false; onDelete() })
@@ -935,6 +946,7 @@ private fun FolderTile(
     c: CollectionEntity, books: List<BookEntity>, store: BookStore, stack: Boolean, compact: Boolean, selected: Boolean?,
     onClick: () -> Unit, onLongClick: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit,
     onMakeCollection: (() -> Unit)? = null,
+    onUngroup: (() -> Unit)? = null,
 ) {
     val covers = remember(books) { books.sortedWith { a, b -> ShelfSearch.naturalCompare(a.title, b.title) }.take(4) }
     val read = books.count { it.finishedAt != null }
@@ -982,7 +994,7 @@ private fun FolderTile(
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                 )
             }
-            CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, size = if (compact) 26.dp else 36.dp, onMakeCollection = onMakeCollection)
+            CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, size = if (compact) 26.dp else 36.dp, onMakeCollection = onMakeCollection, onUngroup = onUngroup)
         }
     }
 }
@@ -994,6 +1006,7 @@ private fun CollectionHead(
     c: CollectionEntity, books: List<BookEntity>, open: Boolean, selected: Boolean?,
     onClick: () -> Unit, onLongClick: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit,
     onMakeCollection: (() -> Unit)? = null,
+    onUngroup: (() -> Unit)? = null,
 ) {
     val read = books.count { it.finishedAt != null }
     Row(
@@ -1013,7 +1026,7 @@ private fun CollectionHead(
             }
         }
         Text(if (open) "🔼" else "🔽")
-        CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, onMakeCollection = onMakeCollection)
+        CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, onMakeCollection = onMakeCollection, onUngroup = onUngroup)
     }
 }
 
@@ -1225,7 +1238,6 @@ private fun seriesKeyOf(b: BookEntity): String? {
             com.oasisreader.app.data.BookOrigin.META -> o.series?.let { return "$kind|m|${o.server}|${o.library}|$it" }
             com.oasisreader.app.data.BookOrigin.OPDS -> o.urls.lastOrNull()?.let { return "$kind|o|${o.server}|$it" }
             com.oasisreader.app.data.BookOrigin.FOLDER -> o.folder?.takeIf { it.isNotBlank() }?.let { return "$kind|f|${o.tree}|$it" }
-            com.oasisreader.app.data.BookOrigin.REMOTE -> o.folder?.let { return "$kind|r|${o.server}|$it" }
         }
     }
     return ShelfSearch.seriesStem(b.title)?.let { "$kind|t|" + ShelfSearch.normalize(it) }
