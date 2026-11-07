@@ -882,7 +882,7 @@ fun LibraryScreen(
 private fun SelectionBar(count: Int, allSelected: Boolean, onClose: () -> Unit, onAll: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
         Row(
-            Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(end = 4.dp),
+            Modifier.fillMaxWidth().shelfTopInset().height(60.dp).padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             EmojiButton("✖️", "선택 끝내기", onClose)

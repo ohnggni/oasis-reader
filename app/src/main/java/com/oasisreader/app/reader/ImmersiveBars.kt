@@ -122,12 +122,21 @@ fun ImmersiveBars(chrome: ReadingChrome, appBarsUp: Boolean = false) {
         owner.lifecycle.addObserver(obs)
         // a dialog, menu or keyboard takes the window focus and Android shows the bars again:
         // hide them once the focus comes back
-        val focus = android.view.ViewTreeObserver.OnWindowFocusChangeListener { has -> if (has) view.post { apply() } }
+        // after leaving, a re-hide already posted must not run (it hid the bars again on the shelf
+        // on some phones, and the insets came back late → the top bar sat under the status bar)
+        var alive = true
+        val reapply = Runnable { if (alive) apply() }
+        val focus = android.view.ViewTreeObserver.OnWindowFocusChangeListener { has ->
+            if (has && alive) { view.removeCallbacks(reapply); view.post(reapply) }
+        }
         view.viewTreeObserver.addOnWindowFocusChangeListener(focus)
         onDispose {
+            alive = false
+            view.removeCallbacks(reapply)
             owner.lifecycle.removeObserver(obs)
             runCatching { view.viewTreeObserver.removeOnWindowFocusChangeListener(focus) }
             ctl?.show(WindowInsetsCompat.Type.systemBars())
+            ViewCompat.requestApplyInsets(view)
         }
     }
 }

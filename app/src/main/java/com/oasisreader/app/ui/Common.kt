@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -24,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -36,6 +40,14 @@ import com.oasisreader.app.ui.theme.BarColors
 fun barColor(): Color = if (isAppDark()) BarColors.Dark else BarColors.Light
 
 /** Plain top bar in the reader's bar colour (two shades off the page). */
+/**
+ * Top inset for screens outside the reader, where the status bar is always shown: its height even
+ * while it is (still) hidden, so the bar never slides under it when the insets come back late
+ * after leaving the reader (S20 FE and other One UI 5 phones, TODO 28).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+fun Modifier.shelfTopInset(): Modifier = composed { windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility) }
+
 @Composable
 fun TopBar(
     title: String,
@@ -46,7 +58,7 @@ fun TopBar(
 ) {
     Surface(color = barColor(), contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
         Row(
-            Modifier.fillMaxWidth().statusBarsPadding().height(if (brand) 60.dp else 56.dp).padding(end = 4.dp),
+            Modifier.fillMaxWidth().shelfTopInset().height(if (brand) 60.dp else 56.dp).padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
