@@ -31,12 +31,13 @@ data class BookOrigin(
     fun encode(): String = json.encodeToString(serializer(), this)
 
     /** 📂 있던 폴더 열기 can go there (a server folder or series; phone folders cannot be shown). */
-    val openable get() = server != null && (type == OPDS && urls.isNotEmpty() || type == META && series != null)
+    val openable get() = server != null && (type == OPDS && urls.isNotEmpty() || type == META && series != null || type == REMOTE && folder != null)
 
     companion object {
         const val OPDS = "opds"
         const val META = "meta"
         const val FOLDER = "folder"
+        const val REMOTE = "remote"     // a file server folder (TODO 29): server + folder (its path there)
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
         fun decode(s: String?): BookOrigin? = s?.let { runCatching { json.decodeFromString(serializer(), it) }.getOrNull() }
@@ -48,6 +49,8 @@ data class BookOrigin(
             series?.ifBlank { null }?.let { BookOrigin(META, serverId, series = it, library = library).encode() }
 
         fun folder(tree: String, folder: String): String = BookOrigin(FOLDER, tree = tree, folder = folder).encode()
+
+        fun remote(serverId: String, folder: String): String = BookOrigin(REMOTE, serverId, folder = folder).encode()
     }
 }
 
@@ -130,6 +133,22 @@ object NextVolumes {
                 db.books().findBySource(api.key(m), href)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(m.name) { c, done ->
                     Downloads.startUrl(c, server, api.key(m), href, m.name, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin)
+                }
+            }
+            BookOrigin.REMOTE -> {
+                val server = ServerSettings(app).get(o.server) ?: return null
+                val dir = o.folder ?: return null
+                val mine = com.oasisreader.app.remote.Remote.parseUrl(book.sourceUrl ?: return null)?.second ?: return null
+                val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.oasisreader.app.remote.Remote.list(app, server, dir)
+                }.filter { it.isBook }.sortedWith { a, b -> ShelfSearch.naturalCompare(a.name, b.name) }
+                val i = list.indexOfFirst { it.path == mine }
+                if (i < 0) return null
+                val f = list.getOrNull(i + 1) ?: return null
+                val url = com.oasisreader.app.remote.Remote.url(server.id, f.path)
+                db.books().findBySource(url, url)?.let { return NextVolume.InLibrary(it) }
+                NextVolume.OnServer(f.name.substringBeforeLast('.')) { c, done ->
+                    Downloads.startRemote(c, server, f.path, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin)
                 }
             }
             else -> null

@@ -1225,6 +1225,7 @@ private fun seriesKeyOf(b: BookEntity): String? {
             com.oasisreader.app.data.BookOrigin.META -> o.series?.let { return "$kind|m|${o.server}|${o.library}|$it" }
             com.oasisreader.app.data.BookOrigin.OPDS -> o.urls.lastOrNull()?.let { return "$kind|o|${o.server}|$it" }
             com.oasisreader.app.data.BookOrigin.FOLDER -> o.folder?.takeIf { it.isNotBlank() }?.let { return "$kind|f|${o.tree}|$it" }
+            com.oasisreader.app.data.BookOrigin.REMOTE -> o.folder?.let { return "$kind|r|${o.server}|$it" }
         }
     }
     return ShelfSearch.seriesStem(b.title)?.let { "$kind|t|" + ShelfSearch.normalize(it) }

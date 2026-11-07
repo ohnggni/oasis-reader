@@ -132,6 +132,66 @@ object Downloads {
         }
     }
 
+    /**
+     * A file from a file server (WebDAV · SFTP · SMB · FTP). Kept books go through the queue
+     * (background, resumable); 바로 읽기 is received at once. Its key and source are remote://….
+     */
+    fun startRemote(
+        context: Context, server: Server, path: String,
+        pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null,
+        origin: String? = null,
+    ) {
+        val url = com.oasisreader.app.remote.Remote.url(server.id, path)
+        val title = com.oasisreader.app.remote.Remote.nameOf(path).substringBeforeLast('.')
+        if (pinned && onDone == null) {
+            BookQueue.enqueue(context, BookQueue.Job(url, server.id, url, title, collectionId = collectionId, origin = origin))
+            return
+        }
+        if (_progress.value.containsKey(url)) return
+        val app = context.applicationContext
+        _progress.update { it + (url to -1f) }
+        _direct.update { it + (url to title) }
+        scope.launch {
+            val tmp = File(app.cacheDir, "dl_${System.nanoTime()}.bin")
+            try {
+                val book = gate.withPermit {
+                    fetch(app, url, tmp) { done, total ->
+                        val f = if (total > 0) done.toFloat() / total else -1f
+                        _progress.update { it + (url to f) }
+                    }
+                    BookStore.get(app).import(tmp, sourceUrl = url, opdsId = url, titleHint = title, fallbackTitle = title, pinned = pinned, moveSource = true)
+                }
+                collectionId?.let { com.oasisreader.app.ui.ShelfCollections.set(com.oasisreader.app.data.db.AppDatabase.get(app), it, book.id, true) }
+                recordOrigin(app, book.id, origin)
+                afterImport(app, book, pinned, onDone)
+            } catch (e: Exception) {
+                _messages.tryEmit("받기 실패: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                tmp.delete()
+                _progress.update { it - url }
+                _direct.update { it - url }
+            }
+        }
+    }
+
+    /**
+     * Receives a book's source again into [dest] (its file went missing, 다시 받기): an OPDS /
+     * bookoasis link, or a file server's remote://….
+     */
+    suspend fun fetch(app: Context, url: String, dest: File, onProgress: (Long, Long) -> Unit = { _, _ -> }) {
+        val remote = com.oasisreader.app.remote.Remote.parseUrl(url)
+        if (remote != null) {
+            val server = ServerSettings(app).get(remote.first) ?: throw HttpException(0, "서버 설정이 지워졌습니다")
+            dest.delete()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.oasisreader.app.remote.Remote.open(app, server).use { it.download(remote.second, dest, onProgress) { false } }
+            }
+        } else {
+            val server = ServerSettings(app).forUrl(url) ?: Server("", "", "", "", "")
+            com.oasisreader.app.opds.OpdsClient(server).download(url, dest, onProgress)
+        }
+    }
+
     /** Where the book came from (다음 권 / 있던 폴더 열기). */
     suspend fun recordOrigin(app: Context, bookId: String, origin: String?) {
         if (origin != null) runCatching { com.oasisreader.app.data.db.AppDatabase.get(app).books().setOrigin(bookId, origin) }

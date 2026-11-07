@@ -217,6 +217,10 @@ private fun App() {
                 com.oasisreader.app.meta.MetaCatalogNav.pending[sid] = com.oasisreader.app.meta.MetaSeries(lib, series)
                 route = Route.CATALOG_OF + sid
             }
+            com.oasisreader.app.data.BookOrigin.REMOTE -> {
+                com.oasisreader.app.remote.RemoteNav.pending[sid] = o.folder ?: return
+                route = Route.CATALOG_OF + sid
+            }
         }
     }
 
@@ -240,7 +244,16 @@ private fun App() {
             val many = remember(sid) { ServerSettings(app).all().size > 1 }
             val hasMeta = remember(sid, route) { ServerSettings(app).get(sid)?.metaUrl?.isNotBlank() == true }
             val isAudio = remember(sid, route) { ServerSettings(app).get(sid)?.isAudiobook == true }
-            if (isAudio) key(sid) {
+            val isRemote = remember(sid, route) { ServerSettings(app).get(sid)?.isRemote == true }
+            if (isRemote) key(sid) {
+                // a file server (WebDAV · SFTP · SMB · FTP): its folders
+                com.oasisreader.app.remote.RemoteScreen(
+                    serverId = sid,
+                    onBack = { route = if (many) Route.CATALOG else Route.LIBRARY },
+                    onOpenSettings = { openServer(route, sid) },
+                    onOpenBook = { id -> route = Route.READER + id },
+                )
+            } else if (isAudio) key(sid) {
                 // a bookoasis audiobook library: list → tracks → player
                 com.oasisreader.app.audio.AudiobookScreen(
                     serverId = sid,

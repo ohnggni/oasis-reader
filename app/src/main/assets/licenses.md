@@ -8,6 +8,8 @@
 - AndroidX (Activity, Core, Lifecycle, Room, WebKit, Window) — The Android Open Source Project
 - Jetpack Compose, Material 3 — The Android Open Source Project
 - OkHttp, Okio — Square, Inc.
+- sshj, smbj — Jeroen van Erp (hierynomus)
+- Apache Commons Net — The Apache Software Foundation
 
 ```
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +23,22 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+```
+
+## MIT License
+
+- Bouncy Castle (bcprov) — The Legion of the Bouncy Castle Inc.
+- SLF4J API — QOS.ch
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+and associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions: The above copyright notice and this
+permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
 ```
 
 ## SIL Open Font License 1.1

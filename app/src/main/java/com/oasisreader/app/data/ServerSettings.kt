@@ -14,12 +14,17 @@ data class Server(
     val password: String,
     val metaUrl: String = "",   // oasis-meta sidecar (series names, clean titles, real dates); "" = none
     val metaDb: String = "general",   // bookoasis database behind this catalog: "general" | "adult" | "audiobook"
+    val proto: String = "",          // a file server (TODO 29): "webdav" | "sftp" | "smb" | "ftp" | "ftps"; "" = OPDS
 ) {
+    /** A file server (WebDAV · SFTP · SMB · FTP), browsed by folders instead of a catalog. */
+    val isRemote get() = proto.isNotEmpty()
+
     /** A bookoasis audiobook library (its web API, not OPDS). */
     val isAudiobook get() = metaDb == ServerSettings.AUDIOBOOK
 
     /** Address set; a login needs both parts (or neither, for a public catalog). */
-    val isComplete get() = url.isNotBlank() && (username.isBlank() == password.isBlank()) &&
+    val isComplete get() = url.isNotBlank() && (username.isBlank() == password.isBlank() || isRemote && proto != "sftp") &&
+        (proto != "sftp" || username.isNotBlank()) &&
         (metaDb != ServerSettings.AUDIOBOOK || username.isNotBlank())   // audiobooks: the web login needs an account
     val host: String? get() = url.toHttpUrlOrNull()?.host
 }
@@ -32,6 +37,7 @@ private data class StoredServer(
     val username: String = "",
     val metaUrl: String? = null,
     val metaDb: String? = null,    // null = guess from the address ("adult" in it -> adult)
+    val proto: String? = null,     // file server kind (TODO 29)
 )
 
 /**
@@ -63,7 +69,7 @@ class ServerSettings(context: Context) {
     fun all(): List<Server> = stored().map {
         Server(
             it.id, it.name, it.url, it.username, secure.get(pwKey(it.id)).orEmpty(),
-            it.metaUrl.orEmpty(), it.metaDb ?: guessDb(it.url),
+            it.metaUrl.orEmpty(), it.metaDb ?: guessDb(it.url), it.proto.orEmpty(),
         )
     }
 
@@ -76,8 +82,9 @@ class ServerSettings(context: Context) {
      * Several catalogs on one host (bookoasis general/adult): pick by the db in /opds/download/<db>/<id>.
      */
     fun forUrl(url: String): Server? {
+        com.oasisreader.app.remote.Remote.parseUrl(url)?.let { (id, _) -> return get(id) }
         val host = url.toHttpUrlOrNull()?.host ?: return null
-        val same = all().filter { it.host == host && !it.isAudiobook }
+        val same = all().filter { it.host == host && !it.isAudiobook && !it.isRemote }
         if (same.size <= 1) return same.firstOrNull()
         val db = Regex("""/download/([a-z]+)/""").find(url)?.groupValues?.get(1)
         return same.firstOrNull { it.metaDb == db } ?: same.first()
@@ -87,15 +94,15 @@ class ServerSettings(context: Context) {
     fun save(s: Server): Server {
         val id = s.id.ifBlank { "s" + java.lang.Long.toString(System.currentTimeMillis(), 36) }
         val item = StoredServer(
-            id, s.name.trim().ifBlank { s.host ?: "OPDS" }, s.url.trim().trimEnd('/'), s.username.trim(),
-            s.metaUrl.trim().trimEnd('/'), s.metaDb,
+            id, s.name.trim().ifBlank { if (s.isRemote) com.oasisreader.app.remote.Remote.label(s.proto) else s.host ?: "OPDS" }, s.url.trim().trimEnd('/'), s.username.trim(),
+            if (s.isRemote) "" else s.metaUrl.trim().trimEnd('/'), s.metaDb, s.proto.ifEmpty { null },
         )
         val list = stored().toMutableList()
         val i = list.indexOfFirst { it.id == id }
         if (i >= 0) list[i] = item else list.add(item)
         prefs.edit().putString("servers", encode(list)).apply()
         secure.put(pwKey(id), s.password.ifEmpty { null })
-        return Server(id, item.name, item.url, item.username, s.password, item.metaUrl.orEmpty(), s.metaDb)
+        return Server(id, item.name, item.url, item.username, s.password, item.metaUrl.orEmpty(), s.metaDb, s.proto)
     }
 
     fun delete(id: String) {

@@ -86,7 +86,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             Section("도움말")
             Item("📘", "사용 안내", "처음 쓰신다면: 서버 연결, 책 받기, 화면 조작", enabled = true) { onDoc(DOC_GUIDE) }
 
-            Section("OPDS 서버")
+            Section("서버 (OPDS · 파일 서버)")
             Item(
                 "☁️", "서버 목록 · 추가",
                 if (servers.isEmpty()) "아직 등록하지 않았습니다" else servers.joinToString(" · ") { it.name },

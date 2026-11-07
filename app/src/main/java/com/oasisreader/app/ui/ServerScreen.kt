@@ -3,6 +3,7 @@ package com.oasisreader.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,15 +56,19 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
     var pass by remember { mutableStateOf(initial.password) }
     var meta by remember { mutableStateOf(initial.metaUrl) }
     var metaDb by remember { mutableStateOf(initial.metaDb) }
+    var proto by remember { mutableStateOf(initial.proto) }   // "" = OPDS / audiobooks; else a file server
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    fun current() = Server(
+    fun current() = if (proto.isNotEmpty()) Server(
+        initial.id, name.trim(), url.trim().trimEnd('/'), user.trim(), pass, "", "general", proto,
+    ) else Server(
         initial.id, name.trim(), url.trim().trimEnd('/'), user.trim(), pass,
         if (metaDb == com.oasisreader.app.data.ServerSettings.AUDIOBOOK) "" else meta.trim().trimEnd('/'), metaDb,
     )
+    val remote = proto.isNotEmpty()
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(if (initial.id.isEmpty()) "서버 추가" else "서버 설정", onBack = onDone) {
@@ -79,7 +84,8 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 .widthIn(max = 560.dp),
         ) {
             Text(
-                "OPDS 주소와 로그인(Basic 인증) 계정입니다. 공개 카탈로그면 아이디·비밀번호를 비워두세요. 비밀번호는 이 폰 안에서만 암호화해서 보관합니다.",
+                if (remote) "파일 서버(WebDAV · SFTP · SMB · FTP)의 폴더를 열어 책을 서재에 담습니다. 비밀번호는 이 폰 안에서만 암호화해서 보관합니다."
+                else "OPDS 주소와 로그인(Basic 인증) 계정입니다. 공개 카탈로그면 아이디·비밀번호를 비워두세요. 비밀번호는 이 폰 안에서만 암호화해서 보관합니다.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -91,20 +97,45 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             // what this entry opens: a book catalog (general / adult DB of bookoasis) or bookoasis audiobooks
-            val audio = metaDb == com.oasisreader.app.data.ServerSettings.AUDIOBOOK
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            val audio = !remote && metaDb == com.oasisreader.app.data.ServerSettings.AUDIOBOOK
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 Text("종류", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp))
                 listOf("general" to "일반", "adult" to "성인", com.oasisreader.app.data.ServerSettings.AUDIOBOOK to "오디오북").forEach { (v, label) ->
                     androidx.compose.material3.FilterChip(
-                        selected = metaDb == v,
-                        onClick = { metaDb = v; status = null },
+                        selected = !remote && metaDb == v,
+                        onClick = { metaDb = v; proto = ""; status = null },
                         label = { Text(label) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                androidx.compose.material3.FilterChip(
+                    selected = remote,
+                    onClick = { if (!remote) proto = com.oasisreader.app.remote.Remote.WEBDAV; status = null },
+                    label = { Text("🗄️ 파일 서버") },
+                )
+            }
+            if (remote) Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp),
+            ) {
+                Text("방식", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp))
+                com.oasisreader.app.remote.Remote.ALL.forEach { p ->
+                    androidx.compose.material3.FilterChip(
+                        selected = proto == p,
+                        onClick = { proto = p; status = null },
+                        label = { Text(com.oasisreader.app.remote.Remote.label(p)) },
                         modifier = Modifier.padding(end = 8.dp),
                     )
                 }
             }
             Text(
-                when (metaDb) {
+                if (remote) when (proto) {
+                    com.oasisreader.app.remote.Remote.WEBDAV -> "NAS(시놀로지 등)·Nextcloud의 WebDAV 폴더입니다. https:// 주소면 암호화됩니다."
+                    com.oasisreader.app.remote.Remote.SFTP -> "SSH로 접속하는 서버입니다(리눅스 서버, 시놀로지 등). 암호화됩니다. 처음 접속한 서버의 키를 기억하고, 키가 바뀌면 접속을 막습니다."
+                    com.oasisreader.app.remote.Remote.SMB -> "윈도 공유 폴더·NAS 공유입니다. 보통 집 안 네트워크에서만 됩니다. 주소에 공유 폴더 이름까지 넣으세요. 아이디를 비우면 게스트로, 「작업그룹\\아이디」로 도메인을 줄 수 있습니다."
+                    com.oasisreader.app.remote.Remote.FTPS -> "FTP + TLS(명시적 AUTH TLS)입니다. 암호화됩니다. 서버가 TLS를 지원하지 않으면 연결되지 않습니다."
+                    else -> "⚠️ 일반 FTP는 아이디·비밀번호와 책이 암호화 없이 오갑니다. 집 안 네트워크에서만 쓰거나 FTPS·SFTP를 쓰세요. 아이디를 비우면 익명으로 접속합니다."
+                } else when (metaDb) {
                     com.oasisreader.app.data.ServerSettings.AUDIOBOOK ->
                         "북오아시스의 오디오북 라이브러리입니다. 북오아시스 주소(OPDS 주소를 넣어도 됩니다)와 계정을 넣으세요. 목록에서 바로 듣고, 들은 위치는 북오아시스와 맞춰집니다."
                     "adult" -> "북오아시스 성인 DB 카탈로그입니다 (관리자 계정만 볼 수 있습니다)."
@@ -117,14 +148,15 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = url, onValueChange = { url = it; status = null },
-                label = { Text(if (audio) "북오아시스 주소" else "OPDS 주소") }, singleLine = true,
-                placeholder = { Text("https://book.example.com/opds") },
+                label = { Text(if (remote) "서버 주소 (시작할 폴더까지)" else if (audio) "북오아시스 주소" else "OPDS 주소") }, singleLine = true,
+                placeholder = { Text(if (remote) com.oasisreader.app.remote.Remote.example(proto) else "https://book.example.com/opds") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),
             )
             val plain = url.trim().startsWith("http://", ignoreCase = true)
             Text(
                 if (plain) "⚠️ http:// 는 암호화되지 않습니다. 아이디·비밀번호와 책이 그대로 오가니 집 안 네트워크(예: 192.168.x.x)에서만 쓰세요."
+                else if (remote) "예: " + com.oasisreader.app.remote.Remote.example(proto)
                 else if (audio) "예: https://book.example.com"
                 else "서버의 OPDS 카탈로그 주소입니다. 보통 서버 주소 뒤에 /opds 를 붙입니다.",
                 style = MaterialTheme.typography.bodySmall,
@@ -145,22 +177,22 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (!audio) Spacer(Modifier.height(12.dp))
-            if (!audio) OutlinedTextField(
+            if (!audio && !remote) Spacer(Modifier.height(12.dp))
+            if (!audio && !remote) OutlinedTextField(
                 value = meta, onValueChange = { meta = it; status = null },
                 label = { Text("메타 API 주소 (선택)") }, singleLine = true,
                 placeholder = { Text("https://meta.example.com") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (!audio) Text(
+            if (!audio && !remote) Text(
                 "북오아시스 서버용 부가 기능입니다. 서버 옆에 띄운 oasis-meta 주소를 넣습니다 (없으면 비워 두세요 · 설치 안내는 설정 › 메타 API 안내). 있으면 시리즈·표지·정리된 제목·실제 날짜·줄거리로 된 목록을 보여 줍니다. 같은 아이디/비밀번호를 씁니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),
             )
             // presets of the organized catalog: for a saved server with a meta API
-            if (initial.id.isNotEmpty() && (initial.isAudiobook || (!audio && initial.metaUrl.isNotBlank()))) {
+            if (initial.id.isNotEmpty() && !remote && !initial.isRemote && (initial.isAudiobook || (!audio && initial.metaUrl.isNotBlank()))) {
                 Spacer(Modifier.height(20.dp))
                 com.oasisreader.app.meta.PresetSettings(initial, audio = initial.isAudiobook)
             }
@@ -171,7 +203,15 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                     onClick = {
                         busy = true; status = "확인하는 중…"
                         scope.launch {
-                            status = if (audio) try {
+                            status = if (remote) try {
+                                val s = current()
+                                val (root, list) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.oasisreader.app.remote.Remote.open(context, s).use { it.root to it.list(it.root) }
+                                }
+                                "✅ 연결되었습니다 · $root · 폴더 ${list.count { it.isDir }}개 · 책 ${list.count { it.isBook }}권"
+                            } catch (e: Exception) {
+                                "⚠️ ${e.message ?: e.javaClass.simpleName}"
+                            } else if (audio) try {
                                 val o = com.oasisreader.app.audio.BookOasisWeb.of(current()).get("/api/media/libraries", mapOf("type" to "audiobook"))
                                 val n = (o["libraries"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0
                                 "✅ 북오아시스에 로그인했습니다 · 오디오북 카테고리 ${n}개"
@@ -196,7 +236,15 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Button(
                     enabled = !busy && current().isComplete,
-                    onClick = { settings.save(current()); onDone() },
+                    onClick = {
+                        val s = current()
+                        // SFTP: a saved (re-saved) server accepts its key afresh
+                        if (s.proto == com.oasisreader.app.remote.Remote.SFTP) runCatching {
+                            val a = com.oasisreader.app.remote.Addr.parse(s.url, 22)
+                            com.oasisreader.app.remote.KnownHosts(context).forget("${a.host}:${a.port}")
+                        }
+                        settings.save(s); onDone()
+                    },
                 ) { Text("저장") }
             }
             status?.let {
@@ -228,7 +276,7 @@ fun ServerListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, onOpen: ((St
     val context = LocalContext.current
     val servers = remember { ServerSettings(context.applicationContext).all() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar(if (onOpen != null) "어디서 받으시겠습니까?" else "OPDS 서버", onBack = onBack) {
+        TopBar(if (onOpen != null) "어디서 받으시겠습니까?" else "서버", onBack = onBack) {
             EmojiButton("➕", "서버 추가") { onEdit(null) }
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
@@ -246,13 +294,13 @@ fun ServerListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, onOpen: ((St
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(if (s.isAudiobook) "🎧" else "☁️", style = MaterialTheme.typography.titleMedium)
+                    Text(if (s.isAudiobook) "🎧" else if (s.isRemote) "🗄️" else "☁️", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(s.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
                             listOfNotNull(
-                                when { s.isAudiobook -> "🎧 오디오북"; s.metaDb == "adult" -> "성인"; else -> null },
+                                when { s.isRemote -> com.oasisreader.app.remote.Remote.label(s.proto); s.isAudiobook -> "🎧 오디오북"; s.metaDb == "adult" -> "성인"; else -> null },
                                 s.username.ifBlank { null }, s.url,
                             ).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,

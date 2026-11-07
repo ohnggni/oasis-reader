@@ -155,14 +155,21 @@ object BookQueue {
             val server = ServerSettings(app).get(job.serverId) ?: throw HttpException(0, "서버 설정이 지워졌습니다")
             val part = partFile(app, job.key)
             var lastFrac = -1f
-            val (fileName, complete) = OpdsClient(server).downloadResume(job.href, part, { done, total ->
+            val progress = { done: Long, total: Long ->
                 val f = if (total > 0) done.toFloat() / total else -1f
                 if (f < 0 || f - lastFrac >= 0.01f) { lastFrac = f; Downloads.setProgress(job.key, f) }
                 note(job.title, left, f)
-            }) {
-                // paused or cancelled meanwhile?
-                isStopped || all(app).firstOrNull { it.key == job.key }?.state != State.WAITING
             }
+            // paused or cancelled meanwhile?
+            val stop = { isStopped || all(app).firstOrNull { it.key == job.key }?.state != State.WAITING }
+            val (fileName, complete) = if (server.isRemote) {
+                // a file server (WebDAV · SFTP · SMB · FTP): href is remote://<server>/<path>
+                val path = com.oasisreader.app.remote.Remote.parseUrl(job.href)?.second ?: throw HttpException(0, "주소가 잘못되었습니다")
+                val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.oasisreader.app.remote.Remote.open(app, server).use { it.download(path, part, progress, stop) }
+                }
+                com.oasisreader.app.remote.Remote.nameOf(path) to ok
+            } else OpdsClient(server).downloadResume(job.href, part, progress, stop)
             if (!complete) { Downloads.setProgress(job.key, null); return }
             val generic = !job.meta && OpdsClient.isGenericTitle(job.title)
             val hint = if (generic) fileName?.substringBeforeLast('.')?.ifBlank { null } else job.title

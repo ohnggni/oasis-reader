@@ -48,7 +48,7 @@ fun KosyncDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext
     val scope = rememberCoroutineScope()
-    val servers = remember { ServerSettings(app).all().filter { it.url.isNotBlank() } }
+    val servers = remember { ServerSettings(app).all().filter { it.url.isNotBlank() && !it.isRemote } }
     val (savedServer, savedUser, hasKey) = remember { KoSync.saved(app) }
     var serverId by remember { mutableStateOf(savedServer?.takeIf { id -> servers.any { it.id == id } } ?: servers.firstOrNull()?.id) }
     val server = servers.firstOrNull { it.id == serverId }

@@ -216,8 +216,7 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
                         scope.launch {
                             val tmp = File(app.cacheDir, "refetch_${System.nanoTime()}.bin")
                             try {
-                                val server = com.oasisreader.app.data.ServerSettings(app).forUrl(url) ?: com.oasisreader.app.data.Server("", "", "", "", "")
-                                com.oasisreader.app.opds.OpdsClient(server).download(url, tmp) { _, _ -> }
+                                com.oasisreader.app.data.Downloads.fetch(app, url, tmp)
                                 store.rebuild(bookId, tmp)
                                 attempt++
                             } catch (e: Exception) {

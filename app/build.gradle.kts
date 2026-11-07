@@ -65,6 +65,19 @@ android {
         compose = true
         buildConfig = true
     }
+    packaging {
+        resources {
+            // sshj / smbj / Bouncy Castle each carry these
+            excludes += setOf(
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                "META-INF/DEPENDENCIES",
+                "META-INF/INDEX.LIST",
+                "META-INF/LICENSE.md",
+                "META-INF/NOTICE.md",
+            )
+            pickFirsts += setOf("META-INF/LICENSE", "META-INF/LICENSE.txt", "META-INF/NOTICE", "META-INF/NOTICE.txt")
+        }
+    }
 }
 
 dependencies {
@@ -91,6 +104,11 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.okhttp)
     implementation(libs.androidx.work.runtime.ktx)
+    // file servers (TODO 29): SFTP · SMB · FTP/FTPS (WebDAV uses OkHttp)
+    implementation("com.hierynomus:sshj:0.39.0")
+    implementation("com.hierynomus:smbj:0.13.0")
+    implementation("commons-net:commons-net:3.11.1")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.79")
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
 }

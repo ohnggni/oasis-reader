@@ -815,8 +815,7 @@ private fun ReaderBody(
                         scope.launch {
                             val tmp = File(app.cacheDir, "refetch_${System.nanoTime()}.epub")
                             try {
-                                val server = com.oasisreader.app.data.ServerSettings(app).forUrl(url) ?: com.oasisreader.app.data.Server("", "", "", "", "")
-                                com.oasisreader.app.opds.OpdsClient(server).download(url, tmp) { _, _ -> }
+                                com.oasisreader.app.data.Downloads.fetch(app, url, tmp)
                                 store.rebuild(bookId, tmp)
                                 openAttempt++
                             } catch (e: Exception) {
