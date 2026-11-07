@@ -50,6 +50,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -283,7 +284,9 @@ fun LibraryScreen(
     fun hitText(b: BookEntity) = ShelfSearch.matches(b.title, q) || ShelfSearch.matches(b.author, q)
 
     // 폴더 안 (컬렉션별 그리드에서 폴더를 누름)
-    var openFolder by rememberSaveable { mutableStateOf<String?>(null) }
+    // kept outside the screen (ShelfMemory): reading a book and coming back lands in the same folder
+    var openFolder by remember { mutableStateOf(ShelfMemory.openFolder) }
+    LaunchedEffect(openFolder) { ShelfMemory.openFolder = openFolder }
     // series groups (묶기: 시리즈): books from the same server series / folder, or with the same title
     // once the volume number is taken off; same kind only; two or more. Shown like 컬렉션 folders
     // (ids "s:…", not saved anywhere).
@@ -611,7 +614,13 @@ fun LibraryScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val bottomPad = if (selecting) 16.dp else 24.dp
             if (tiles) {
-                val gridState = remember(tabKey, openFolder, useGroups) { LazyGridState() }
+                val posKey = "g|$tabKey|$openFolder|$useGroups"
+                val gridState = remember(tabKey, openFolder, useGroups) {
+                    val p = ShelfMemory.pos[posKey]; LazyGridState(p?.first ?: 0, p?.second ?: 0)
+                }
+                DisposableEffect(gridState) {
+                    onDispose { ShelfMemory.pos[posKey] = gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+                }
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(tileDp.dp),
@@ -640,7 +649,13 @@ fun LibraryScreen(
                 }
                 FastScroller(remember(gridState) { gridState.scrollTarget() }, ::labelAt, bottomPadding = bottomPad)
             } else {
-                val listState = remember(tabKey, openFolder, useGroups) { LazyListState() }
+                val posKey = "l|$tabKey|$openFolder|$useGroups"
+                val listState = remember(tabKey, openFolder, useGroups) {
+                    val p = ShelfMemory.pos[posKey]; LazyListState(p?.first ?: 0, p?.second ?: 0)
+                }
+                DisposableEffect(listState) {
+                    onDispose { ShelfMemory.pos[posKey] = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize().let { if (selecting) it else it.navigationBarsPadding() },
@@ -1248,4 +1263,10 @@ private fun seriesNameOf(books: List<BookEntity>): String {
     val stems = books.mapNotNull { ShelfSearch.seriesStem(it.title) }
     return stems.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
         ?: books.minWithOrNull { a, b -> ShelfSearch.naturalCompare(a.title, b.title) }?.title.orEmpty()
+}
+
+/** Where the shelf was (open folder, scroll per tab/folder) — survives opening a book and coming back. */
+object ShelfMemory {
+    var openFolder: String? = null
+    val pos = HashMap<String, Pair<Int, Int>>()
 }

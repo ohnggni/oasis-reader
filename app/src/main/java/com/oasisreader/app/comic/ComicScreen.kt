@@ -294,7 +294,12 @@ private fun ComicViewer(
     val isPdf = remember(pkg) { pkg.pages.firstOrNull()?.path?.let { PdfPages.isPdfPage(it) } == true }
 
     var mode by remember {
-        mutableStateOf(runCatching { ComicMode.valueOf(prefs.getString("mode_${book.id}", null) ?: "") }.getOrDefault(guessMode(pkg)))
+        // this book's own choice, else 읽기 기본값 › 만화·PDF › 보기 (자동 = by page shape)
+        mutableStateOf(
+            runCatching { ComicMode.valueOf(prefs.getString("mode_${book.id}", null) ?: "") }.getOrNull()
+                ?: runCatching { ComicMode.valueOf(prefs.getString("default_mode", null) ?: "") }.getOrNull()
+                ?: guessMode(pkg)
+        )
     }
     var rtl by remember { mutableStateOf(prefs.getBoolean("rtl", false)) }
     var coverAlone by remember { mutableStateOf(prefs.getBoolean("cover_alone", true)) }
@@ -314,6 +319,9 @@ private fun ComicViewer(
     var nextVol by remember { mutableStateOf<com.oasisreader.app.data.NextVolume?>(null) }
     var nextAsked by remember { mutableStateOf(false) }
     var nextClosed by remember { mutableStateOf(false) }
+    var nextSearching by remember { mutableStateOf(false) }
+    // webtoon scroll: the "— 끝 —" tail came on screen (the next volume lives there, not in a card)
+    var tailSeen by remember { mutableStateOf(false) }
 
     // position, shared by both modes: page index + fraction inside that page (scroll mode)
     var curPage by remember { mutableIntStateOf(book.spineIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))) }
@@ -727,7 +735,9 @@ private fun ComicViewer(
                                 val count = slices.count { it.page == s0.page }.coerceAtLeast(1)
                                 curPage = s0.page
                                 curFrac = ((fi - firstSliceOf[s0.page]).toFloat() / count).coerceIn(0f, 1f)
-                                lastPageShown = if (!listState.canScrollForward) pageCount - 1
+                                val tail = (li ?: 0) >= slices.size
+                                if (tail) tailSeen = true
+                                lastPageShown = if (!listState.canScrollForward || tail) pageCount - 1
                                                 else slices.getOrNull(li ?: fi)?.page ?: s0.page
                                 label = "${s0.page + 1} / $pageCount"
                             }
@@ -765,6 +775,14 @@ private fun ComicViewer(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 Text("— 끝 —", color = chrome)
+                                val n = nextVol
+                                when {
+                                    n != null -> androidx.compose.material3.FilledTonalButton(
+                                        onClick = { com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook) },
+                                        modifier = Modifier.padding(top = 12.dp).widthIn(max = 420.dp).padding(horizontal = 24.dp),
+                                    ) { Text("▶ 다음 권  ${n.title}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+                                    nextSearching -> Text("다음 권 찾는 중…", color = chrome, modifier = Modifier.padding(top = 12.dp))
+                                }
                                 TextButton(onClick = onBack) { Text("서재로") }
                             }
                         }
@@ -919,15 +937,19 @@ private fun ComicViewer(
         }
 
         // the last page: the next volume, one tap away
+        // 쪽 넘기기: a card on the last page. 웹툰 스크롤: the button in the "— 끝 —" tail (the card came
+        // up as soon as the last strip peeked in, and went away again once the tail was on screen)
         val atEnd = pageCount > 0 && lastPageShown >= pageCount - 1
-        LaunchedEffect(atEnd) {
-            if (atEnd && !nextAsked) {
-                nextAsked = true
+        val lookUp = if (mode == ComicMode.SCROLL) tailSeen else atEnd
+        LaunchedEffect(lookUp) {
+            if (lookUp && !nextAsked) {
+                nextAsked = true; nextSearching = true
                 nextVol = runCatching { com.oasisreader.app.data.NextVolumes.find(app, book) }.getOrNull()
+                nextSearching = false
             }
         }
         nextVol?.let { n ->
-            if (atEnd && !nextClosed) com.oasisreader.app.reader.NextVolumeCard(
+            if (mode == ComicMode.PAGE && atEnd && !nextClosed) com.oasisreader.app.reader.NextVolumeCard(
                 n, onOpen = { com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook) }, onDismiss = { nextClosed = true },
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .let { if (readingChrome.hideNav) it else it.navigationBarsPadding() }

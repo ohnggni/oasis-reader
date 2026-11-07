@@ -133,7 +133,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
             PanelSwitch("책 디자인 사용 (제목·문단 모양)", null, publisher, { publisher = it; prefs.publisherStyle = it })
 
             Spacer(Modifier.height(8.dp))
-            PanelTitle("쪽 · 책마다 따로")
+            PanelTitle("쪽 · 책(EPUB·TXT), 책마다 따로")
             PanelChoice("보기", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) {
                 mode = if (it == 0) ReaderMode.PAGE else ReaderMode.SCROLL; prefs.mode = mode
             }
@@ -143,6 +143,10 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
                 prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
             }
             ThemeRow(theme) { theme = it; prefs.theme = it }
+
+            Spacer(Modifier.height(8.dp))
+            PanelTitle("만화 · PDF (보기는 만화마다 따로)")
+            ComicDefaultsPanel()
 
             Spacer(Modifier.height(8.dp))
             PanelTitle("화면 · 모든 책 공통")
@@ -206,5 +210,29 @@ private fun Preview(theme: ReaderTheme, font: FontOption, px: Int, lineHeight: I
             fontWeight = when (weight) { 1 -> FontWeight.Medium; 2 -> FontWeight.Bold; else -> FontWeight.Normal },
             maxLines = 3,
         )
+    }
+}
+
+/** 만화·PDF 기본값: these live in the "comic" prefs the viewer reads (보기 is the start for books not yet set). */
+@Composable
+private fun ComicDefaultsPanel() {
+    val app = LocalContext.current.applicationContext
+    val cp = remember { app.getSharedPreferences("comic", android.content.Context.MODE_PRIVATE) }
+    var dMode by remember { mutableStateOf(cp.getString("default_mode", "AUTO") ?: "AUTO") }
+    var rtl by remember { mutableStateOf(cp.getBoolean("rtl", false)) }
+    var coverAlone by remember { mutableStateOf(cp.getBoolean("cover_alone", true)) }
+    var narrow by remember { mutableStateOf(cp.getBoolean("narrow", false)) }
+    val modes = listOf("AUTO", "PAGE", "SCROLL")
+    PanelChoice("보기", listOf("자동 (웹툰이면 스크롤)", "책처럼 넘기기", "세로 스크롤"), modes.indexOf(dMode).coerceAtLeast(0)) {
+        dMode = modes[it]; cp.edit().putString("default_mode", dMode).apply()
+    }
+    PanelChoice("방향", listOf("왼쪽 → 오른쪽", "오른쪽 → 왼쪽 (일본 만화)"), if (rtl) 1 else 0) {
+        rtl = it == 1; cp.edit().putBoolean("rtl", rtl).apply()
+    }
+    PanelChoice("맞쪽", listOf("첫 장은 혼자", "첫 장도 짝 지어"), if (coverAlone) 0 else 1) {
+        coverAlone = it == 0; cp.edit().putBoolean("cover_alone", coverAlone).apply()
+    }
+    PanelChoice("폭", listOf("화면 너비에 맞추기", "가운데 좁게"), if (narrow) 1 else 0) {
+        narrow = it == 1; cp.edit().putBoolean("narrow", narrow).apply()
     }
 }
