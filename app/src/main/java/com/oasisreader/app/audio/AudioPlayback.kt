@@ -67,6 +67,23 @@ fun bookPlace(durations: List<Double>, track: Int, posSec: Double, curDurSec: Do
     return BookPlace(done.coerceAtMost(total), total, known.size == d.size)
 }
 
+private const val NO_SOUND = "이 폰이 재생하지 못하는 소리 형식입니다"
+
+/**
+ * Some fragmented m4a files carry protection headers (pssh) although their sound is not
+ * encrypted. Media3 then marks the track "DRM not supported" and skips it: the book plays in
+ * silence with no error. This manager asks for no keys, so samples that are in the clear play;
+ * a file whose samples really are encrypted still fails, with the player's error on screen.
+ */
+private object ClearSamplesOnly : androidx.media3.exoplayer.drm.DrmSessionManager {
+    override fun setPlayer(playbackLooper: android.os.Looper, playerId: androidx.media3.exoplayer.analytics.PlayerId) {}
+    override fun acquireSession(
+        eventDispatcher: androidx.media3.exoplayer.drm.DrmSessionEventListener.EventDispatcher?,
+        format: androidx.media3.common.Format,
+    ): androidx.media3.exoplayer.drm.DrmSession? = null
+    override fun getCryptoType(format: androidx.media3.common.Format): Int = C.CRYPTO_TYPE_NONE
+}
+
 /** The 서재 row of [this] book. */
 fun AudioBook.rowId(): String = shelfId.ifEmpty { if (serverId.isEmpty()) "" else AudioLibraryLink.bookId(serverId, id) }
 
@@ -128,7 +145,10 @@ object AudioPlayback {
         speed = app.getSharedPreferences("audio", Context.MODE_PRIVATE).getFloat("speed", 1f)
         val p = ExoPlayer.Builder(app)
             // files on the phone (오프라인, encrypted) and the server's stream with the web session
-            .setMediaSourceFactory(DefaultMediaSourceFactory(MediaDataSourceFactory(app, androidx.media3.datasource.DefaultDataSource.Factory(app, OkHttpDataSource.Factory(w?.client ?: com.oasisreader.app.data.Http.client)))))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(MediaDataSourceFactory(app, androidx.media3.datasource.DefaultDataSource.Factory(app, OkHttpDataSource.Factory(w?.client ?: com.oasisreader.app.data.Http.client))))
+                    .setDrmSessionManagerProvider { ClearSamplesOnly },
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_SPEECH).build(),
                 /* handleAudioFocus = */ true,
@@ -160,6 +180,15 @@ object AudioPlayback {
             }
             override fun onPlayerError(e: PlaybackException) {
                 error = "재생할 수 없습니다: " + (e.cause?.message ?: e.errorCodeName)
+            }
+            // A sound track the phone cannot play is skipped without an error: the time runs on
+            // in silence. Say so instead.
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                if (audio.isNotEmpty() && audio.none { it.isSelected }) {
+                    val f = audio.first().getTrackFormat(0)
+                    error = NO_SOUND + " (" + listOfNotNull(f.sampleMimeType, f.codecs).joinToString(" ") + ")"
+                } else if (error?.startsWith(NO_SOUND) == true) error = null
             }
         })
         player = p; if (w != null) web = w
