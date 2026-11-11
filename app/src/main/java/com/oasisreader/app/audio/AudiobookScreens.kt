@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -48,6 +49,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -484,6 +486,9 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
         barShown = false
     }
     val barAlpha by androidx.compose.animation.core.animateFloatAsState(if (barShown) 1f else 0f, label = "bar")
+    var picking by remember { mutableStateOf(false) }
+    // The place in the track changes twice a second: only the small pieces below that show it
+    // (BookPlaceLine, PlayerHeadline, PlayerSeek) read it, so the rest of the screen stays put.
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).pointerInput(Unit) {
             awaitEachGesture {
@@ -498,6 +503,11 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
                     if (b != null) com.oasisreader.app.ui.EmojiButton("⏹️", "듣기 끝내기") { AudioPlayback.close(context); onBack() }
                 }
             }
+            // the whole book's place (TODO 34) stays readable when the bar has faded
+            if (b != null) Box(
+                Modifier.align(Alignment.BottomEnd).height(56.dp).padding(end = 54.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) { BookPlaceLine(b) }
             // hidden: a touch on the bar only brings it back
             if (!barShown) Box(Modifier.matchParentSize().pointerInput(Unit) {
                 awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() }
@@ -517,100 +527,206 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
                 web != null -> RemoteCover(b.coverUrl, b.title, { u -> web.bytes(u) }, coverMod)
                 else -> Box(coverMod, contentAlignment = Alignment.Center) { Text("🎧", fontSize = 64.sp) }
             }
-            Spacer(Modifier.height(16.dp))
-            Text(b.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val t = b.tracks.getOrNull(AudioPlayback.trackIndex)
-            // 장 표시: the chapter inside the track (m4b, metadata.json), else the track
-            val ci = if (b.chapters.isNotEmpty()) AudioPlayback.chapterIndex() else -1
-            val ch = b.chapters.getOrNull(ci)
-            Text(
-                if (ch != null) "${ci + 1}장 / ${b.chapters.size} · ${ch.title}"
-                else "${AudioPlayback.trackIndex + 1} / ${b.tracks.size}" + (t?.title?.let { " · $it" } ?: ""),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            AudioPlayback.error?.let { Text("⚠️ $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-            Spacer(Modifier.height(12.dp))
-            val dur = AudioPlayback.durationMs.coerceAtLeast(1L)
-            var drag by remember { mutableStateOf<Float?>(null) }
-            ThinSlider(
-                value = drag ?: (AudioPlayback.positionMs.toFloat() / dur).coerceIn(0f, 1f), range = 0f..1f,
-                onChange = { drag = it },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            LaunchedEffect(drag) {
-                val d = drag ?: return@LaunchedEffect
-                kotlinx.coroutines.delay(350)          // seek when the finger rests / lets go
-                AudioPlayback.seekTo((d * dur).toLong()); drag = null
-            }
-            Row(Modifier.fillMaxWidth()) {
-                Text(hms(AudioPlayback.positionMs / 1000.0), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                Text(hms(dur / 1000.0), style = MaterialTheme.typography.labelSmall)
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Big("⏮", if (b.chapters.isNotEmpty()) "이전 장" else "이전 트랙", 22) { AudioPlayback.previous() }
-                Big("↺15", "15초 뒤로", 16) { AudioPlayback.seekBy(-15_000) }
-                // ⏯: a plain high-contrast disc (dark on light, light on dark) with a drawn icon
-                Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.onSurface, shadowElevation = 2.dp) {
-                    IconButton(onClick = { AudioPlayback.toggle() }, modifier = Modifier.size(68.dp).semantics { contentDescription = if (AudioPlayback.playing) "일시정지" else "재생" }) {
-                        androidx.compose.material3.Icon(
-                            androidx.compose.ui.res.painterResource(if (AudioPlayback.playing) com.oasisreader.app.R.drawable.ic_ra_pause else com.oasisreader.app.R.drawable.ic_ra_play),
-                            contentDescription = null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(34.dp),
-                        )
-                    }
-                }
-                Big("30↻", "30초 앞으로", 16) { AudioPlayback.seekBy(30_000) }
-                Big("⏭", if (b.chapters.isNotEmpty()) "다음 장" else "다음 트랙", 22) { AudioPlayback.next() }
-            }
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                var sOpen by remember { mutableStateOf(false) }
-                Box {
-                    AssistChip(onClick = { sOpen = true }, label = { Text("속도 ${AudioPlayback.speed}배") })
-                    DropdownMenu(sOpen, { sOpen = false }) {
-                        listOf(0.75f, 1f, 1.1f, 1.25f, 1.5f, 1.75f, 2f).forEach { s ->
-                            DropdownMenuItem(text = { Text("${s}배") }, leadingIcon = { com.oasisreader.app.ui.CheckMark(s == AudioPlayback.speed) }, onClick = { sOpen = false; AudioPlayback.changeSpeed(context, s) })
-                        }
-                    }
-                }
-                var tOpen by remember { mutableStateOf(false) }
-                val left = if (AudioPlayback.sleepAt > 0) ((AudioPlayback.sleepAt - System.currentTimeMillis()) / 60_000 + 1).coerceAtLeast(1) else 0
-                Box {
-                    AssistChip(onClick = { tOpen = true }, label = { Text(when { left > 0 -> "🌙 ${left}분"; AudioPlayback.sleepAtTrackEnd -> "🌙 트랙 끝"; else -> "🌙 타이머" }) })
-                    DropdownMenu(tOpen, { tOpen = false }) {
-                        listOf(15, 30, 45, 60, 90).forEach { m -> DropdownMenuItem(text = { Text("${m}분 뒤 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepIn(m) }) }
-                        DropdownMenuItem(text = { Text("이 트랙 끝에서 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepAtEndOfTrack() })
-                        DropdownMenuItem(text = { Text("타이머 끄기") }, onClick = { tOpen = false; AudioPlayback.sleepIn(0) })
-                    }
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            HorizontalDivider(thickness = 0.5.dp)
-            if (b.chapters.isNotEmpty()) b.chapters.forEachIndexed { i, c ->
-                val now = i == ci
-                Row(
-                    Modifier.fillMaxWidth().clickable { AudioPlayback.goChapter(i) }.padding(vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(if (now) "▶" else "${i + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.widthIn(min = 28.dp))
-                    Text(c.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                        fontWeight = if (now) FontWeight.Bold else FontWeight.Normal)
-                    Text(hms(c.startSec), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else b.tracks.forEachIndexed { i, tr ->
-                val now = i == AudioPlayback.trackIndex
-                Row(
-                    Modifier.fillMaxWidth().clickable { AudioPlayback.track(i) }.padding(vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(if (now) "▶" else "${i + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.widthIn(min = 28.dp))
-                    Text(tr.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                        fontWeight = if (now) FontWeight.Bold else FontWeight.Normal)
-                    if (tr.durationSec > 0) Text(hms(tr.durationSec), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            PlayerHeadline(b) { picking = true }
+            AudioPlayback.error?.let { Text("⚠️ $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            Spacer(Modifier.height(6.dp))
+            PlayerSeek()
+            Spacer(Modifier.height(8.dp))
+            PlayerButtons(b)
+            Spacer(Modifier.height(10.dp))
+            PlayerChips()
+            Spacer(Modifier.height(12.dp))
+            VolumeRow()
             Spacer(Modifier.height(24.dp))
         }
+    }
+    if (picking && b != null) PlacePicker(b) { picking = false }
+}
+
+/** "1:02:03 / 9:40:00 · 11%" of the whole book (TODO 34); "약" while some track lengths are still unknown. */
+@Composable
+private fun BookPlaceLine(b: AudioBook) {
+    val place = bookPlace(
+        b.tracks.map { it.durationSec }, AudioPlayback.trackIndex,
+        AudioPlayback.positionMs / 1000.0, AudioPlayback.durationMs / 1000.0,
+    ) ?: return
+    val pct = (place.doneSec / place.totalSec * 100).toInt().coerceIn(0, 100)
+    Text(
+        (if (place.exact) "" else "약 ") + "${hms(place.doneSec)} / ${hms(place.totalSec)} · $pct%",
+        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+    )
+}
+
+/** Title and the 장 (or track) playing now; a tap opens the list to jump (TODO 35). */
+@Composable
+private fun PlayerHeadline(b: AudioBook, onPick: () -> Unit) {
+    // 장 표시: the chapter inside the track (m4b, metadata.json), else the track
+    val ci by remember(b) { derivedStateOf { if (b.chapters.isNotEmpty()) AudioPlayback.chapterIndex() else -1 } }
+    val ti = AudioPlayback.trackIndex
+    val ch = b.chapters.getOrNull(ci)
+    val t = b.tracks.getOrNull(ti)
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .clickable(onClickLabel = if (b.chapters.isNotEmpty()) "장 목록 열기" else "트랙 목록 열기", onClick = onPick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(b.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (ch != null) "${ci + 1}장 / ${b.chapters.size} · ${ch.title}"
+                else "${ti + 1} / ${b.tracks.size}" + (t?.title?.let { " · $it" } ?: ""),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+            )
+            Text("  ▾", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+/** The track's seek bar with the place and the length under it. */
+@Composable
+private fun PlayerSeek() {
+    val dur = AudioPlayback.durationMs.coerceAtLeast(1L)
+    var drag by remember { mutableStateOf<Float?>(null) }
+    ThinSlider(
+        value = drag ?: (AudioPlayback.positionMs.toFloat() / dur).coerceIn(0f, 1f), range = 0f..1f,
+        onChange = { drag = it },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    LaunchedEffect(drag) {
+        val d = drag ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(350)          // seek when the finger rests / lets go
+        AudioPlayback.seekTo((d * dur).toLong()); drag = null
+    }
+    Row(Modifier.fillMaxWidth()) {
+        Text(hms(AudioPlayback.positionMs / 1000.0), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+        Text(hms(dur / 1000.0), style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun PlayerButtons(b: AudioBook) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Big("⏮", if (b.chapters.isNotEmpty()) "이전 장" else "이전 트랙", 22) { AudioPlayback.previous() }
+        Big("↺15", "15초 뒤로", 16) { AudioPlayback.seekBy(-15_000) }
+        // ⏯: a plain high-contrast disc (dark on light, light on dark) with a drawn icon
+        Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.onSurface, shadowElevation = 2.dp) {
+            IconButton(onClick = { AudioPlayback.toggle() }, modifier = Modifier.size(68.dp).semantics { contentDescription = if (AudioPlayback.playing) "일시정지" else "재생" }) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.ui.res.painterResource(if (AudioPlayback.playing) com.oasisreader.app.R.drawable.ic_ra_pause else com.oasisreader.app.R.drawable.ic_ra_play),
+                    contentDescription = null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(34.dp),
+                )
+            }
+        }
+        Big("30↻", "30초 앞으로", 16) { AudioPlayback.seekBy(30_000) }
+        Big("⏭", if (b.chapters.isNotEmpty()) "다음 장" else "다음 트랙", 22) { AudioPlayback.next() }
+    }
+}
+
+/** 속도 · 수면 타이머. */
+@Composable
+private fun PlayerChips() {
+    val context = LocalContext.current
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        var sOpen by remember { mutableStateOf(false) }
+        Box {
+            AssistChip(onClick = { sOpen = true }, label = { Text("속도 ${AudioPlayback.speed}배") })
+            DropdownMenu(sOpen, { sOpen = false }) {
+                listOf(0.75f, 1f, 1.1f, 1.25f, 1.5f, 1.75f, 2f).forEach { s ->
+                    DropdownMenuItem(text = { Text("${s}배") }, leadingIcon = { com.oasisreader.app.ui.CheckMark(s == AudioPlayback.speed) }, onClick = { sOpen = false; AudioPlayback.changeSpeed(context, s) })
+                }
+            }
+        }
+        var tOpen by remember { mutableStateOf(false) }
+        // the minutes left count down with the player's tick (read only while a timer runs)
+        val tickMs = if (AudioPlayback.sleepAt > 0) AudioPlayback.positionMs else 0L
+        val left = if (AudioPlayback.sleepAt > 0 && tickMs >= 0) ((AudioPlayback.sleepAt - System.currentTimeMillis()) / 60_000 + 1).coerceAtLeast(1) else 0
+        Box {
+            AssistChip(onClick = { tOpen = true }, label = { Text(when { left > 0 -> "🌙 ${left}분"; AudioPlayback.sleepAtTrackEnd -> "🌙 트랙 끝"; else -> "🌙 타이머" }) })
+            DropdownMenu(tOpen, { tOpen = false }) {
+                listOf(15, 30, 45, 60, 90).forEach { m -> DropdownMenuItem(text = { Text("${m}분 뒤 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepIn(m) }) }
+                DropdownMenuItem(text = { Text("이 트랙 끝에서 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepAtEndOfTrack() })
+                DropdownMenuItem(text = { Text("타이머 끄기") }, onClick = { tOpen = false; AudioPlayback.sleepIn(0) })
+            }
+        }
+    }
+}
+
+/** 🔈 ━━ 🔊: the phone's media volume (TODO 39), in step with the volume buttons. */
+@Composable
+private fun VolumeRow() {
+    val context = LocalContext.current
+    val am = remember { context.applicationContext.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager }
+    val stream = android.media.AudioManager.STREAM_MUSIC
+    val max = remember { am.getStreamMaxVolume(stream).coerceAtLeast(1) }
+    var vol by remember { mutableIntStateOf(am.getStreamVolume(stream)) }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val app = context.applicationContext
+        val r = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context, i: android.content.Intent) { vol = am.getStreamVolume(stream) }
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            app, r, android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,   // the system's own broadcast still arrives
+        )
+        onDispose { runCatching { app.unregisterReceiver(r) } }
+    }
+    Row(Modifier.fillMaxWidth().semantics { contentDescription = "음량" }, verticalAlignment = Alignment.CenterVertically) {
+        Text("🔈", fontSize = 14.sp)
+        ThinSlider(
+            value = vol.toFloat(), range = 0f..max.toFloat(),
+            onChange = { v ->
+                val n = Math.round(v).coerceIn(0, max)
+                if (n != vol) { vol = n; runCatching { am.setStreamVolume(stream, n, 0) } }
+            },
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+        )
+        Text("🔊", fontSize = 14.sp)
+    }
+}
+
+/** The 장 (or track) list in a popup: the one playing is marked and in view, a tap jumps there (TODO 35). */
+@Composable
+private fun PlacePicker(b: AudioBook, onClose: () -> Unit) {
+    val byChapter = b.chapters.isNotEmpty()
+    val cur by remember(b) { derivedStateOf { if (byChapter) AudioPlayback.chapterIndex() else AudioPlayback.trackIndex } }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (cur - 2).coerceAtLeast(0))
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+            Column(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp)) {
+                Text(
+                    if (byChapter) "장 ${b.chapters.size}개" else "트랙 ${b.tracks.size}개",
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp),
+                )
+                HorizontalDivider(thickness = 0.5.dp)
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), state = listState) {
+                    if (byChapter) itemsIndexed(b.chapters) { i, c ->
+                        PlaceRow(i, c.title, hms(c.startSec), i == cur) { AudioPlayback.goChapter(i); onClose() }
+                    } else itemsIndexed(b.tracks) { i, tr ->
+                        PlaceRow(i, tr.title, if (tr.durationSec > 0) hms(tr.durationSec) else "", i == cur) { AudioPlayback.track(i); onClose() }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onClose) { Text("닫기") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaceRow(i: Int, title: String, time: String, now: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (now) "▶" else "${i + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.widthIn(min = 30.dp))
+        Text(title.ifBlank { "${i + 1}" }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            fontWeight = if (now) FontWeight.Bold else FontWeight.Normal)
+        if (time.isNotEmpty()) Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
     }
 }
 

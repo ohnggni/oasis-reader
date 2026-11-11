@@ -269,13 +269,6 @@ private fun groupsOf(pkg: ComicPackage, spread: Boolean, coverAlone: Boolean): L
     return out
 }
 
-/** Pages much taller than wide are a webtoon strip: start those books in scroll mode. */
-private fun guessMode(pkg: ComicPackage): ComicMode {
-    val ratios = pkg.pages.map { it.h.toFloat() / it.w.coerceAtLeast(1) }.sorted()
-    val median = ratios.getOrElse(ratios.size / 2) { 1.4f }
-    return if (median > 2.5f) ComicMode.SCROLL else ComicMode.PAGE
-}
-
 @Composable
 private fun ComicViewer(
     book: BookEntity, pkg: ComicPackage, store: BookStore, db: AppDatabase, onBack: () -> Unit,
@@ -294,11 +287,13 @@ private fun ComicViewer(
     val isPdf = remember(pkg) { pkg.pages.firstOrNull()?.path?.let { PdfPages.isPdfPage(it) } == true }
 
     var mode by remember {
-        // this book's own choice, else 읽기 기본값 › 만화·PDF › 보기 (자동 = by page shape)
+        // this book's own choice, else 읽기 기본값 › 만화·PDF › 보기. There is no guessing by page
+        // shape any more (TODO 42: webtoons cut to book-sized pages cannot be told from comics);
+        // an old "AUTO" default reads as 책처럼 넘기기
         mutableStateOf(
             runCatching { ComicMode.valueOf(prefs.getString("mode_${book.id}", null) ?: "") }.getOrNull()
                 ?: runCatching { ComicMode.valueOf(prefs.getString("default_mode", null) ?: "") }.getOrNull()
-                ?: guessMode(pkg)
+                ?: ComicMode.PAGE
         )
     }
     var rtl by remember { mutableStateOf(prefs.getBoolean("rtl", false)) }

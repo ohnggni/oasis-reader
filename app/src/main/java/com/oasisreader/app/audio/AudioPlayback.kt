@@ -47,6 +47,26 @@ data class AudioBook(
     val chapters: List<AudioChapter> = emptyList(),   // 장 표시: inside the tracks (m4b, metadata.json)
 )
 
+/** The place in the whole book: [doneSec] of [totalSec]; [exact] is false while some track lengths are guessed. */
+data class BookPlace(val doneSec: Double, val totalSec: Double, val exact: Boolean)
+
+/**
+ * Where [track] / [posSec] is in the whole book (TODO 34). [durations]: the tracks' lengths (0 = not
+ * known yet — 소장 tracks are learnt as they play), [curDurSec]: the player's length of the track
+ * playing. Unknown lengths count as the average of the known ones; null when nothing is known.
+ */
+fun bookPlace(durations: List<Double>, track: Int, posSec: Double, curDurSec: Double): BookPlace? {
+    if (track !in durations.indices) return null
+    val d = durations.mapIndexed { i, v -> if (i == track && curDurSec > 0) curDurSec else v }
+    val known = d.filter { it > 0 }
+    if (known.isEmpty()) return null
+    val avg = known.average()
+    val filled = d.map { if (it > 0) it else avg }
+    val total = filled.sum()
+    val done = filled.take(track).sum() + posSec.coerceIn(0.0, filled[track])
+    return BookPlace(done.coerceAtMost(total), total, known.size == d.size)
+}
+
 /** The 서재 row of [this] book. */
 fun AudioBook.rowId(): String = shelfId.ifEmpty { if (serverId.isEmpty()) "" else AudioLibraryLink.bookId(serverId, id) }
 

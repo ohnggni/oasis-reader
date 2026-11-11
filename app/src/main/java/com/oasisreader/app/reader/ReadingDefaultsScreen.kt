@@ -218,12 +218,13 @@ private fun Preview(theme: ReaderTheme, font: FontOption, px: Int, lineHeight: I
 private fun ComicDefaultsPanel() {
     val app = LocalContext.current.applicationContext
     val cp = remember { app.getSharedPreferences("comic", android.content.Context.MODE_PRIVATE) }
-    var dMode by remember { mutableStateOf(cp.getString("default_mode", "AUTO") ?: "AUTO") }
+    // "AUTO" (1.4, by page shape) is gone: it shows and reads as 책처럼 넘기기
+    var dMode by remember { mutableStateOf(cp.getString("default_mode", "PAGE") ?: "PAGE") }
     var rtl by remember { mutableStateOf(cp.getBoolean("rtl", false)) }
     var coverAlone by remember { mutableStateOf(cp.getBoolean("cover_alone", true)) }
     var narrow by remember { mutableStateOf(cp.getBoolean("narrow", false)) }
-    val modes = listOf("AUTO", "PAGE", "SCROLL")
-    PanelChoice("보기", listOf("자동 (웹툰이면 스크롤)", "책처럼 넘기기", "세로 스크롤"), modes.indexOf(dMode).coerceAtLeast(0)) {
+    val modes = listOf("PAGE", "SCROLL")
+    PanelChoice("보기", listOf("책처럼 넘기기", "세로 스크롤 (웹툰)"), modes.indexOf(dMode).coerceAtLeast(0)) {
         dMode = modes[it]; cp.edit().putString("default_mode", dMode).apply()
     }
     PanelChoice("방향", listOf("왼쪽 → 오른쪽", "오른쪽 → 왼쪽 (일본 만화)"), if (rtl) 1 else 0) {
