@@ -44,34 +44,40 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d -i > "$RUNNER_TEMP/release.jks"
           echo "OASIS_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Build debug APK (stable key)
+      - name: Build release APK (R8, stable key)
         env:
           OASIS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
-          gradle --no-daemon testDebugUnitTest assembleDebug -PversionCode=${{ github.run_number }} 2>&1 | tee "$RUNNER_TEMP/build.log" || {
+          gradle --no-daemon testDebugUnitTest assembleRelease -PversionCode=${{ github.run_number }} 2>&1 | tee "$RUNNER_TEMP/build.log" || {
             # surface Kotlin compile errors as annotations (readable without the raw log)
             grep -E '^e: ' "$RUNNER_TEMP/build.log" | head -20 | sed 's/^e: /::error::/' || true
             grep -A3 'What went wrong' "$RUNNER_TEMP/build.log" | head -8 | sed 's/^/::error::/' || true
             grep -E 'FAILED|AssertionError|expected:' "$RUNNER_TEMP/build.log" | head -10 | sed 's/^/::error::/' || true
+            # R8: classes a library refers to that are not on Android (add -dontwarn for them)
+            M=app/build/outputs/mapping/release/missing_rules.txt
+            if [ -f "$M" ]; then grep -E '^-dontwarn' "$M" | head -40 | sed 's/^/::error::R8 missing /' || true; fi
             exit 1
           }
 
       - name: Show signing certificate
         run: |
           APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | grep -E "DN|SHA-256"
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -E "DN|SHA-256"
 
       - name: Rename APK
         run: |
           mkdir -p out
           V="$(cat VERSION 2>/dev/null || echo 0.1).${{ github.run_number }}"
           echo "APP_VERSION=$V" >> "$GITHUB_ENV"
-          cp app/build/outputs/apk/debug/app-debug.apk "out/OasisReader-$V-debug.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/OasisReader-$V.apk"
+          # size and what is inside, to compare builds
+          ls -l "out/OasisReader-$V.apk" | awk '{printf "::notice::APK %.1f MB\n", $5/1048576}'
+          unzip -l "out/OasisReader-$V.apk" | grep -E 'classes[0-9]*\.dex' | awk '{s+=$1; n++} END {printf "::notice::dex %d files, %.1f MB\n", n, s/1048576}' 
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OasisReader-${{ env.APP_VERSION }}-debug
+          name: OasisReader-${{ env.APP_VERSION }}
           path: out/*.apk
           retention-days: 30
 
@@ -83,7 +89,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="${{ env.APP_VERSION }}"
-          cp "out/OasisReader-$V-debug.apk" out/OasisReader.apk
+          cp "out/OasisReader-$V.apk" out/OasisReader.apk
           # release body = the top "## x.y" section of the in-app release notes;
           # falls back to the commit message when that section is empty
           awk '/^## /{n++; if(n==1){next}} n==1' app/src/main/assets/release-notes.md > out/notes.md

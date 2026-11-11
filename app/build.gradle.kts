@@ -46,7 +46,9 @@ android {
         }
         release {
             if (stableKeystore != null) signingConfig = signingConfigs.getByName("stable")
-            isMinifyEnabled = false
+            // R8: unused code and resources are dropped; names are kept (see proguard-rules.pro)
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -64,6 +66,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    lint {
+        // the release build is what CI publishes: lint findings must not stop it
+        checkReleaseBuilds = false
+        abortOnError = false
     }
     packaging {
         resources {
