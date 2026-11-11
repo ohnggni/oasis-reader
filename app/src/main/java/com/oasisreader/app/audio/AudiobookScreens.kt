@@ -502,12 +502,12 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
                 TopBar("재생 중", onBack = onBack) {
                     if (b != null) com.oasisreader.app.ui.EmojiButton("⏹️", "듣기 끝내기") { AudioPlayback.close(context); onBack() }
                 }
+                // the whole book's place (TODO 34), part of the bar: it fades out with it
+                if (b != null) Box(
+                    Modifier.align(Alignment.BottomEnd).height(56.dp).padding(end = 54.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) { BookPlaceLine(b) }
             }
-            // the whole book's place (TODO 34) stays readable when the bar has faded
-            if (b != null) Box(
-                Modifier.align(Alignment.BottomEnd).height(56.dp).padding(end = 54.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) { BookPlaceLine(b) }
             // hidden: a touch on the bar only brings it back
             if (!barShown) Box(Modifier.matchParentSize().pointerInput(Unit) {
                 awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() }
@@ -534,10 +534,11 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
             PlayerSeek()
             Spacer(Modifier.height(8.dp))
             PlayerButtons(b)
-            Spacer(Modifier.height(10.dp))
-            PlayerChips()
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+            // above the chips: at the bottom edge a slide on it ran into the home gesture
             VolumeRow()
+            Spacer(Modifier.height(8.dp))
+            PlayerChips()
             Spacer(Modifier.height(24.dp))
         }
     }

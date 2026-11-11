@@ -140,6 +140,9 @@ body {
 /* dark pages: drop the book's background pictures too, they assume dark text */
 html.dark #content * { background-image: none !important; }
 #content p, #content li, #content dd, #content blockquote { line-height: inherit !important; }
+/* pages fill to the last line: the default (2 / 2) moves a line to the next page so that no
+   paragraph leaves a single line behind, which left the bottom a line short now and then */
+#content, #content * { widows: 1 !important; orphans: 1 !important; }
 #content a { color: var(--accent) !important; text-decoration: none !important; }
 #content iframe, #content video, #content embed, #content object {
   display: block; width: 100% !important; height: auto !important; aspect-ratio: 16 / 9;
