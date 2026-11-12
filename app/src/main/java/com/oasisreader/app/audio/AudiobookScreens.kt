@@ -395,7 +395,7 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             if (onShelf == null) androidx.compose.material3.OutlinedButton(onClick = {
                                 scope.launch {
                                     runCatching { AudioLibraryLink.add(context, web, b, pct, completed) }
-                                        .onSuccess { com.oasisreader.app.ui.Notice.added("서재에 담았습니다: ${b.title}", AudioLibraryLink.bookId(serverId, b.id)) }
+                                        .onSuccess { com.oasisreader.app.ui.Notice.added("서재에 담았습니다: ${b.title}", AudioLibraryLink.bookId(b.serverId, b.id)) }
                                         .onFailure { com.oasisreader.app.ui.Notice.show(context, "담지 못했습니다: ${it.message}") }
                                 }
                             }, contentPadding = pad) { Text("📚 서재+", maxLines = 1, softWrap = false) }
