@@ -86,7 +86,9 @@ fun TopBar(
 @Composable
 fun EmojiButton(emoji: String, label: String, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = label }) {
-        Text(emoji, style = MaterialTheme.typography.titleMedium)
+        val icon = OgIcons.forEmoji(emoji)
+        if (icon != null) Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+        else Text(emoji, style = MaterialTheme.typography.titleMedium)
     }
 }
 

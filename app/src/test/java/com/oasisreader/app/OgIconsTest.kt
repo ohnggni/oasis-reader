@@ -1,0 +1,24 @@
+package com.oasisreader.app
+
+import com.oasisreader.app.ui.OgIconPaths
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class OgIconsTest {
+    @Test fun everyMappedEmojiHasAPath() {
+        for ((emoji, name) in OgIconPaths.byEmoji) assertTrue("$emoji -> $name", OgIconPaths.paths.containsKey(name))
+    }
+
+    @Test fun variationSelectorIsIgnored() {
+        assertEquals("settings", OgIconPaths.nameFor("⚙️"))
+        assertEquals("settings", OgIconPaths.nameFor("⚙"))
+        assertNull(OgIconPaths.nameFor("🌓"))
+    }
+
+    @Test fun pathsUseOnlyPathCharacters() {
+        val ok = Regex("[MLHVCAZmlhvcaz0-9 .\\-]+")
+        for ((name, d) in OgIconPaths.paths) assertTrue(name, ok.matches(d) && d.startsWith("M"))
+    }
+}
