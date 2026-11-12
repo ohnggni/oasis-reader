@@ -141,6 +141,11 @@ private fun App() {
     // text shared to the app: ask which book it is about
     val sharedText = com.oasisreader.app.ui.ReviewInbox.pending
     LaunchedEffect(sharedText) { if (sharedText != null) route = Route.REVIEW_PICK }
+    // 🏠 서재로 (server screens) and 서재에서 보기 (the "담았습니다" card): the 서재, from any screen
+    val jump = com.oasisreader.app.ui.ShelfJump.seq
+    LaunchedEffect(jump) {
+        if (jump != com.oasisreader.app.ui.ShelfJump.handled) { com.oasisreader.app.ui.ShelfJump.handled = jump; route = Route.LIBRARY }
+    }
 
     LaunchedEffect(Unit) {
         Downloads.messages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
@@ -159,15 +164,16 @@ private fun App() {
         importing = true
         scope.launch {
             var ok = 0
+            var last: String? = null
             for (u in uris) {
                 try {
-                    store.importUri(u); ok++
+                    last = store.importUri(u).id; ok++
                 } catch (e: Exception) {
                     com.oasisreader.app.ui.Notice.show(context, "가져오기 실패: ${e.message}")
                 }
             }
             importing = false
-            if (ok > 0) Toast.makeText(context, "${ok}권을 서재에 담았습니다", Toast.LENGTH_SHORT).show()
+            last?.let { com.oasisreader.app.ui.Notice.added("${ok}권을 서재에 담았습니다", it) }
         }
     }
 

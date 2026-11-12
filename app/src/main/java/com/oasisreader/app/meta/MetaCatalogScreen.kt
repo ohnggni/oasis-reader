@@ -300,6 +300,7 @@ fun MetaCatalogScreen(
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(server.name, onBack = onBack) {
+            com.oasisreader.app.ui.HomeButton()
             EmojiButton("⚙️", "서버 설정", onOpenSettings)
         }
         com.oasisreader.app.ui.CatalogViewSwitch(organized = true, onOrganized = {}, onFolders = onOpdsFolders)
@@ -559,7 +560,7 @@ private fun SeriesDetail(
         } catch (e: Exception) { error = e.message; null }
     }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar(series.seriesName, onBack = onBack)
+        TopBar(series.seriesName, onBack = onBack) { com.oasisreader.app.ui.HomeButton() }
         val list = books
         when {
             error != null -> Column(
@@ -676,7 +677,7 @@ private fun BookDetail(
             // swallow touches so the list underneath can't be tapped through
             .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
     ) {
-        TopBar(b.name, onBack = onBack)
+        TopBar(b.name, onBack = onBack) { com.oasisreader.app.ui.HomeButton() }
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -3,18 +3,28 @@ package com.oasisreader.app.audio
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,7 +35,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.AudioMarkEntity
 import com.oasisreader.app.data.db.forgetRemovedIfEmpty
-import com.oasisreader.app.ui.CountLine
 import com.oasisreader.app.ui.MiniChip
 import com.oasisreader.app.ui.MiniChipGap
 import com.oasisreader.app.ui.Notice
@@ -130,12 +141,47 @@ fun AudioMarkDialog(m: AudioMarkEntity, title: String, onPlay: (() -> Unit)?, on
     )
 }
 
+/**
+ * One 책갈피 in a list — the same shape as a highlight in the 하이라이트 screen: a bar at the left,
+ * the place, the note, the day it was made.
+ */
 @Composable
-private fun MarkRow(m: AudioMarkEntity, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("📌 " + AudioMarks.label(m), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        m.note?.takeIf { it.isNotBlank() }?.let {
-            Text("📝 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+fun AudioMarkRow(m: AudioMarkEntity, day: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Box(Modifier.width(4.dp).height(48.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.tertiary))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("📌 " + AudioMarks.label(m), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            m.note?.takeIf { it.isNotBlank() }?.let {
+                Text("📝 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+            Text(day, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** An audiobook's line over its 책갈피 in the 하이라이트 screen: 🎧 title, how many, ⋮ (copy all, delete all). */
+@Composable
+fun AudioMarkHeader(title: String, onShelf: Boolean, count: Int, onCopyAll: () -> Unit, onDeleteAll: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                (if (onShelf) "🎧 " else "🗑️ ") + title,
+                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = if (onShelf) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "책갈피 ${count}개" + if (onShelf) "" else " · 지운 오디오북 (다시 담으면 이어집니다)",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Box {
+            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "이 오디오북 책갈피 메뉴") }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("📋 모두 복사") }, onClick = { menu = false; onCopyAll() })
+                DropdownMenuItem(text = { Text("🗑️ 이 오디오북 책갈피 모두 지우기", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onDeleteAll() })
+            }
         }
     }
 }
@@ -147,13 +193,14 @@ fun AudioMarksDialog(bookId: String, title: String, onDismiss: () -> Unit) {
     val db = AppDatabase.get(context.applicationContext)
     val marks by remember(bookId) { db.audioMarks().observeFor(bookId) }.collectAsState(initial = emptyList())
     var picked by remember { mutableStateOf<AudioMarkEntity?>(null) }
+    val fmt = remember { java.text.SimpleDateFormat("yyyy.M.d", java.util.Locale.KOREA) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("📌 책갈피 ${marks.size}개", style = MaterialTheme.typography.titleSmall) },
         text = {
             if (marks.isEmpty()) Text("아직 책갈피가 없습니다.\n듣다가 📌 책갈피를 누르면 그 자리가 남습니다.")
             else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
-                items(marks, key = { it.id }) { m -> MarkRow(m) { picked = m } }
+                items(marks, key = { it.id }) { m -> AudioMarkRow(m, fmt.format(java.util.Date(m.createdAt))) { picked = m } }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
@@ -163,41 +210,5 @@ fun AudioMarksDialog(bookId: String, title: String, onDismiss: () -> Unit) {
     )
     picked?.let { m ->
         AudioMarkDialog(m, title, onPlay = { AudioPlayback.goTo(m.track, m.startSec); onDismiss() }, onDismiss = { picked = null })
-    }
-}
-
-/** 하이라이트 화면의 🎧 오디오북 책갈피: every book's marks, by book (the newest first). */
-@Composable
-fun AudioMarksPanel(marks: List<AudioMarkEntity>, query: String, titleOf: (String) -> String, onShelf: (String) -> Boolean, onPlay: (AudioMarkEntity) -> Unit) {
-    val context = LocalContext.current
-    var picked by remember { mutableStateOf<AudioMarkEntity?>(null) }
-    val groups = remember(marks, query) {
-        val q = query.trim()
-        marks.filter { m -> q.isEmpty() || (m.note?.contains(q, true) == true) || m.trackTitle.contains(q, true) || titleOf(m.bookId).contains(q, true) }
-            .groupBy { it.bookId }.entries.sortedByDescending { e -> e.value.maxOf { it.createdAt } }
-            .map { it.key to it.value.sortedWith(compareBy<AudioMarkEntity> { m -> m.track }.thenBy { m -> m.startSec }) }
-    }
-    CountLine("📌 ${groups.sumOf { it.second.size }}개 · 오디오북 ${groups.size}권")
-    if (groups.isEmpty()) Text(
-        "오디오북 책갈피가 없습니다.\n오디오북을 듣다가 재생 화면의 📌 책갈피를 누르면 그 자리와 메모가 여기에 모입니다.",
-        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp),
-    )
-    LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
-        groups.forEach { (bookId, list) ->
-            item(key = "ah_$bookId") {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp)) {
-                    Text(
-                        (if (onShelf(bookId)) "🎧 " else "🗑️ ") + titleOf(bookId),
-                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    MiniChip("📋 모두 복사", onClick = { AudioMarks.copy(context, "「${titleOf(bookId)}」\n\n" + list.joinToString("\n") { AudioMarks.line(it) }) })
-                }
-            }
-            items(list, key = { it.id }) { m -> MarkRow(m) { picked = m } }
-        }
-    }
-    picked?.let { m ->
-        AudioMarkDialog(m, titleOf(m.bookId), onPlay = if (onShelf(m.bookId)) ({ onPlay(m) }) else null, onDismiss = { picked = null })
     }
 }

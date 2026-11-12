@@ -134,6 +134,7 @@ object FolderImport {
                 return cols.getOrPut(name) { ShelfCollections.findOrCreate(db, name).id }
             }
             var ok = 0
+            var lastId: String? = null
             val failed = ArrayList<String>()
             plan.items.forEachIndexed { i, item ->
                 if (isStopped) return Result.success()
@@ -150,13 +151,14 @@ object FolderImport {
                     )
                     collectionFor(item)?.let { ShelfCollections.set(db, it, book.id, true) }
                     db.books().setOrigin(book.id, com.oasisreader.app.data.BookOrigin.folder(tree.toString(), item.folder))
-                    ok++
+                    ok++; lastId = book.id
                 } catch (e: Exception) {
                     failed += item.name
                 } finally {
                     tmp.delete()
                 }
             }
+            lastId?.let { com.oasisreader.app.ui.Notice.added("「${plan.rootName}」 ${ok}권을 서재에 담았습니다", it) }
             done(
                 app,
                 "「${plan.rootName}」 ${ok}권을 서재에 담았습니다" +

@@ -257,6 +257,7 @@ fun OpdsScreen(
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // the folder the user opened, by the name they tapped (feed titles like "Library Series" say little)
         TopBar(if (stack.size == 1) server.name else "📂 " + labels.last(), onBack = ::back) {
+            HomeButton()
             if (stack.size > 1) androidx.compose.material3.IconButton(
                 onClick = {
                     val added = OpdsFavorites.toggle(app, serverId, stack.toList(), labels.toList())

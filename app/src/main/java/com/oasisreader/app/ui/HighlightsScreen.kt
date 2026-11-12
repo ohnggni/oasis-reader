@@ -61,7 +61,7 @@ import java.util.Date
 import java.util.Locale
 
 /** Which highlights the screen shows. */
-private enum class HlFilter(val label: String) { ALL("전체"), ON_SHELF("📚 서재에 있는 책"), REMOVED("🗑️ 지운 책"), AUDIO("🎧 오디오북 책갈피") }
+private enum class HlFilter(val label: String) { ALL("전체"), ON_SHELF("📚 서재에 있는 책"), REMOVED("🗑️ 지운 책"), AUDIO("🎧 오디오북만") }
 
 /**
  * All highlights, by book (newest first). A book still on the 서재: tap a highlight to open it
@@ -107,6 +107,31 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
             .map { it.key to it.value.sortedWith(compareBy<HighlightEntity> { h -> h.spineIndex }.thenBy { h -> h.createdAt }) }
     }
 
+    // 🎧 오디오북 책갈피, grouped the same way; 전체 shows books and audiobooks together, newest first
+    val markGroups = remember(marks, filter, query, titles, removedTitles) {
+        val q = query.trim()
+        marks
+            .filter { m ->
+                when (HlFilter.valueOf(filter)) {
+                    HlFilter.ALL, HlFilter.AUDIO -> true
+                    HlFilter.ON_SHELF -> titles.containsKey(m.bookId)
+                    HlFilter.REMOVED -> !titles.containsKey(m.bookId)
+                }
+            }
+            .filter { m -> q.isEmpty() || (m.note?.contains(q, true) == true) || m.trackTitle.contains(q, true) || titleOf(m.bookId).contains(q, true) }
+            .groupBy { it.bookId }
+            .map { it.key to it.value.sortedWith(compareBy<com.oasisreader.app.data.db.AudioMarkEntity> { m -> m.track }.thenBy { m -> m.startSec }) }
+    }
+    val groupMap = remember(groups) { groups.toMap() }
+    val markMap = remember(markGroups) { markGroups.toMap() }
+    val sections: List<Pair<String, Boolean>> = remember(groups, markGroups) {
+        (groups.map { Triple(it.first, false, it.second.maxOf { h -> h.createdAt }) } +
+            markGroups.map { Triple(it.first, true, it.second.maxOf { m -> m.createdAt }) })
+            .sortedByDescending { it.third }.map { it.first to it.second }
+    }
+    var pickedMark by remember { mutableStateOf<com.oasisreader.app.data.db.AudioMarkEntity?>(null) }
+    var deleteMarks by remember { mutableStateOf<String?>(null) }
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar("하이라이트", onBack = onBack) { HighlightJsonExportMenu(enabled = !highlights.isNullOrEmpty()) }
         if (highlights != null && highlights!!.isEmpty() && marks.isEmpty()) {
@@ -120,7 +145,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
         }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
-            placeholder = { Text("🔍 하이라이트·메모·책 제목 찾기") },
+            placeholder = { Text("🔍 하이라이트·책갈피·메모·책 제목 찾기") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         )
         Row(
@@ -129,13 +154,30 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
         ) {
             HlFilter.entries.forEach { f -> MiniChip(f.label, selected = filter == f.name, onClick = { filter = f.name }) }
         }
-        if (filter == HlFilter.AUDIO.name) {
-            com.oasisreader.app.audio.AudioMarksPanel(marks, query, ::titleOf, { id -> titles.containsKey(id) }, onPlayMark)
-            return@Column
-        }
-        CountLine(groups.sumOf { it.second.size }.takeIf { highlights != null }?.let { "🖍️ ${it}개 · 책 ${groups.size}권" })
+        CountLine(
+            if (highlights == null) null
+            else listOfNotNull(
+                "🖍️ ${groups.sumOf { it.second.size }}개".takeIf { groups.isNotEmpty() || markGroups.isEmpty() },
+                "📌 ${markGroups.sumOf { it.second.size }}개".takeIf { markGroups.isNotEmpty() },
+                "책 ${groups.size + markGroups.size}권",
+            ).joinToString(" · "),
+        )
         LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            groups.forEach { (bookId, list) ->
+            sections.forEach { (bookId, isAudio) ->
+                if (isAudio) {
+                    // an audiobook: its 📌 책갈피, in the same shape as a book's highlights
+                    val ms = markMap[bookId].orEmpty()
+                    item(key = "ah_$bookId") {
+                        com.oasisreader.app.audio.AudioMarkHeader(
+                            titleOf(bookId), titles.containsKey(bookId), ms.size,
+                            onCopyAll = { copy(context, titleOf(bookId) + "\n\n" + ms.joinToString("\n") { com.oasisreader.app.audio.AudioMarks.line(it) }) },
+                            onDeleteAll = { deleteMarks = bookId },
+                        )
+                    }
+                    items(ms, key = { "am_" + it.id }) { m -> com.oasisreader.app.audio.AudioMarkRow(m, fmt.format(Date(m.createdAt))) { pickedMark = m } }
+                    return@forEach
+                }
+                val list = groupMap[bookId].orEmpty()
                 val onShelf = titles.containsKey(bookId)
                 item(key = "h_$bookId") {
                     var menu by remember { mutableStateOf(false) }
@@ -220,6 +262,28 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
                 }) { Text("지우기", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { deleteBook = null }) { Text("취소") } },
+        )
+    }
+
+    pickedMark?.let { m ->
+        com.oasisreader.app.audio.AudioMarkDialog(
+            m, titleOf(m.bookId),
+            onPlay = if (titles.containsKey(m.bookId)) ({ onPlayMark(m) }) else null,
+            onDismiss = { pickedMark = null },
+        )
+    }
+    deleteMarks?.let { id ->
+        val n = marks.count { it.bookId == id }
+        AlertDialog(
+            onDismissRequest = { deleteMarks = null },
+            text = { Text("「${titleOf(id)}」의 책갈피 ${n}개를 모두 지울까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteMarks = null
+                    scope.launch { db.audioMarks().deleteForBook(id); db.forgetRemovedIfEmpty(id) }
+                }) { Text("지우기", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteMarks = null }) { Text("취소") } },
         )
     }
 

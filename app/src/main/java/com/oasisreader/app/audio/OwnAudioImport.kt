@@ -64,7 +64,7 @@ object OwnAudioImport {
                                 key = "remote:${server.id}:$home", keep = keep,
                                 origin = BookOrigin.remote(server.id, Remote.parent(home)),
                             )
-                        }.size
+                        }
                     }
                 }
             }
@@ -92,7 +92,7 @@ object OwnAudioImport {
                             OwnAudio.Own(blank, OwnAudio.FOLDER, path = home, tree = tree.toString(), inPlace = !copy),
                             key = "folder:$home", keep = copy,
                         )
-                    }.size
+                    }
                 }
             }
             report(app, r, if (copy) "앱 안으로 복사합니다 (받기 관리)" else "폴더에서 그대로 듣습니다")
@@ -105,10 +105,11 @@ object OwnAudioImport {
         return try { m.setDataSource(c, uri); m.embeddedPicture } catch (e: Exception) { null } finally { runCatching { m.release() } }
     }
 
-    private fun report(c: Context, r: Result<Int>, how: String) {
-        r.onSuccess { n ->
-            Notice.show(c, if (n == 0) "🎧 오디오북을 찾지 못했습니다. 소리 파일(mp3 · m4a · m4b …)이 든 폴더를 골라 주세요."
-                else "🎧 오디오북 ${n}권을 서재에 담았습니다. $how")
+    /** [r]: the 서재 ids of the books added. */
+    private fun report(c: Context, r: Result<List<String>>, how: String) {
+        r.onSuccess { ids ->
+            if (ids.isEmpty()) Notice.show(c, "🎧 오디오북을 찾지 못했습니다. 소리 파일(mp3 · m4a · m4b …)이 든 폴더를 골라 주세요.")
+            else Notice.added("🎧 오디오북 ${ids.size}권을 서재에 담았습니다. $how", ids.first())
         }.onFailure { Notice.show(c, "🎧 가져오지 못했습니다: ${it.message ?: it.javaClass.simpleName}") }
     }
 }

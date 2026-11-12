@@ -317,6 +317,29 @@ fun LibraryScreen(
         selected = if (ids.all { it in selected }) selected - ids.toSet() else selected + ids
     }
 
+    // 서재에서 보기 (ShelfJump.to): show that book — nothing filtering it out, its 종류 tab, inside
+    // its 컬렉션 or 묶음 — then scroll to it. Each change recomposes and comes back here.
+    val jumpId = ShelfJump.pendingBook
+    LaunchedEffect(jumpId, bookIds, activeCol, tabKey, showTabs, groupMode, seriesGroups, links) {
+        val id = jumpId ?: return@LaunchedEffect
+        val b = books.firstOrNull { it.id == id } ?: return@LaunchedEffect      // not in the list yet
+        if (selected.isNotEmpty()) selected = emptySet()
+        if (searchOpen) searchOpen = false
+        if (filterName != ShelfFilter.ALL.name) filterName = ShelfFilter.ALL.name
+        val cols = links.filter { it.bookId == id }.map { it.collectionId }.filter { c -> collections.any { it.id == c } }
+        if (activeCol != null && activeCol !in cols) { setCol(null); return@LaunchedEffect }
+        val want = ShelfKind.of(b)
+        if (showTabs && kind != want) { setTab(want); return@LaunchedEffect }
+        openFolder = when {
+            activeCol != null -> null                                   // already that 컬렉션's page
+            cols.isNotEmpty() -> cols.first()
+            else -> seriesGroups.firstOrNull { g -> g.second.any { it.id == id } }?.first?.id
+        }
+        ShelfJump.scrollTo = id
+        ShelfJump.pendingBook = null
+    }
+    val scrollId = ShelfJump.scrollTo
+
     val kindBase = remember(base, kind) { if (kind == null) base else base.filter { ShelfKind.of(it) == kind } }
     val pool = remember(kindBase, filter, sort, sortDesc, kindOrder) { sortShelf(kindBase.filter { filter.matches(it) }, sort, sortDesc, kindOrder) }
     val shown = remember(pool, q, namesOf) {
@@ -626,6 +649,12 @@ fun LibraryScreen(
                 DisposableEffect(gridState) {
                     onDispose { ShelfMemory.pos[posKey] = gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
                 }
+                LaunchedEffect(scrollId, entries, gridState) {
+                    val id = scrollId ?: return@LaunchedEffect
+                    val i = entries.indexOfFirst { it is ShelfEntry.Book && it.b.id == id }
+                    if (i >= 0) { gridState.scrollToItem(i); ShelfJump.scrollTo = null }
+                    else { kotlinx.coroutines.delay(1_500); ShelfJump.scrollTo = null }   // not on this page after all
+                }
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(tileDp.dp),
@@ -660,6 +689,12 @@ fun LibraryScreen(
                 }
                 DisposableEffect(listState) {
                     onDispose { ShelfMemory.pos[posKey] = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+                }
+                LaunchedEffect(scrollId, entries, listState) {
+                    val id = scrollId ?: return@LaunchedEffect
+                    val i = entries.indexOfFirst { it is ShelfEntry.Book && it.b.id == id }
+                    if (i >= 0) { listState.scrollToItem(i); ShelfJump.scrollTo = null }
+                    else { kotlinx.coroutines.delay(1_500); ShelfJump.scrollTo = null }
                 }
                 LazyColumn(
                     state = listState,

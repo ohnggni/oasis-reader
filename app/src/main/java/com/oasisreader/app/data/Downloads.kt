@@ -202,7 +202,7 @@ object Downloads {
 
     /** Kept books get a message; "바로 읽기" opens the book and makes room in the cache. */
     private suspend fun afterImport(app: Context, book: com.oasisreader.app.data.db.BookEntity, pinned: Boolean, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)?) {
-        if (pinned) _messages.tryEmit("서재에 담았습니다: ${book.title}")
+        if (pinned) com.oasisreader.app.ui.Notice.added("서재에 담았습니다: ${book.title}", book.id)
         onDone?.invoke(book)
         if (!pinned) runCatching { BookStore.get(app).trimCache(CachePrefs(app).limitBytes, keep = book.id) }
     }

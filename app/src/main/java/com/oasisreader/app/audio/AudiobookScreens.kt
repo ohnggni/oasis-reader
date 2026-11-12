@@ -242,6 +242,7 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
     BackHandler { if (open != null) open = null else onBack() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(server.name.ifBlank { "오디오북" }, onBack = { if (open != null) open = null else onBack() }) {
+            com.oasisreader.app.ui.HomeButton()
             com.oasisreader.app.ui.EmojiButton("⚙️", "서버 설정", onOpenSettings)
             if (AudioPlayback.book != null) com.oasisreader.app.ui.EmojiButton("🎧", "재생 중", onPlayer)
         }
@@ -394,7 +395,7 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                             if (onShelf == null) androidx.compose.material3.OutlinedButton(onClick = {
                                 scope.launch {
                                     runCatching { AudioLibraryLink.add(context, web, b, pct, completed) }
-                                        .onSuccess { android.widget.Toast.makeText(context, "서재에 담았습니다", android.widget.Toast.LENGTH_SHORT).show() }
+                                        .onSuccess { com.oasisreader.app.ui.Notice.added("서재에 담았습니다: ${b.title}", AudioLibraryLink.bookId(serverId, b.id)) }
                                         .onFailure { com.oasisreader.app.ui.Notice.show(context, "담지 못했습니다: ${it.message}") }
                                 }
                             }, contentPadding = pad) { Text("📚 서재+", maxLines = 1, softWrap = false) }

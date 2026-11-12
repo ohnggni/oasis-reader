@@ -219,6 +219,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
             else -> "📂 " + Remote.nameOf(dir!!)
         }
         TopBar(title, onBack = ::back) {
+            com.oasisreader.app.ui.HomeButton()
             if (selected.isNotEmpty()) {
                 EmojiButton("☑️", "모두 고르기") {
                     val all = items.orEmpty()
