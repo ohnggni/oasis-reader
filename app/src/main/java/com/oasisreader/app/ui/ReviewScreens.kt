@@ -211,7 +211,7 @@ fun ReviewEditorScreen(bookId: String, onBack: () -> Unit) {
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { EmojiText("🖍️ 하이라이트 넣기") }, onClick = { menu = false; pickHighlights = true })
                     DropdownMenuItem(text = { EmojiText("📄 글 파일에서 가져오기") }, onClick = { menu = false; runCatching { openFile.launch(arrayOf("text/*")) } })
-                    DropdownMenuItem(text = { EmojiText("📝 마크다운 파일로 저장 (하이라이트 포함)") }, onClick = {
+                    DropdownMenuItem(text = { EmojiText("📝 마크다운으로 저장") }, onClick = {
                         menu = false
                         runCatching { saveFile.launch(HighlightExport.fileName(title, "md")) }
                     })

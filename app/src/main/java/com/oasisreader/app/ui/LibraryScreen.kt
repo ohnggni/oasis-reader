@@ -412,11 +412,24 @@ fun LibraryScreen(
                     Icon(androidx.compose.material.icons.Icons.Default.Menu, contentDescription = "메뉴")
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    Text(
+                        "가져오기", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
+                    )
                     listOf(
-                        Triple("☁️", "서버에서 책 가져오기", onCatalog),
-                        Triple("📄", "파일에서 책 가져오기", onImportFile),
-                        Triple("📁", "폴더에서 책 가져오기", onImportFolder),
-                        Triple("🎧", "폴더에서 오디오북 가져오기", onImportAudio),
+                        Triple("☁️", "서버", onCatalog),
+                        Triple("📄", "파일", onImportFile),
+                        Triple("📁", "폴더", onImportFolder),
+                        Triple("🎧", "오디오북 폴더", onImportAudio),
+                    ).forEach { (emoji, label, action) ->
+                        DropdownMenuItem(
+                            leadingIcon = { EmojiText(emoji, style = MaterialTheme.typography.titleMedium) },
+                            text = { Text(label) },
+                            onClick = { menu = false; action() },
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    listOf(
                         Triple("🖍️", "하이라이트", onHighlights),
                         Triple("📝", "독후감", onReviews),
                         Triple("📊", "독서 통계", onStats),
@@ -964,7 +977,7 @@ private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onS
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.size(size)) {
-            Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, contentDescription = "컬렉션 메뉴", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(if (size < 36.dp) 18.dp else 24.dp))
+            Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, contentDescription = "컬렉션 메뉴", tint = androidx.compose.material3.LocalContentColor.current, modifier = Modifier.size(if (size < 36.dp) 18.dp else 24.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { EmojiText("☑️ 모두 고르기") }, onClick = { open = false; onSelectAll() })
@@ -1094,7 +1107,7 @@ private fun MoreButton(onClick: () -> Unit, size: Dp = 36.dp) {
         Icon(
             androidx.compose.material.icons.Icons.Filled.MoreVert,
             contentDescription = "책 메뉴",
-            tint = MaterialTheme.colorScheme.onSurface,
+            tint = androidx.compose.material3.LocalContentColor.current,
             modifier = Modifier.size(if (size < 36.dp) 18.dp else 24.dp),
         )
     }
@@ -1111,9 +1124,9 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text("서재가 비어 있습니다", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = onCatalog) { EmojiText("☁️ 서버에서 책 가져오기") }
+        Button(onClick = onCatalog) { EmojiText("☁️ 서버에서 가져오기") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onImportFile) { EmojiText("📄 파일에서 책 가져오기") }
+        OutlinedButton(onClick = onImportFile) { EmojiText("📄 파일에서 가져오기") }
     }
 }
 
@@ -1168,16 +1181,22 @@ private fun GridBook(
     }
 }
 
-/** The disc a tile's ⋮ sits in, on the cover's bottom-left: page colour with a thin rim, so it reads on any cover. */
+/** Marks laid on a cover: a see-through dark disc with a white mark, like buttons on a photo (E-INK: solid black on white). */
+private val CoverScrim = Color.Black.copy(alpha = 0.40f)
+
+/** The disc a tile's ⋮ sits in, on the cover's bottom-left. */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.MenuDisc(small: Boolean, content: @Composable () -> Unit) {
     val size = if (small) 24.dp else 28.dp
+    val eink = com.oasisreader.app.ui.theme.ThemeMode.eink
     Box(
         Modifier.align(Alignment.BottomStart).padding(4.dp).size(size)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+            .background(if (eink) Color.White else CoverScrim, CircleShape)
+            .let { if (eink) it.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape) else it },
         contentAlignment = Alignment.Center,
-    ) { content() }
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides if (eink) Color.Black else Color.White) { content() }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1237,16 +1256,18 @@ internal fun minutesText(min: Int): String = when {
 private fun MarkDisc(kept: Boolean, small: Boolean) {
     val size = if (small) 24.dp else 28.dp
     if (OgIcons.style != OgIcons.EMOJI) {
-        // one-colour style: kept = a filled disc in the text colour, server-only = the same disc hollow
-        val ink = MaterialTheme.colorScheme.onSurface
-        val paper = MaterialTheme.colorScheme.surface
+        // one-colour style: a see-through dark disc, ⬇ = on the phone, ☁ = server only (E-INK: kept filled black, server-only hollow)
+        val eink = com.oasisreader.app.ui.theme.ThemeMode.eink
+        val ink = if (eink) (if (kept) Color.White else Color.Black) else Color.White
         Box(
-            Modifier.size(size).background(if (kept) ink else paper, CircleShape).border(1.5.dp, if (kept) paper else ink, CircleShape)
+            Modifier.size(size)
+                .background(if (eink) (if (kept) Color.Black else Color.White) else CoverScrim, CircleShape)
+                .let { if (eink) it.border(1.dp, Color.Black, CircleShape) else it }
                 .semantics { contentDescription = if (kept) "폰에 받음" else "서버에만 있음 또는 임시 보관" },
             contentAlignment = Alignment.Center,
         ) {
             OgIcons.icon(if (kept) "download" else "cloud")?.let {
-                Icon(it, contentDescription = null, tint = if (kept) paper else ink, modifier = Modifier.size(size * 0.64f))
+                Icon(it, contentDescription = null, tint = ink, modifier = Modifier.size(size * 0.64f))
             }
         }
         return
