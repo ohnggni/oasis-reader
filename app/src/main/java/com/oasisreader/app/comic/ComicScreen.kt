@@ -466,7 +466,7 @@ private fun ComicViewer(
     fun toggleBars() { barsVisible = !barsVisible; if (barsVisible) barsShownAt = System.currentTimeMillis() }
 
     val dark = isAppDark()
-    val barColor = if (dark) BarColors.Dark else BarColors.Light
+    val barColor = com.oasisreader.app.ui.theme.barColorFor(dark)
     val chrome = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
     var label by remember { mutableStateOf("") }

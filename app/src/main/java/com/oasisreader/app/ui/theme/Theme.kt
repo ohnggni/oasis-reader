@@ -1,10 +1,14 @@
 package com.oasisreader.app.ui.theme
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import com.oasisreader.app.reader.ReaderTheme
 
 // oasis green accent
 private val Oasis = Color(0xFF2F5D50)
@@ -47,5 +51,40 @@ fun OasisTheme(
     darkTheme: Boolean = isAppDark(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, content = content)
+    // A screen may ask for the other darkness than the app theme's (a book with its own reading
+    // theme): then the app's reading-theme colours do not fit, and the plain light / dark set is used.
+    val worn = ThemeMode.reader?.takeIf { it.dark == darkTheme }
+    val scheme = if (worn != null) remember(worn) { schemeOf(worn) } else if (darkTheme) DarkColors else LightColors
+    MaterialTheme(colorScheme = scheme, content = content)
+}
+
+/** Bar colour for a screen of the given darkness: the worn reading theme's rule colour when it fits. */
+fun barColorFor(dark: Boolean): Color =
+    ThemeMode.reader?.takeIf { it.dark == dark }?.let { Color(it.rule) } ?: if (dark) BarColors.Dark else BarColors.Light
+
+/** A whole Material colour set out of a reading theme's five colours. */
+private fun schemeOf(t: ReaderTheme): ColorScheme {
+    val bg = Color(t.bg); val fg = Color(t.fg); val accent = Color(t.accent); val rule = Color(t.rule)
+    // small grey text needs more contrast than the reading page's "muted" gives on light paper
+    val soft = lerp(Color(t.muted), fg, if (t.dark) 0.10f else 0.35f)
+    fun tone(f: Float) = lerp(bg, fg, f)
+    val base = if (t.dark) darkColorScheme() else lightColorScheme()
+    return base.copy(
+        primary = accent, onPrimary = bg,
+        primaryContainer = lerp(bg, accent, 0.22f), onPrimaryContainer = fg,
+        inversePrimary = lerp(accent, bg, 0.5f),
+        secondary = accent, onSecondary = bg,
+        secondaryContainer = tone(0.10f), onSecondaryContainer = fg,
+        tertiary = accent, onTertiary = bg,
+        tertiaryContainer = lerp(bg, accent, 0.14f), onTertiaryContainer = fg,
+        background = bg, onBackground = fg,
+        surface = bg, onSurface = fg,
+        surfaceVariant = tone(0.07f), onSurfaceVariant = soft,
+        surfaceTint = accent,
+        inverseSurface = fg, inverseOnSurface = bg,
+        outline = soft, outlineVariant = rule,
+        surfaceBright = bg, surfaceDim = tone(0.08f),
+        surfaceContainerLowest = bg, surfaceContainerLow = tone(0.02f), surfaceContainer = tone(0.04f),
+        surfaceContainerHigh = tone(0.06f), surfaceContainerHighest = tone(0.09f),
+    )
 }

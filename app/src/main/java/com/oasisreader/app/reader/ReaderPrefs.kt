@@ -22,12 +22,14 @@ enum class ReaderTheme(
     SEPIA("sepia", "세피아", false, 0xFFEEDDBB, 0xFF4A3A26, 0xFF84704F, 0xFF7A4E1E, 0xFFDCC69C),
     GRAY("gray", "회색", false, 0xFFE4E4E1, 0xFF262626, 0xFF6A6A66, 0xFF3E5470, 0xFFD0D0CC),
     GREEN("green", "연두", false, 0xFFDCE8D5, 0xFF223020, 0xFF5E7058, 0xFF2F5D50, 0xFFC6D8BC),
+    PINK("pink", "분홍", false, 0xFFF8E8EA, 0xFF3A2428, 0xFF7A5A60, 0xFFA8405A, 0xFFEBCFD4),
     NIGHT("night", "밤", true, 0xFF1B2420, 0xFFD6DDD6, 0xFF8F9C94, 0xFF9CC8B4, 0xFF2E3A34),
     NAVY("navy", "남색", true, 0xFF141C2B, 0xFFC9D3E0, 0xFF8090A6, 0xFF8FB4E0, 0xFF26324A),
     BLACK("black", "검정", true, 0xFF000000, 0xFFBDBDBD, 0xFF7A7A7A, 0xFF9CC8B4, 0xFF222222);
 
-    /** AUTO resolved against the app's light/dark setting. */
-    fun resolve(appDark: Boolean) = if (this == AUTO) (if (appDark) NIGHT else PAPER) else this
+    /** AUTO resolved against the app theme: the same reading theme if the app wears one, else its light/dark. */
+    fun resolve(appDark: Boolean) =
+        if (this == AUTO) (com.oasisreader.app.ui.theme.ThemeMode.reader ?: if (appDark) NIGHT else PAPER) else this
 
     companion object { fun of(id: String?) = entries.firstOrNull { it.id == id } ?: AUTO }
 }

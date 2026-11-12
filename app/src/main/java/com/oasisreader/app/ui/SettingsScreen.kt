@@ -95,9 +95,9 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
 
             Section("화면")
             val tm = com.oasisreader.app.ui.theme.ThemeMode
-            Item("🌓", "테마: ${tm.label(tm.mode)}", "시스템 따라가기 → 라이트 → 다크 (누를 때마다 바뀝니다)", enabled = true) {
-                tm.set(app, tm.ALL[(tm.ALL.indexOf(tm.mode) + 1) % tm.ALL.size])
-            }
+            var themeOpen by remember { mutableStateOf(false) }
+            Item("🌓", "테마: ${tm.label(tm.mode)}", "앱 전체 색. 종이·세피아·분홍·밤 같은 읽기 테마를 서재와 메뉴에도 입힐 수 있습니다", enabled = true) { themeOpen = true }
+            if (themeOpen) com.oasisreader.app.ui.theme.ThemePickDialog { themeOpen = false }
             Item("🎨", "아이콘: ${OgIcons.label(OgIcons.style)}", "단색(앱이 직접 그린 선 아이콘) ↔ 이모지 (누를 때마다 바뀝니다). 지금은 화면 위쪽 버튼부터 바뀝니다", enabled = true) {
                 OgIcons.set(app, if (OgIcons.style == OgIcons.MONO) OgIcons.EMOJI else OgIcons.MONO)
             }

@@ -815,7 +815,7 @@ private fun ReaderBody(
     val paper = Color(rTheme.bg)
     val chrome = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
     // bars sit two shades off the page so they read as separate from the text
-    val barColor = if (dark) BarColors.Dark else BarColors.Light
+    val barColor = com.oasisreader.app.ui.theme.barColorFor(dark)
     val showBars = barsVisible || state !is LoadState.Ready
 
     Box(Modifier.fillMaxSize().background(paper)) {

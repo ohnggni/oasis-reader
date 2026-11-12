@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.oasisreader.app.ui.theme.BarColors
 
 @Composable
-fun barColor(): Color = if (isAppDark()) BarColors.Dark else BarColors.Light
+fun barColor(): Color = com.oasisreader.app.ui.theme.barColorFor(isAppDark())
 
 /** Plain top bar in the reader's bar colour (two shades off the page). */
 /**

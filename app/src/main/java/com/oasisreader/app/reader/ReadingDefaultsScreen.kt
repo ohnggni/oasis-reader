@@ -195,7 +195,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
 /** A few lines in the chosen background, size, spacing and weight (font: its 명조/고딕 kind). */
 @Composable
 private fun Preview(theme: ReaderTheme, font: FontOption, px: Int, lineHeight: Int, weight: Int) {
-    val t = if (theme == ReaderTheme.AUTO) (if (isAppDark()) ReaderTheme.NIGHT else ReaderTheme.PAPER) else theme
+    val t = theme.resolve(isAppDark())
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
             .background(Color(t.bg), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 12.dp),
