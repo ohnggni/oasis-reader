@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         com.oasisreader.app.ui.theme.ThemeMode.load(this)
         com.oasisreader.app.ui.OgIcons.load(this)
+        com.oasisreader.app.ui.theme.UiScale.load(this)
         com.oasisreader.app.data.FontManager(this)   // loads the user's own fonts
         com.oasisreader.app.ui.DiskCovers.dir = java.io.File(cacheDir, "covers")
         com.oasisreader.app.meta.MetaApi.cacheDir = java.io.File(cacheDir, "meta")

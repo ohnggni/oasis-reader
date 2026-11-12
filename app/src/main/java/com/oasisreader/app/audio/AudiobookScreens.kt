@@ -587,7 +587,9 @@ private fun PlayerHeadline(b: AudioBook, onPick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
             )
-            Text("  ▾", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            com.oasisreader.app.ui.OgIcons.icon("down")?.let {
+                androidx.compose.material3.Icon(it, contentDescription = "장 목록", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 6.dp).size(22.dp))
+            }
         }
     }
 }

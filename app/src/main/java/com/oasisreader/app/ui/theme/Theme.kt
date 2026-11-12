@@ -8,7 +8,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
@@ -53,13 +56,19 @@ object BarColors {
 @Composable
 fun OasisTheme(
     darkTheme: Boolean = isAppDark(),
+    scaleText: Boolean = true,     // false where a theme is nested in another (the reader): scale once only
     content: @Composable () -> Unit,
 ) {
     // A screen may ask for the other darkness than the app theme's (a book with its own reading
     // theme): then the app's reading-theme colours do not fit, and the plain light / dark set is used.
     val worn = ThemeMode.reader?.takeIf { it.dark == darkTheme }
     val scheme = if (worn != null) remember(worn) { schemeOf(worn) } else if (darkTheme) DarkColors else LightColors
-    MaterialTheme(colorScheme = scheme, content = content)
+    val d = LocalDensity.current
+    if (scaleText && UiScale.factor != 1f) {
+        CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * UiScale.factor)) {
+            MaterialTheme(colorScheme = scheme, content = content)
+        }
+    } else MaterialTheme(colorScheme = scheme, content = content)
 }
 
 /** Bar colour for a screen of the given darkness: the worn reading theme's rule colour when it fits. */
@@ -67,8 +76,11 @@ fun barColorFor(dark: Boolean): Color =
     ThemeMode.reader?.takeIf { it.dark == dark }?.let { if (it == ReaderTheme.EINK) Color.White else Color(it.rule) }
         ?: if (dark) BarColors.Dark else BarColors.Light
 
+/** E-INK: outlines and dividers are a dark grey; solid black lines were too heavy next to the text. */
+private val EinkLine = Color(0xFF707070)
+
 /** E-INK: bars are white like the page, so they get an outline instead of a shade. */
-fun einkBorder(): BorderStroke? = if (ThemeMode.eink) BorderStroke(1.5.dp, Color.Black) else null
+fun einkBorder(): BorderStroke? = if (ThemeMode.eink) BorderStroke(1.5.dp, EinkLine) else null
 
 /** E-INK: no fades or slides (the panel would ghost through every frame). */
 fun calm(e: EnterTransition): EnterTransition = if (ThemeMode.eink) EnterTransition.None else e
@@ -89,7 +101,7 @@ private fun schemeOf(t: ReaderTheme): ColorScheme {
         background = bg, onBackground = fg, surface = bg, onSurface = fg,
         surfaceVariant = bg, onSurfaceVariant = fg, surfaceTint = bg,
         inverseSurface = fg, inverseOnSurface = bg,
-        outline = fg, outlineVariant = fg, scrim = fg,
+        outline = EinkLine, outlineVariant = EinkLine, scrim = fg,
         surfaceBright = bg, surfaceDim = bg,
         surfaceContainerLowest = bg, surfaceContainerLow = bg, surfaceContainer = bg,
         surfaceContainerHigh = bg, surfaceContainerHighest = bg,

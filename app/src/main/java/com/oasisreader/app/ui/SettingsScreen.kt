@@ -98,6 +98,8 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             var themeOpen by remember { mutableStateOf(false) }
             Item("🌓", "테마: ${tm.label(tm.mode)}", "앱 전체 색. 종이·세피아·분홍·밤 같은 읽기 테마를 서재와 메뉴에도 입힙니다. E-INK(흑백)는 전자잉크 화면용으로 움직임도 끕니다", enabled = true) { themeOpen = true }
             if (themeOpen) com.oasisreader.app.ui.theme.ThemePickDialog { themeOpen = false }
+            val us = com.oasisreader.app.ui.theme.UiScale
+            Item("🔤", "글자 크기: ${us.label}", "서재·메뉴·설정의 글자 크기 5단계 (누를 때마다 바뀝니다). 책 본문 크기는 읽는 화면의 가에서 따로 정합니다", enabled = true) { us.next(app) }
             Item("🎨", "아이콘: ${OgIcons.label(OgIcons.style)}", "단색(앱이 직접 그린 선 아이콘) ↔ 이모지 (누를 때마다 바뀝니다)", enabled = true) {
                 OgIcons.set(app, if (OgIcons.style == OgIcons.MONO) OgIcons.EMOJI else OgIcons.MONO)
             }

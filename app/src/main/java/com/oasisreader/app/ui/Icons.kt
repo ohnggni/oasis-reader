@@ -126,6 +126,12 @@ object OgIconPaths {
         "globe" to "M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0M3.5 12H20.5M12 3.5a13 13 0 0 0 0 17M12 3.5a13 13 0 0 1 0 17",
         "stats" to "M5.5 19.5V12M10.5 19.5V5M15.5 19.5V9M20 19.5V14",
         "theme" to "M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0M12 3.5V20.5M12 8H19.5M12 12H20.5M12 16H19.5",
+        "rewind" to "M12 6L6 12L12 18M19 6L13 12L19 18",
+        "unlock" to "M6 11H18V20H6ZM8.5 11V7.5a3.5 3.5 0 0 1 7 0",
+        "size" to "M4 20V4L20 20ZM8 16.5V12.5L12 16.5Z",
+        "wifi" to "M3 9a13 13 0 0 1 18 0M6.5 13a8 8 0 0 1 11 0M12 17.5h.01",
+        "text" to "M5 19L12 4.5L19 19M7.9 13.5H16.1",
+        "shapes" to "M4 4H11V11H4ZM13 16.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0",
     )
 
     /** Emoji (without the variation selector) -> icon name. */
@@ -142,6 +148,8 @@ object OgIconPaths {
         "🕒" to "clock", "🕘" to "clock", "⏰" to "clock", "⏳" to "clock", "🔁" to "refresh", "♻" to "refresh",
         "🖼" to "image", "💾" to "save", "🗄" to "server", "📱" to "phone", "🔔" to "bell", "⚡" to "bolt",
         "🌐" to "globe", "📊" to "stats", "🌓" to "theme", "📘" to "book", "📕" to "book", "🗂" to "folder", "🗃" to "storage",
+        "⏪" to "rewind", "📥" to "download", "⬆" to "up", "🔓" to "unlock", "📐" to "size", "✓" to "check", "📑" to "file",
+        "❌" to "close", "📶" to "wifi", "🔤" to "text", "🎨" to "shapes", "🧹" to "delete",
     )
 
     /**

@@ -168,7 +168,7 @@ fun ReaderScreen(
     val prefs = remember(bookId) { ReaderPrefs(app, bookId) }
     var theme by remember(bookId) { mutableStateOf(prefs.theme) }
     val rTheme = theme.resolve(isAppDark())
-    com.oasisreader.app.ui.theme.OasisTheme(darkTheme = rTheme.dark) {
+    com.oasisreader.app.ui.theme.OasisTheme(darkTheme = rTheme.dark, scaleText = false) {
         ReaderBody(bookId, focusHighlight, onBack, prefs, theme, rTheme, onOpenBook, onOpenFolder) { t -> theme = t; prefs.theme = t }
     }
 }

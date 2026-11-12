@@ -413,10 +413,10 @@ fun LibraryScreen(
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     listOf(
-                        Triple("☁️", "서버에서 책 찾기", onCatalog),
-                        Triple("📁", "파일에서 가져오기", onImportFile),
-                        Triple("🗂️", "폴더에서 가져오기", onImportFolder),
-                        Triple("🎧", "폰 폴더에서 오디오북 가져오기", onImportAudio),
+                        Triple("☁️", "서버에서 책 가져오기", onCatalog),
+                        Triple("📄", "파일에서 책 가져오기", onImportFile),
+                        Triple("📁", "폴더에서 책 가져오기", onImportFolder),
+                        Triple("🎧", "폴더에서 오디오북 가져오기", onImportAudio),
                         Triple("🖍️", "하이라이트", onHighlights),
                         Triple("📝", "독후감", onReviews),
                         Triple("📊", "독서 통계", onStats),
@@ -1108,9 +1108,9 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text("서재가 비어 있습니다", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = onCatalog) { EmojiText("☁️ 서버에서 책 찾기") }
+        Button(onClick = onCatalog) { EmojiText("☁️ 서버에서 책 가져오기") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onImportFile) { EmojiText("📁 내 폰 · 구글 드라이브에서 가져오기") }
+        OutlinedButton(onClick = onImportFile) { EmojiText("📄 파일에서 책 가져오기") }
     }
 }
 
@@ -1217,6 +1217,21 @@ internal fun minutesText(min: Int): String = when {
 @Composable
 private fun MarkDisc(kept: Boolean, small: Boolean) {
     val size = if (small) 24.dp else 28.dp
+    if (OgIcons.style != OgIcons.EMOJI) {
+        // one-colour style: kept = a filled disc in the text colour, server-only = the same disc hollow
+        val ink = MaterialTheme.colorScheme.onSurface
+        val paper = MaterialTheme.colorScheme.surface
+        Box(
+            Modifier.size(size).background(if (kept) ink else paper, CircleShape).border(1.5.dp, if (kept) paper else ink, CircleShape)
+                .semantics { contentDescription = if (kept) "폰에 받음" else "서버에만 있음 또는 임시 보관" },
+            contentAlignment = Alignment.Center,
+        ) {
+            OgIcons.icon(if (kept) "download" else "cloud")?.let {
+                Icon(it, contentDescription = null, tint = if (kept) paper else ink, modifier = Modifier.size(size * 0.64f))
+            }
+        }
+        return
+    }
     Box(
         Modifier.size(size)
             .background(if (kept) Color(0xFF1E8E4E) else Color(0xFF37474F).copy(alpha = 0.88f), CircleShape)

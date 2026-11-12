@@ -50,3 +50,24 @@ fun isAppDark(): Boolean = when (ThemeMode.mode) {
     ThemeMode.SYSTEM -> isSystemInDarkTheme()
     else -> ThemeMode.reader?.dark ?: isSystemInDarkTheme()
 }
+
+/** Size of the app's own text (shelf, menus, settings; not the book page), five steps (TODO 51). */
+object UiScale {
+    val FACTORS = listOf(0.88f, 0.94f, 1f, 1.08f, 1.16f)
+    private val LABELS = listOf("아주 작게", "작게", "보통", "크게", "아주 크게")
+
+    var step by mutableStateOf(2)
+        private set
+
+    val factor: Float get() = FACTORS[step.coerceIn(0, FACTORS.lastIndex)]
+    val label: String get() = LABELS[step.coerceIn(0, LABELS.lastIndex)]
+
+    fun load(c: Context) { step = c.getSharedPreferences("app", Context.MODE_PRIVATE).getInt("ui_scale", 2).coerceIn(0, FACTORS.lastIndex) }
+
+    fun set(c: Context, s: Int) {
+        step = s.coerceIn(0, FACTORS.lastIndex)
+        c.getSharedPreferences("app", Context.MODE_PRIVATE).edit().putInt("ui_scale", step).apply()
+    }
+
+    fun next(c: Context) = set(c, (step + 1) % FACTORS.size)
+}

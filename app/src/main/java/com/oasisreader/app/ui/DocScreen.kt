@@ -143,6 +143,7 @@ private fun Markdown(text: String) {
             line.startsWith("### ") -> Heading(line.removePrefix("### "), 16)
             line.startsWith(">") -> Text(
                 rich(line.removePrefix(">").trim()),
+                inlineContent = ogInline(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 10.dp, top = 2.dp, bottom = 2.dp),
@@ -151,12 +152,12 @@ private fun Markdown(text: String) {
                 val indent = line.length - line.trimStart().length
                 Row(Modifier.padding(start = (indent * 6).dp, top = 2.dp, bottom = 2.dp)) {
                     Text("•  ", style = MaterialTheme.typography.bodyMedium)
-                    Text(rich(line.trimStart().removePrefix("- ")), style = MaterialTheme.typography.bodyMedium)
+                    Text(rich(line.trimStart().removePrefix("- ")), inlineContent = ogInline(), style = MaterialTheme.typography.bodyMedium)
                 }
             }
             line.isBlank() -> Spacer(Modifier.height(8.dp))
             line.startsWith("---") -> Spacer(Modifier.height(12.dp))
-            else -> Text(rich(line), style = MaterialTheme.typography.bodyMedium)
+            else -> Text(rich(line), inlineContent = ogInline(), style = MaterialTheme.typography.bodyMedium)
         }
         i++
     }
@@ -211,6 +212,7 @@ private fun MdTable(rows: List<List<String>>) {
                 (0 until cols).forEach { c ->
                     Text(
                         rich(r.getOrNull(c).orEmpty()),
+                        inlineContent = ogInline(),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (ri == 0) FontWeight.SemiBold else null,
                         modifier = Modifier.weight(weights[c]).padding(horizontal = 6.dp, vertical = 6.dp),
@@ -232,15 +234,16 @@ private fun rich(s: String): androidx.compose.ui.text.AnnotatedString {
             textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
         ),
     )
-    return remember(s, linkStyle) {
+    val icons = OgIcons.style != OgIcons.EMOJI
+    return remember(s, linkStyle, icons) {
         val re = Regex("""\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)]\(([^)\s]+)\)|(https?://[^\s)]+)|([\w.+-]+@[\w-]+(?:\.[\w-]+)+)""")
         androidx.compose.ui.text.buildAnnotatedString {
             var last = 0
             for (m in re.findAll(s)) {
-                append(s.substring(last, m.range.first))
+                appendWithIcons(s.substring(last, m.range.first), icons)
                 val g = m.groupValues
                 when {
-                    g[1].isNotEmpty() -> withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) { append(g[1]) }
+                    g[1].isNotEmpty() -> withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) { appendWithIcons(g[1], icons) }
                     g[2].isNotEmpty() -> append(g[2])
                     g[3].isNotEmpty() -> withLink(androidx.compose.ui.text.LinkAnnotation.Url(g[4], linkStyle)) { append(g[3]) }
                     g[5].isNotEmpty() -> withLink(androidx.compose.ui.text.LinkAnnotation.Url(g[5], linkStyle)) { append(g[5]) }
@@ -248,7 +251,7 @@ private fun rich(s: String): androidx.compose.ui.text.AnnotatedString {
                 }
                 last = m.range.last + 1
             }
-            append(s.substring(last))
+            appendWithIcons(s.substring(last), icons)
         }
     }
 }

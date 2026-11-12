@@ -8,6 +8,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.takeOrElse
@@ -129,3 +130,40 @@ fun Text(
     text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration,
     textAlign, lineHeight, overflow, softWrap, maxLines, minLines, inlineContent = inlineContent, onTextLayout = onTextLayout, style = style,
 )
+
+/**
+ * Appends [text], putting an inline icon in place of every emoji the app has an icon for (not just
+ * a leading one). The text it goes into needs [ogInline] as its inlineContent. With [icons] false
+ * this is a plain append.
+ */
+fun AnnotatedString.Builder.appendWithIcons(text: String, icons: Boolean) {
+    if (!icons) { append(text); return }
+    var i = 0
+    var plain = 0
+    while (i < text.length) {
+        val cp = text.codePointAt(i)
+        val len = Character.charCount(cp)
+        val name = if (cp < 0x2190) null else OgIconPaths.byEmoji[text.substring(i, i + len)]
+        if (name == null) { i += len; continue }
+        append(text.substring(plain, i))
+        var end = i + len
+        if (text.getOrNull(end) == '\uFE0F') end++
+        appendInlineContent("og:$name", text.substring(i, end))
+        i = end
+        plain = end
+    }
+    append(text.substring(plain))
+}
+
+/** Inline content for every icon [appendWithIcons] may have put in, in the current text colour. */
+@Composable
+fun ogInline(): Map<String, InlineTextContent> {
+    val tint = LocalContentColor.current
+    return remember(tint) {
+        OgIconPaths.paths.keys.associate { name ->
+            "og:$name" to InlineTextContent(Placeholder(1.25.em, 1.25.em, PlaceholderVerticalAlign.TextCenter)) {
+                OgIcons.icon(name)?.let { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.fillMaxSize()) }
+            }
+        }
+    }
+}
