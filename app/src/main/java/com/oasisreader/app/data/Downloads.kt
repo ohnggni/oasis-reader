@@ -40,6 +40,15 @@ object Downloads {
     /** Progress from the background queue ([BookQueue]); null takes the entry out. */
     fun setProgress(key: String, f: Float?) = _progress.update { if (f == null) it - key else it + (key to f) }
     fun clearProgress() = _progress.update { emptyMap() }
+
+    /** A download's progress for [key], sent on only when it moved by 1% (it arrives every 64KB). */
+    private fun stepped(key: String): (Long, Long) -> Unit {
+        var last = -2f
+        return { done, total ->
+            val f = if (total > 0) done.toFloat() / total else -1f
+            if (f < 0f || f - last >= 0.01f) { last = f; _progress.update { it + (key to f) } }
+        }
+    }
     fun message(text: String) { _messages.tryEmit(text) }
 
     /**
@@ -60,10 +69,7 @@ object Downloads {
         scope.launch {
             val tmp = File(app.cacheDir, "dl_${System.nanoTime()}.bin")
             try {
-                val fileName = OpdsClient(server).download(acq.href, tmp) { done, total ->
-                    val f = if (total > 0) done.toFloat() / total else -1f
-                    _progress.update { it + (entry.id to f) }
-                }
+                val fileName = OpdsClient(server).download(acq.href, tmp, stepped(entry.id))
                 // catalog titles like "[만화] 1" carry no series name: prefer the server's file name
                 val generic = OpdsClient.isGenericTitle(entry.title)
                 val hint = if (generic) fileName?.substringBeforeLast('.')?.ifBlank { null } else entry.title
@@ -106,10 +112,7 @@ object Downloads {
             val tmp = File(app.cacheDir, "dl_${System.nanoTime()}.bin")
             try {
                 val book = gate.withPermit {
-                    OpdsClient(server).download(href, tmp) { done, total ->
-                        val f = if (total > 0) done.toFloat() / total else -1f
-                        _progress.update { it + (key to f) }
-                    }
+                    OpdsClient(server).download(href, tmp, stepped(key))
                     BookStore.get(app).import(tmp, sourceUrl = href, opdsId = key, titleHint = title, fallbackTitle = title, pinned = pinned, moveSource = true)
                 }.let { b ->
                     // comics: the catalog's clean title beats whatever ComicInfo inside says

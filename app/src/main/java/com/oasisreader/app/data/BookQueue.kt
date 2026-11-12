@@ -66,7 +66,7 @@ object BookQueue {
     }
 
     private fun write(c: Context, list: List<Job>) = synchronized(lock) {
-        if (list.isEmpty()) file(c).delete() else file(c).writeText(Http.json.encodeToString(ser, list))
+        if (list.isEmpty()) file(c).delete() else file(c).writeTextAtomic(Http.json.encodeToString(ser, list))
         version++
     }
 

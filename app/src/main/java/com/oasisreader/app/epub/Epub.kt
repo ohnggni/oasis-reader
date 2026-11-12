@@ -36,10 +36,16 @@ data class EpubPackage(
     val toc: List<TocItem> = emptyList(),
     val coverPath: String? = null,
 ) {
-    val totalChars: Long get() = spine.sumOf { it.chars.toLong() }.coerceAtLeast(1)
+    // sums[i] = chars before spine index i (sums[size] = all), added up once: overall() runs on
+    // every page turn, and web novels have thousands of chapters
+    private val sums: LongArray by lazy {
+        LongArray(spine.size + 1).also { a -> for (i in spine.indices) a[i + 1] = a[i] + spine[i].chars.toLong() }
+    }
+
+    val totalChars: Long get() = sums[spine.size].coerceAtLeast(1)
 
     /** chars before spine index i */
-    fun charsBefore(i: Int): Long = spine.take(i.coerceIn(0, spine.size)).sumOf { it.chars.toLong() }
+    fun charsBefore(i: Int): Long = sums[i.coerceIn(0, spine.size)]
 
     fun spineIndexOf(path: String): Int = spine.indexOfFirst { it.path == path }
 

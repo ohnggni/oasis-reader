@@ -95,7 +95,7 @@ class MetaApi(val server: Server, val db: String = server.metaDb) {
             runCatching { f.readText() }.getOrNull()?.let { return@withContext it }
         }
         val body = fetch(u)
-        if (f != null) runCatching { f.parentFile?.mkdirs(); f.writeText(body) }
+        if (f != null) runCatching { com.oasisreader.app.data.writeTextAtomicTo(f, body) }
         body
     }
 

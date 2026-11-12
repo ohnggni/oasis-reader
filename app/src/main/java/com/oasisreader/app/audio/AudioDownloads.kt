@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.data.writeTextAtomic
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -65,7 +66,7 @@ object AudioDownloads {
 
     internal fun writeManifest(context: Context, bookId: String, b: AudioBook) {
         dir(context, bookId).mkdirs()
-        manifest(context, bookId).writeText(Http.json.encodeToString(AudioBook.serializer(), b.copy(tracks = b.tracks.map { it.copy(localPath = null) })))
+        manifest(context, bookId).writeTextAtomic(Http.json.encodeToString(AudioBook.serializer(), b.copy(tracks = b.tracks.map { it.copy(localPath = null) })))
     }
 
     private fun readManifest(context: Context, bookId: String): AudioBook? =
@@ -128,7 +129,7 @@ object AudioDownloads {
     internal fun writeQueue(context: Context, bookId: String, q: Queue) = synchronized(lock) {
         val f = File(dir(context, bookId), QUEUE)
         if (q.wanted.isEmpty() && q.error == null) f.delete()
-        else { f.parentFile?.mkdirs(); f.writeText(Http.json.encodeToString(Queue.serializer(), q)) }
+        else f.writeTextAtomic(Http.json.encodeToString(Queue.serializer(), q))
     }
 
     internal fun updateQueue(context: Context, bookId: String, change: (Queue) -> Queue) = synchronized(lock) {
