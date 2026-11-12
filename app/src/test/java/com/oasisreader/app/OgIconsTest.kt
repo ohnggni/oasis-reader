@@ -14,7 +14,7 @@ class OgIconsTest {
     @Test fun variationSelectorIsIgnored() {
         assertEquals("settings", OgIconPaths.nameFor("⚙️"))
         assertEquals("settings", OgIconPaths.nameFor("⚙"))
-        assertNull(OgIconPaths.nameFor("🧹"))
+        assertNull(OgIconPaths.nameFor("가"))
     }
 
     @Test fun leadingEmojiOfALabel() {
