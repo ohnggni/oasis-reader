@@ -1,5 +1,6 @@
 package com.oasisreader.app.reader
 
+import com.oasisreader.app.ui.EmojiText
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -188,7 +189,7 @@ fun BookmarksDialog(
                             )
                             Text(b.snippet.ifBlank { "(내용 없음)" }, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        TextButton(onClick = { onDelete(b) }) { Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        TextButton(onClick = { onDelete(b) }) { EmojiText("✕", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     HorizontalDivider(thickness = 0.5.dp)
                 }

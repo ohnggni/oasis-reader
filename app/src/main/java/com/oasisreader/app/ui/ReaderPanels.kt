@@ -206,7 +206,7 @@ fun PanelAction(emoji: String, label: String, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(emoji, fontSize = 17.sp)
+        EmojiText(emoji, fontSize = 17.sp)
         Spacer(Modifier.width(14.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge)
     }

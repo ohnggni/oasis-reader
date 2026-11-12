@@ -1,5 +1,6 @@
 package com.oasisreader.app.reader
 
+import com.oasisreader.app.ui.EmojiText
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
@@ -133,6 +134,8 @@ import kotlin.math.roundToInt
 
 private const val ASSET_HOST = BookStore.ASSET_HOST
 private const val BAR_DP = 52
+/** Height of the top bar itself; the page keeps reserving [BAR_DP] + 10 so text does not reflow. */
+private const val TOP_BAR_DP = 60
 private const val RUNNING_HEAD_DP = 30
 private const val SIDEWAYS_PAD_DP = 24
 private const val SIDEWAYS_EXTRA_BOTTOM = 14   // a little more air above the page label
@@ -1068,7 +1071,7 @@ private fun ReaderBody(
                 ) {
                     Column {
                         Row(
-                            Modifier.height(BAR_DP.dp).padding(end = 10.dp),
+                            Modifier.height(TOP_BAR_DP.dp).padding(end = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
@@ -1086,7 +1089,7 @@ private fun ReaderBody(
                             // [ ☀️ 화면 | 가 글자 | ▤ 쪽 | ☰ 이동 ]: each opens its panel under the bar
                             PillGroup(paper) {
                                 PillSegment(selected = panel == Panel.SCREEN, onClick = { panel = panel.toggle(Panel.SCREEN) }) {
-                                    Text("☀️", fontSize = 14.sp)
+                                    EmojiText("☀️", fontSize = 14.sp)
                                 }
                                 PillDivider()
                                 PillSegment(selected = panel == Panel.TEXT, onClick = { panel = panel.toggle(Panel.TEXT) }) {
@@ -1098,7 +1101,7 @@ private fun ReaderBody(
                                 }
                                 PillDivider()
                                 PillSegment(selected = panel == Panel.NAV, onClick = { panel = panel.toggle(Panel.NAV) }) {
-                                    Text("☰", fontSize = 15.sp)
+                                    EmojiText("☰", fontSize = 15.sp)
                                 }
                             }
                         }
@@ -1289,7 +1292,7 @@ private fun ReaderBody(
                 fill = barColor,
                 onVoice = { voiceOpen = true },
                 onClose = { stopAloud() },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (showBars) 84.dp else 34.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (showBars) 70.dp else 34.dp),
             )
 
             // with the top bar: a bottom bar whose thin slider spans the whole book
@@ -1404,7 +1407,7 @@ private fun ReaderSeekBar(
     Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
         // lifted well clear of the bottom edge: with gesture navigation a swipe up from there
         // means home / recent apps, and the slider must not catch it (it may cover a line of text)
-        Column(Modifier.navigationBarsPadding().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 30.dp)) {
+        Column(Modifier.navigationBarsPadding().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     chapter.ifEmpty { " " },
@@ -1416,7 +1419,7 @@ private fun ReaderSeekBar(
                 )
                 Text("${(v * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = chrome)
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
             // − + : 1% of the book back / on (no repeat: each one opens the place)
             com.oasisreader.app.ui.StepButtons(
@@ -1481,7 +1484,7 @@ private fun MissingFiles(canFetch: Boolean, auto: Boolean, busy: Boolean, onFetc
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("📦", fontSize = 40.sp)
+        EmojiText("📦", fontSize = 40.sp)
         Spacer(Modifier.height(12.dp))
         Text(
             if (canFetch) "이 책 파일이 이 폰에 없습니다.\n서버에서 다시 받을 수 있습니다."
@@ -1492,7 +1495,7 @@ private fun MissingFiles(canFetch: Boolean, auto: Boolean, busy: Boolean, onFetc
         Spacer(Modifier.height(16.dp))
         if (canFetch) {
             if (busy) CircularProgressIndicator()
-            else Button(onClick = onFetch) { Text("⬇️ 다시 받기") }
+            else Button(onClick = onFetch) { EmojiText("⬇️ 다시 받기") }
         }
         TextButton(onClick = onBack) { Text("뒤로") }
     }

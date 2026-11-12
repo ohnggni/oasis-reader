@@ -30,7 +30,7 @@ import com.oasisreader.app.data.Storage
 fun FolderScanningDialog() {
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("📁 폴더를 살펴보는 중…") },
+        title = { EmojiText("📁 폴더를 살펴보는 중…") },
         text = { Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(); Spacer(Modifier.padding(horizontal = 8.dp)); Text("하위 폴더까지 책 파일을 찾고 있습니다") } },
         confirmButton = {},
     )
@@ -44,7 +44,7 @@ fun FolderImportDialog(plan: FolderImport.Plan, onDismiss: () -> Unit, onStart: 
     var group by remember { mutableStateOf(if (plan.folders > 1) FolderImport.Group.BOOK_FOLDER else FolderImport.Group.PICKED_FOLDER) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("📁 「${plan.rootName}」 가져오기") },
+        title = { EmojiText("📁 「${plan.rootName}」 가져오기") },
         text = {
             Column {
                 if (plan.items.isEmpty()) {
@@ -62,7 +62,7 @@ fun FolderImportDialog(plan: FolderImport.Plan, onDismiss: () -> Unit, onStart: 
                         color = if (plan.bytes * 2 > free) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text("📚 컬렉션으로 묶기", style = MaterialTheme.typography.labelLarge)
+                    EmojiText("📚 컬렉션으로 묶기", style = MaterialTheme.typography.labelLarge)
                     listOf(
                         FolderImport.Group.BOOK_FOLDER to "책 폴더마다 (예: 「${plan.items.first().folder}」)",
                         FolderImport.Group.PICKED_FOLDER to "「${plan.rootName}」 하나로",

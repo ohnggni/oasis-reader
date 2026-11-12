@@ -251,7 +251,7 @@ private fun Item(emoji: String, title: String, sub: String?, enabled: Boolean, o
         Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(emoji, style = MaterialTheme.typography.titleMedium)
+        EmojiText(emoji, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)

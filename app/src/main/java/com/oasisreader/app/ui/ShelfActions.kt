@@ -111,7 +111,7 @@ fun BulkDeleteDialog(books: List<BookEntity>, onDismiss: () -> Unit, onConfirm: 
     var keepHl by remember { mutableStateOf(true) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("🗑️ 서재에서 지우기") },
+        title = { EmojiText("🗑️ 서재에서 지우기") },
         text = {
             Column {
                 Text(
@@ -120,7 +120,7 @@ fun BulkDeleteDialog(books: List<BookEntity>, onDismiss: () -> Unit, onConfirm: 
                 )
                 if (hl > 0) Row(Modifier.fillMaxWidth().clickable { keepHl = !keepHl }.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = keepHl, onCheckedChange = { keepHl = it })
-                    Text("🖍️ 하이라이트·메모 ${hl}개는 남기기", style = MaterialTheme.typography.bodyMedium)
+                    EmojiText("🖍️ 하이라이트·메모 ${hl}개는 남기기", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
@@ -137,7 +137,7 @@ fun BulkCollectionDialog(count: Int, collections: List<CollectionEntity>, onDism
     var creating by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("📚 ${count}권을 컬렉션에 넣기") },
+        title = { EmojiText("📚 ${count}권을 컬렉션에 넣기") },
         text = {
             Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
                 if (collections.isEmpty()) Text("아직 컬렉션이 없습니다. 아래에서 만드세요.", style = MaterialTheme.typography.bodyMedium)
@@ -147,7 +147,7 @@ fun BulkCollectionDialog(count: Int, collections: List<CollectionEntity>, onDism
                         modifier = Modifier.fillMaxWidth().clickable { onPicked(c) }.padding(vertical = 10.dp),
                     )
                 }
-                TextButton(onClick = { creating = true }) { Text("➕ 새 컬렉션") }
+                TextButton(onClick = { creating = true }) { EmojiText("➕ 새 컬렉션") }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
@@ -196,7 +196,7 @@ fun CollectionDeleteDialog(
                 if (withBooks) {
                     Row(Modifier.fillMaxWidth().clickable { keepHl = !keepHl }.padding(start = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = keepHl, onCheckedChange = { keepHl = it })
-                        Text("🖍️ 하이라이트·메모는 남기기", style = MaterialTheme.typography.bodyMedium)
+                        EmojiText("🖍️ 하이라이트·메모는 남기기", style = MaterialTheme.typography.bodyMedium)
                     }
                     if (elsewhere > 0) Text(
                         "이 중 ${elsewhere}권은 다른 컬렉션에도 있습니다. 서재에서 지우면 거기서도 빠집니다.",

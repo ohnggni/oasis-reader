@@ -237,7 +237,7 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
         val local = chosen.count { !it.fromServer }
         AlertDialog(
             onDismissRequest = { confirmRemoveFiles = false },
-            title = { Text("☁️ 폰에서 지우기") },
+            title = { EmojiText("☁️ 폰에서 지우기") },
             text = {
                 Text(
                     "${chosen.size - local}권의 파일(${Storage.label(chosen.filter { it.fromServer }.sumOf { it.bytes })})을 지웁니다. 서재·읽은 위치·하이라이트는 남고, 열면 서버에서 다시 받습니다." +

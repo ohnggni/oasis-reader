@@ -1,5 +1,6 @@
 package com.oasisreader.app.reader
 
+import com.oasisreader.app.ui.EmojiText
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.clickable
@@ -61,7 +62,7 @@ fun NextVolumeCard(next: NextVolume, onOpen: () -> Unit, onDismiss: () -> Unit, 
                     if (next is NextVolume.InLibrary) "다음 권 · 서재에 있음" else "다음 권 · 서버에서 받기",
                     style = MaterialTheme.typography.labelSmall,
                 )
-                Text("▶ ${next.title}", style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                EmojiText("▶ ${next.title}", style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text(
                 "✕",

@@ -145,7 +145,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
         }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
-            placeholder = { Text("🔍 하이라이트·책갈피·메모·책 제목 찾기") },
+            placeholder = { EmojiText("🔍 하이라이트·책갈피·메모·책 제목 찾기") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         )
         Row(
@@ -158,14 +158,14 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
             if (highlights == null) null
             else listOfNotNull(
                 "🖍️ ${groups.sumOf { it.second.size }}개".takeIf { groups.isNotEmpty() || markGroups.isEmpty() },
-                "📌 ${markGroups.sumOf { it.second.size }}개".takeIf { markGroups.isNotEmpty() },
+                "🔖 ${markGroups.sumOf { it.second.size }}개".takeIf { markGroups.isNotEmpty() },
                 "책 ${groups.size + markGroups.size}권",
             ).joinToString(" · "),
         )
         LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             sections.forEach { (bookId, isAudio) ->
                 if (isAudio) {
-                    // an audiobook: its 📌 책갈피, in the same shape as a book's highlights
+                    // an audiobook: its 🔖 책갈피, in the same shape as a book's highlights
                     val ms = markMap[bookId].orEmpty()
                     item(key = "ah_$bookId") {
                         com.oasisreader.app.audio.AudioMarkHeader(
@@ -199,13 +199,13 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "이 책 하이라이트 메뉴") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                DropdownMenuItem(text = { Text("📝 이 책 하이라이트 내보내기") }, onClick = { menu = false; exportFor = bookId })
-                                DropdownMenuItem(text = { Text("📋 모두 복사") }, onClick = {
+                                DropdownMenuItem(text = { EmojiText("📝 이 책 하이라이트 내보내기") }, onClick = { menu = false; exportFor = bookId })
+                                DropdownMenuItem(text = { EmojiText("📋 모두 복사") }, onClick = {
                                     menu = false
                                     copy(context, titleOf(bookId) + "\n\n" + list.joinToString("\n\n") { h -> "“${h.text}”" + (h.note?.let { "\n— $it" } ?: "") })
                                 })
                                 DropdownMenuItem(
-                                    text = { Text("🗑️ 이 책 하이라이트 모두 지우기", color = MaterialTheme.colorScheme.error) },
+                                    text = { EmojiText("🗑️ 이 책 하이라이트 모두 지우기", color = MaterialTheme.colorScheme.error) },
                                     onClick = { menu = false; deleteBook = bookId },
                                 )
                             }
@@ -230,7 +230,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
                         Column(Modifier.weight(1f)) {
                             Text(h.text, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
                             h.note?.takeIf { it.isNotBlank() }?.let {
-                                Text("📝 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                EmojiText("📝 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
                             Text(
                                 fmt.format(Date(h.createdAt)),
@@ -307,7 +307,7 @@ private fun HighlightActions(h: HighlightEntity, title: String, canOpen: Boolean
                 Text(h.text, style = MaterialTheme.typography.bodyMedium, maxLines = 8, overflow = TextOverflow.Ellipsis)
                 OutlinedTextField(
                     value = note, onValueChange = { note = it },
-                    label = { Text("📝 메모") }, maxLines = 4,
+                    label = { EmojiText("📝 메모") }, maxLines = 4,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 )
                 Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {

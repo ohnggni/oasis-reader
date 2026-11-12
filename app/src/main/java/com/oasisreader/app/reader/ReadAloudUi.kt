@@ -1,5 +1,6 @@
 package com.oasisreader.app.reader
 
+import com.oasisreader.app.ui.EmojiText
 import android.speech.tts.Voice
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -126,7 +127,7 @@ private fun SleepButton(ra: ReadAloud) {
 @Composable
 private fun BarButton(glyph: String, label: String, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.size(38.dp).semantics { contentDescription = label }) {
-        Text(glyph, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+        com.oasisreader.app.ui.EmojiText(glyph, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -203,7 +204,7 @@ private fun VoiceRow(label: String, note: String?, selected: Boolean, onPick: ()
             if (note != null) Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(4.dp))
-        TextButton(onClick = onPlay) { Text("▶ 듣기") }
+        TextButton(onClick = onPlay) { EmojiText("▶ 듣기") }
     }
 }
 

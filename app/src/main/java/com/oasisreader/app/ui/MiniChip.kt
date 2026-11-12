@@ -47,7 +47,7 @@ fun MiniChip(
         modifier = modifier.heightIn(min = 28.dp).let { m -> if (description != null) m.semantics { contentDescription = description } else m },
     ) {
         Box(Modifier.padding(horizontal = if (plain) 4.dp else 8.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {
-            Text(
+            EmojiText(
                 text,
                 fontSize = 12.5.sp, lineHeight = 16.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,

@@ -1,5 +1,6 @@
 package com.oasisreader.app.comic
 
+import com.oasisreader.app.ui.EmojiText
 import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -200,7 +201,7 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text("📦", fontSize = 40.sp)
+                EmojiText("📦", fontSize = 40.sp)
                 Spacer(Modifier.height(12.dp))
                 Text(
                     if (b?.sourceUrl != null) "이 웹툰 파일이 이 폰에 없습니다.\n서버에서 다시 받을 수 있습니다."
@@ -229,7 +230,7 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
                     // a "바로 읽기" book whose file was dropped from the cache: fetch it without asking
                     LaunchedEffect(Unit) { if (b?.pinned == false && !refetching) fetch() }
                     if (refetching) CircularProgressIndicator()
-                    else Button(onClick = { fetch() }) { Text("⬇️ 다시 받기") }
+                    else Button(onClick = { fetch() }) { EmojiText("⬇️ 다시 받기") }
                 }
                 TextButton(onClick = onBack) { Text("뒤로") }
             }
@@ -775,7 +776,7 @@ private fun ComicViewer(
                                     n != null -> androidx.compose.material3.FilledTonalButton(
                                         onClick = { com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook) },
                                         modifier = Modifier.padding(top = 12.dp).widthIn(max = 420.dp).padding(horizontal = 24.dp),
-                                    ) { Text("▶ 다음 권  ${n.title}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+                                    ) { EmojiText("▶ 다음 권  ${n.title}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                                     nextSearching -> Text("다음 권 찾는 중…", color = chrome, modifier = Modifier.padding(top = 12.dp))
                                 }
                                 TextButton(onClick = onBack) { Text("서재로") }
@@ -824,7 +825,7 @@ private fun ComicViewer(
         ) {
             Surface(color = barColor, contentColor = chrome) {
                 Column {
-                    Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().height(60.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
                         Text(
                             book.title,
@@ -838,13 +839,13 @@ private fun ComicViewer(
                         // [ ☀️ 화면 | ▣ 보기 | ⇆ 넘김 | ☰ 이동 ]
                         Box(Modifier.padding(end = 10.dp)) {
                             com.oasisreader.app.reader.PillGroup(MaterialTheme.colorScheme.background) {
-                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.SCREEN, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.SCREEN) }) { Text("☀️", fontSize = 14.sp) }
+                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.SCREEN, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.SCREEN) }) { EmojiText("☀️", fontSize = 14.sp) }
                                 com.oasisreader.app.reader.PillDivider()
                                 com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.TEXT, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.TEXT) }) { Text("▣", fontSize = 16.sp) }
                                 com.oasisreader.app.reader.PillDivider()
                                 com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.PAGE, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.PAGE) }) { Text("⇆", fontSize = 16.sp) }
                                 com.oasisreader.app.reader.PillDivider()
-                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.NAV, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.NAV) }) { Text("☰", fontSize = 15.sp) }
+                                com.oasisreader.app.reader.PillSegment(selected = panel == com.oasisreader.app.ui.ReadPanel.NAV, onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.NAV) }) { EmojiText("☰", fontSize = 15.sp) }
                             }
                         }
                     }
@@ -999,13 +1000,13 @@ private fun ComicSeekBar(
     Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
         Column(
             Modifier.let { if (navPad) it.navigationBarsPadding() else it }
-                .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 30.dp),
+                .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 20.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = MaterialTheme.typography.labelMedium, color = chrome, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text("${p + 1} / $count", style = MaterialTheme.typography.labelMedium, color = chrome)
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // − + : one page back / on (in reading order)
                 com.oasisreader.app.ui.StepButtons(onMinus = { go(p - 1) }, onPlus = { go(p + 1) }, repeat = false)

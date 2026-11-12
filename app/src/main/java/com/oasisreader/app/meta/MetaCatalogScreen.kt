@@ -1,5 +1,6 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.ui.EmojiText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -252,7 +253,7 @@ fun MetaCatalogScreen(
     askSeries?.let { (name, list) ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { askSeries = null },
-            title = { Text("📚 컬렉션으로 묶을까요?") },
+            title = { EmojiText("📚 컬렉션으로 묶을까요?") },
             text = { Text("「$name」 시리즈의 책을 서재에 담으면서 같은 이름의 컬렉션으로 묶습니다. 이미 서재에 있는 이 시리즈의 책도 함께 묶습니다.") },
             confirmButton = { TextButton(onClick = { askSeries = null; keepSeries(list, name) }) { Text("묶어서 받기") } },
             dismissButton = { TextButton(onClick = { askSeries = null; keepSeries(list, null) }) { Text("그냥 받기") } },
@@ -451,10 +452,10 @@ fun MetaCatalogScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text("⚠️ $err", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                EmojiText("⚠️ $err", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = { reload++ }) { Text("다시 시도") }
-                TextButton(onClick = onOpdsFolders) { Text("📂 OPDS 폴더로 보기") }
+                TextButton(onClick = onOpdsFolders) { EmojiText("📂 OPDS 폴더로 보기") }
                 TextButton(onClick = onOpenSettings) { Text("서버 설정") }
             }
             activeQuery.isNotBlank() && searchBooks -> LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
@@ -568,7 +569,7 @@ private fun SeriesDetail(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text("⚠️ $error", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                EmojiText("⚠️ $error", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(onClick = { attempt++ }) { Text("다시 시도") }
             }
             list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -584,7 +585,7 @@ private fun SeriesDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
-                    if (missing > 1) OutlinedButton(onClick = { onDownloadAll(list) }) { Text("⬇️ 서재에 없는 ${missing}권 모두 담기") }
+                    if (missing > 1) OutlinedButton(onClick = { onDownloadAll(list) }) { EmojiText("⬇️ 서재에 없는 ${missing}권 모두 담기") }
                 }
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
@@ -631,7 +632,7 @@ private fun BookRow(
         Spacer(Modifier.width(8.dp))
         when {
             owned -> Box(Modifier.size(48.dp).clickable(onClick = onAction), contentAlignment = Alignment.Center) {
-                Text("📖", style = MaterialTheme.typography.titleMedium)
+                EmojiText("📖", style = MaterialTheme.typography.titleMedium)
             }
             b.readable -> com.oasisreader.app.ui.DownloadControl(api.key(b), progress, onAction, size = 44.dp)
             else -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -698,15 +699,15 @@ private fun BookDetail(
                     Text(if (progress < 0f) "받는 중…" else "받는 중 ${(progress * 100).toInt()}%")
                 }
                 owned -> {
-                    Button(onClick = onRead, modifier = Modifier.fillMaxWidth()) { Text("📖 읽기") }
+                    Button(onClick = onRead, modifier = Modifier.fillMaxWidth()) { EmojiText("📖 읽기") }
                     if (!pinned) {
-                        OutlinedButton(onClick = onKeep, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("📌 서재에 보관 (지금은 임시)") }
+                        OutlinedButton(onClick = onKeep, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { EmojiText("📌 서재에 보관 (지금은 임시)") }
                     }
                 }
                 b.readable -> {
-                    Button(onClick = onRead, modifier = Modifier.fillMaxWidth()) { Text("📖 바로 읽기") }
+                    Button(onClick = onRead, modifier = Modifier.fillMaxWidth()) { EmojiText("📖 바로 읽기") }
                     OutlinedButton(onClick = onKeep, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Text("⬇️ 서재에 담기" + (mb(b.fileSize)?.let { " ($it)" } ?: ""))
+                        EmojiText("⬇️ 서재에 담기" + (mb(b.fileSize)?.let { " ($it)" } ?: ""))
                     }
                 }
                 else -> Text("${b.fileFormat?.uppercase() ?: "이"} 형식은 아직 읽을 수 없습니다", color = MaterialTheme.colorScheme.onSurfaceVariant)

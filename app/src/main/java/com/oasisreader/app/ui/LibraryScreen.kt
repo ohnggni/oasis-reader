@@ -424,7 +424,7 @@ fun LibraryScreen(
                         Triple("⬇️", "받기 관리", onDownloads),
                     ).forEach { (emoji, label, action) ->
                         DropdownMenuItem(
-                            leadingIcon = { Text(emoji, style = MaterialTheme.typography.titleMedium) },
+                            leadingIcon = { EmojiText(emoji, style = MaterialTheme.typography.titleMedium) },
                             text = { Text(label) },
                             onClick = { menu = false; action() },
                         )
@@ -482,19 +482,19 @@ fun LibraryScreen(
                 )
                 DropdownMenu(expanded = viewOpen, onDismissRequest = { viewOpen = false }) {
                     fun setLayout(grid: Boolean) { gridChoice = grid; shelfPrefs.edit().putString(pk("layout"), if (grid) "grid" else "list").apply() }
-                    DropdownMenuItem(text = { Text("🔲 타일") }, leadingIcon = { CheckMark(tiles) }, onClick = { viewOpen = false; setLayout(true) })
-                    DropdownMenuItem(text = { Text("📃 목록") }, leadingIcon = { CheckMark(!tiles) }, onClick = { viewOpen = false; setLayout(false) })
+                    DropdownMenuItem(text = { EmojiText("🔲 타일") }, leadingIcon = { CheckMark(tiles) }, onClick = { viewOpen = false; setLayout(true) })
+                    DropdownMenuItem(text = { EmojiText("📃 목록") }, leadingIcon = { CheckMark(!tiles) }, onClick = { viewOpen = false; setLayout(false) })
                     HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("📚 컬렉션별로 묶기") }, leadingIcon = { CheckMark(groupMode == "collection") },
+                        text = { EmojiText("📚 컬렉션별로 묶기") }, leadingIcon = { CheckMark(groupMode == "collection") },
                         onClick = { viewOpen = false; openFolder = null; setGroup(if (groupMode == "collection") "none" else "collection") },
                     )
                     DropdownMenuItem(
-                        text = { Text("🔗 컬렉션 + 시리즈별로 묶기 (자동)") }, leadingIcon = { CheckMark(groupMode == "series") },
+                        text = { EmojiText("🔗 컬렉션 + 시리즈별로 묶기 (자동)") }, leadingIcon = { CheckMark(groupMode == "series") },
                         onClick = { viewOpen = false; openFolder = null; setGroup(if (groupMode == "series") "none" else "series") },
                     )
                     if (groupMode == "series" && ungrouped.isNotEmpty()) DropdownMenuItem(
-                        text = { Text("🔗 풀어 둔 묶음 ${ungrouped.size}개 다시 묶기") },
+                        text = { EmojiText("🔗 풀어 둔 묶음 ${ungrouped.size}개 다시 묶기") },
                         onClick = { viewOpen = false; setUngrouped(emptySet()) },
                     )
                     if (grouped && tiles) {
@@ -577,8 +577,8 @@ fun LibraryScreen(
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
                 placeholder = { Text("제목·저자·컬렉션 이름 (초성도 됩니다)") },
-                leadingIcon = { Text("🔍") },
-                trailingIcon = { IconButton(onClick = { query = ""; searchOpen = false }) { Text("✖️") } },
+                leadingIcon = { EmojiText("🔍") },
+                trailingIcon = { IconButton(onClick = { query = ""; searchOpen = false }) { EmojiText("✖️") } },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).focusRequester(focus),
             )
             if (q.isNotEmpty()) CountLine("찾은 책 ${shown.size}권")
@@ -804,7 +804,7 @@ fun LibraryScreen(
         }
         AlertDialog(
             onDismissRequest = { bulkRemove = false },
-            title = { Text("☁️ 폰에서 지우기") },
+            title = { EmojiText("☁️ 폰에서 지우기") },
             text = {
                 val n = can?.size
                 Text(
@@ -840,12 +840,12 @@ fun LibraryScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { menuFor = null; infoFor = b }) { Text("ℹ️ 책 정보") }
-                    TextButton(onClick = { menuFor = null; onReview(b) }) { Text("📝 독후감") }
+                    TextButton(onClick = { menuFor = null; onReview(b) }) { EmojiText("📝 독후감") }
                     TextButton(onClick = { menuFor = null; pickColFor = b }) {
                         val n = links.count { it.bookId == b.id }
-                        Text("📚 컬렉션에 넣기" + if (n > 0) " (${n}곳에 있음)" else "")
+                        EmojiText("📚 컬렉션에 넣기" + if (n > 0) " (${n}곳에 있음)" else "")
                     }
-                    onSourceFolder?.takeIf { com.oasisreader.app.reader.canOpenOrigin(b) }?.let { open -> TextButton(onClick = { menuFor = null; open(b) }) { Text("📂 있던 폴더 열기") } }
+                    onSourceFolder?.takeIf { com.oasisreader.app.reader.canOpenOrigin(b) }?.let { open -> TextButton(onClick = { menuFor = null; open(b) }) { EmojiText("📂 있던 폴더 열기") } }
                     TextButton(onClick = { menuFor = null; renaming = b }) { Text("✏️ 제목 바꾸기") }
                     val isAudio = b.format == AudioLibraryLink.FORMAT
                     if (isAudio) {
@@ -859,32 +859,32 @@ fun LibraryScreen(
                             ad.enqueue(ctx, b)
                             com.oasisreader.app.ui.Notice.show(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
                         }
-                        err?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
+                        err?.let { EmojiText("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
                         val paused = remember(b.id, ad.version) { ad.isPaused(ctx, b.id) }
                         when {
                             dl != null || paused -> Row {
-                                if (paused) TextButton(onClick = { ad.resume(ctx, b.id) }) { Text("▶️ 이어 받기") }
-                                else TextButton(onClick = { ad.pause(ctx, b.id) }) { Text("⏸️ 일시정지 ${((dl ?: 0f) * 100).roundToInt()}%") }
-                                TextButton(onClick = { ad.cancel(ctx, b.id) }) { Text("✖️ 받기 취소") }
+                                if (paused) TextButton(onClick = { ad.resume(ctx, b.id) }) { EmojiText("▶️ 이어 받기") }
+                                else TextButton(onClick = { ad.pause(ctx, b.id) }) { EmojiText("⏸️ 일시정지 ${((dl ?: 0f) * 100).roundToInt()}%") }
+                                TextButton(onClick = { ad.cancel(ctx, b.id) }) { EmojiText("✖️ 받기 취소") }
                             }
                             b.pinned && b.fileBytes > 0 -> {}
-                            b.fileBytes > 0 -> TextButton(onClick = { startDl() }) { Text("⬇️ 나머지 트랙도 받기") }
-                            else -> TextButton(onClick = { startDl() }) { Text("⬇️ 폰에 받기 (오프라인으로 듣기)") }
+                            b.fileBytes > 0 -> TextButton(onClick = { startDl() }) { EmojiText("⬇️ 나머지 트랙도 받기") }
+                            else -> TextButton(onClick = { startDl() }) { EmojiText("⬇️ 폰에 받기 (오프라인으로 듣기)") }
                         }
                         if (b.fileBytes > 0) TextButton(onClick = {
                             menuFor = null
                             scope.launch { ad.remove(ctx, b) }
-                        }) { Text("☁️ 폰에서 지우고 스트리밍으로 듣기") }
-                    } else TextButton(onClick = { menuFor = null; exportFor = b }) { Text("📝 하이라이트 내보내기") }
+                        }) { EmojiText("☁️ 폰에서 지우고 스트리밍으로 듣기") }
+                    } else TextButton(onClick = { menuFor = null; exportFor = b }) { EmojiText("📝 하이라이트 내보내기") }
                     if (b.sourceUrl != null && !isAudio) TextButton(onClick = { menuFor = null; onPin(b, !b.pinned) }) {
                         Text(if (b.pinned) "☁️ 임시로 두기 (공간 부족하면 파일만 지워짐)" else "📌 서재에 보관 (지금은 임시)")
                     }
-                    TextButton(onClick = { menuFor = null; selected = selected + b.id }) { Text("☑️ 여러 권 고르기") }
+                    TextButton(onClick = { menuFor = null; selected = selected + b.id }) { EmojiText("☑️ 여러 권 고르기") }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { menuFor = null; confirmDelete = b }) {
-                    Text("🗑️ 서재에서 지우기", color = MaterialTheme.colorScheme.error)
+                    EmojiText("🗑️ 서재에서 지우기", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = { TextButton(onClick = { menuFor = null }) { Text("닫기") } },
@@ -929,7 +929,7 @@ fun LibraryScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         androidx.compose.material3.Checkbox(checked = keepHl, onCheckedChange = { keepHl = it })
-                        Text("🖍️ 하이라이트·메모 ${hlCount}개는 남기기", style = MaterialTheme.typography.bodyMedium)
+                        EmojiText("🖍️ 하이라이트·메모 ${hlCount}개는 남기기", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             },
@@ -967,14 +967,14 @@ private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onS
             Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, contentDescription = "컬렉션 메뉴", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("☑️ 모두 고르기") }, onClick = { open = false; onSelectAll() })
+            DropdownMenuItem(text = { EmojiText("☑️ 모두 고르기") }, onClick = { open = false; onSelectAll() })
             if (onMakeCollection != null) {
                 // an automatic series group: nothing to rename or delete; it can become a 컬렉션
-                DropdownMenuItem(text = { Text("📚 컬렉션으로 만들기") }, onClick = { open = false; onMakeCollection() })
+                DropdownMenuItem(text = { EmojiText("📚 컬렉션으로 만들기") }, onClick = { open = false; onMakeCollection() })
                 if (onUngroup != null) DropdownMenuItem(text = { Text("🔓 이 묶음 풀기") }, onClick = { open = false; onUngroup() })
             } else {
                 DropdownMenuItem(text = { Text("✏️ 이름 바꾸기") }, onClick = { open = false; onRename() })
-                DropdownMenuItem(text = { Text("🗑️ 컬렉션 지우기…", color = MaterialTheme.colorScheme.error) }, onClick = { open = false; onDelete() })
+                DropdownMenuItem(text = { EmojiText("🗑️ 컬렉션 지우기…", color = MaterialTheme.colorScheme.error) }, onClick = { open = false; onDelete() })
             }
         }
     }
@@ -1104,13 +1104,13 @@ private fun EmptyShelf(onCatalog: () -> Unit, onImportFile: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("📚", style = MaterialTheme.typography.displayMedium)
+        EmojiText("📚", style = MaterialTheme.typography.displayMedium)
         Spacer(Modifier.height(12.dp))
         Text("서재가 비어 있습니다", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = onCatalog) { Text("☁️ 서버에서 책 찾기") }
+        Button(onClick = onCatalog) { EmojiText("☁️ 서버에서 책 찾기") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onImportFile) { Text("📁 내 폰 · 구글 드라이브에서 가져오기") }
+        OutlinedButton(onClick = onImportFile) { EmojiText("📁 내 폰 · 구글 드라이브에서 가져오기") }
     }
 }
 

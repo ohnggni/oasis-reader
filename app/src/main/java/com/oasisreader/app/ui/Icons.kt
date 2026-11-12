@@ -108,12 +108,29 @@ object OgIconPaths {
         "sleep" to "M19.5 14.5A8 8 0 1 1 9.5 4.5a7.1 7.1 0 0 0 10 10z",
     )
 
-    /** Emoji (without the variation selector) -> icon name. 1단계: 상단바 버튼에 쓰는 것. */
+    /** Emoji (without the variation selector) -> icon name. */
     val byEmoji: Map<String, String> = mapOf(
-        "⬅" to "back", "🏠" to "home", "⚙" to "settings", "➕" to "add", "✖" to "close",
-        "🗑" to "delete", "📤" to "share", "🔄" to "refresh", "📋" to "copy", "☑" to "select_all",
-        "🎧" to "audiobook", "⏸" to "pause", "⏹" to "stop",
+        "⬅" to "back", "🏠" to "home", "☰" to "menu", "⋮" to "more", "🔍" to "search", "🔎" to "search",
+        "⚙" to "settings", "➕" to "add", "✖" to "close", "✕" to "close", "🗑" to "delete", "📤" to "share", "🔄" to "refresh",
+        "📚" to "shelf", "📖" to "book", "🎧" to "audiobook", "📄" to "file", "📁" to "folder", "📂" to "folder_open",
+        "📦" to "storage", "🔲" to "tiles", "📃" to "list",
+        "⬇" to "download", "☁" to "cloud", "✅" to "done", "⚠" to "warning", "📌" to "pin", "☑" to "select_all", "📋" to "copy",
+        "🖍" to "highlight", "📝" to "review", "🔖" to "bookmark", "☀" to "brightness", "🔗" to "link",
+        "▶" to "play", "⏸" to "pause", "⏹" to "stop", "⏮" to "prev", "⏭" to "next", "🌙" to "sleep",
     )
+
+    /**
+     * The emoji a text starts with, if it has an icon: its icon name and how many chars it takes
+     * (with a following variation selector). "📚 컬렉션" -> ("shelf", 2).
+     */
+    fun leading(text: String): Pair<String, Int>? {
+        if (text.isEmpty()) return null
+        val key = String(Character.toChars(text.codePointAt(0)))
+        val name = byEmoji[key] ?: return null
+        var n = key.length
+        if (text.getOrNull(n) == '\uFE0F') n++
+        return name to n
+    }
 
     fun nameFor(emoji: String): String? = byEmoji[emoji.replace("️", "")]
 }

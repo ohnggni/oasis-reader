@@ -1,5 +1,6 @@
 package com.oasisreader.app.remote
 
+import com.oasisreader.app.ui.EmojiText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -282,7 +283,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
         Box(Modifier.weight(1f)) {
             when {
                 error != null -> Column(Modifier.padding(24.dp)) {
-                    Text("⚠️ ${error}", style = MaterialTheme.typography.bodyMedium)
+                    EmojiText("⚠️ ${error}", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.size(12.dp))
                     Row {
                         TextButton(onClick = { reload++ }) { Text("다시 시도") }
@@ -331,7 +332,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                             }
                             if (!f.isDir && selected.isEmpty()) {
                                 Spacer(Modifier.width(8.dp))
-                                if (url in ownedSet && progress[url] == null) Text("✅", style = MaterialTheme.typography.titleMedium)
+                                if (url in ownedSet && progress[url] == null) EmojiText("✅", style = MaterialTheme.typography.titleMedium)
                                 else DownloadControl(url, progress[url], { receive(f) })
                             }
                         }
@@ -381,7 +382,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
         var byFolder by remember(picked) { mutableStateOf(hasDir) }
         AlertDialog(
             onDismissRequest = { ask = null },
-            title = { Text("⬇️ 서재에 담기") },
+            title = { EmojiText("⬇️ 서재에 담기") },
             text = {
                 Column {
                     Text(

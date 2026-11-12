@@ -17,6 +17,15 @@ class OgIconsTest {
         assertNull(OgIconPaths.nameFor("🌓"))
     }
 
+    @Test fun leadingEmojiOfALabel() {
+        assertEquals("shelf" to 2, OgIconPaths.leading("📚 컬렉션"))
+        assertEquals("download" to 2, OgIconPaths.leading("⬇️ 받기"))
+        assertEquals("download" to 1, OgIconPaths.leading("⬇ 받기"))
+        assertEquals("play" to 1, OgIconPaths.leading("▶"))
+        assertNull(OgIconPaths.leading("컬렉션 📚"))
+        assertNull(OgIconPaths.leading(""))
+    }
+
     @Test fun pathsUseOnlyPathCharacters() {
         val ok = Regex("[MLHVCAZmlhvcaz0-9 .\\-]+")
         for ((name, d) in OgIconPaths.paths) assertTrue(name, ok.matches(d) && d.startsWith("M"))

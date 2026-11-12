@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.EmojiText
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -131,7 +132,7 @@ fun OwnAudioChoiceDialog(remote: Boolean, what: String, onPick: (Boolean) -> Uni
     )
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("🎧 오디오북으로 담기") },
+        title = { EmojiText("🎧 오디오북으로 담기") },
         text = {
             Column {
                 Text(

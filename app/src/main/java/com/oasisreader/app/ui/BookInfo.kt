@@ -129,7 +129,7 @@ fun BookInfoDialog(b: BookEntity, store: BookStore, onDismiss: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     when {
                         summary != null && suspect && !showSuspect -> {
-                            Text("⚠️ 다른 책 소개가 잘못 들어갔을 수 있습니다", style = MaterialTheme.typography.bodySmall,
+                            EmojiText("⚠️ 다른 책 소개가 잘못 들어갔을 수 있습니다", style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             TextButton(onClick = { showSuspect = true }) { Text("그래도 보기") }
                             own?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

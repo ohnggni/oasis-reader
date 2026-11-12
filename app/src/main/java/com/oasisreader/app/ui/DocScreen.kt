@@ -78,7 +78,7 @@ fun DocScreen(title: String, asset: String, onBack: () -> Unit, shareable: Boole
                             val cm = context.getSystemService(android.content.ClipboardManager::class.java)
                             cm?.setPrimaryClip(android.content.ClipData.newPlainText(name, body))
                             Toast.makeText(context, "설치 스크립트를 복사했습니다.", Toast.LENGTH_SHORT).show()
-                        }) { Text("📋 설치 스크립트 복사") }
+                        }) { EmojiText("📋 설치 스크립트 복사") }
                         androidx.compose.material3.TextButton(onClick = {
                             val send = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
@@ -86,7 +86,7 @@ fun DocScreen(title: String, asset: String, onBack: () -> Unit, shareable: Boole
                                 putExtra(Intent.EXTRA_TEXT, body)
                             }
                             context.startActivity(Intent.createChooser(send, "$name 공유"))
-                        }) { Text("📤 공유") }
+                        }) { EmojiText("📤 공유") }
                     }
                 }
             }

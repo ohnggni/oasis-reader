@@ -91,7 +91,7 @@ fun CollectionChip(
                 )
             }
             HorizontalDivider()
-            DropdownMenuItem(text = { Text("➕ 새 컬렉션…", color = MaterialTheme.colorScheme.primary) }, onClick = { open = false; onNew() })
+            DropdownMenuItem(text = { EmojiText("➕ 새 컬렉션…", color = MaterialTheme.colorScheme.primary) }, onClick = { open = false; onNew() })
             if (collections.isNotEmpty()) DropdownMenuItem(text = { Text("✏️ 컬렉션 편집…") }, onClick = { open = false; onEdit() })
         }
     }
@@ -125,7 +125,7 @@ fun CollectionPickDialog(book: BookEntity, collections: List<CollectionEntity>, 
     var creating by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("📚 컬렉션에 넣기") },
+        title = { EmojiText("📚 컬렉션에 넣기") },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 Text(book.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -139,7 +139,7 @@ fun CollectionPickDialog(book: BookEntity, collections: List<CollectionEntity>, 
                         Text(c.name, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
-                TextButton(onClick = { creating = true }) { Text("➕ 새 컬렉션 만들어 넣기") }
+                TextButton(onClick = { creating = true }) { EmojiText("➕ 새 컬렉션 만들어 넣기") }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("완료") } },

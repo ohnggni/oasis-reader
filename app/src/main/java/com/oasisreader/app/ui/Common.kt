@@ -173,7 +173,7 @@ fun CompactSearchField(
                     .padding(start = 12.dp, end = 4.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
-                Text("🔍", style = MaterialTheme.typography.bodyMedium)
+                EmojiText("🔍", style = MaterialTheme.typography.bodyMedium)
                 androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
                     if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)

@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.EmojiText
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -308,14 +309,14 @@ private fun AudioShelf(
         com.oasisreader.app.ui.CountLine(count)
         when {
             error != null && items.isEmpty() -> Column(Modifier.padding(24.dp)) {
-                Text("⚠️ $error", color = MaterialTheme.colorScheme.error)
+                EmojiText("⚠️ $error", color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = { load(1) }) { Text("다시 시도") }
             }
             loading && items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             // nothing yet but more to look through (the 읽음 filter): offer to read on, never a dead end
             items.isEmpty() && hasMore -> Column(Modifier.padding(24.dp)) {
                 Text("아직 맞는 오디오북을 못 찾았습니다.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { load(page + 1) }) { Text("🔎 더 찾아보기") }
+                TextButton(onClick = { load(page + 1) }) { EmojiText("🔎 더 찾아보기") }
             }
             items.isEmpty() -> Text("오디오북이 없습니다.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
             else -> LazyVerticalGrid(
@@ -367,7 +368,7 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
     val trackState = rememberTrackStates(rowId)
     val askNotif = rememberNotificationAsk()
     when {
-        error != null -> Text("⚠️ $error", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
+        error != null -> EmojiText("⚠️ $error", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
         b == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 90.dp)) {
             item {
@@ -398,21 +399,21 @@ private fun AudiobookDetail(web: BookOasisWeb, item: AudioItem, onPlayer: () -> 
                                         .onSuccess { com.oasisreader.app.ui.Notice.added("서재에 담았습니다: ${b.title}", AudioLibraryLink.bookId(b.serverId, b.id)) }
                                         .onFailure { com.oasisreader.app.ui.Notice.show(context, "담지 못했습니다: ${it.message}") }
                                 }
-                            }, contentPadding = pad) { Text("📚 서재+", maxLines = 1, softWrap = false) }
-                            else Text("📚 서재에 있음", maxLines = 1, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
+                            }, contentPadding = pad) { EmojiText("📚 서재+", maxLines = 1, softWrap = false) }
+                            else EmojiText("📚 서재에 있음", maxLines = 1, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
                         }
                         // 오프라인: the tracks on the phone (puts it on the 서재 first)
                         val dl = AudioDownloads.progress[rowId]
                         val dlErr = AudioDownloads.errors[rowId]
                         val kept = onShelf?.let { it.pinned && it.fileBytes > 0 } == true
-                        dlErr?.let { Text("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
+                        dlErr?.let { EmojiText("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
                         when {
                             dl != null || AudioDownloads.isPaused(context, rowId) -> Row {
-                                if (AudioDownloads.isPaused(context, rowId)) TextButton(onClick = { AudioDownloads.resume(context, rowId) }) { Text("▶️ 이어 받기") }
-                                else TextButton(onClick = { AudioDownloads.pause(context, rowId) }) { Text("⏸️ 받는 중 ${((dl ?: 0f) * 100).toInt()}%") }
-                                TextButton(onClick = { AudioDownloads.cancel(context, rowId) }) { Text("✖️ 취소") }
+                                if (AudioDownloads.isPaused(context, rowId)) TextButton(onClick = { AudioDownloads.resume(context, rowId) }) { EmojiText("▶️ 이어 받기") }
+                                else TextButton(onClick = { AudioDownloads.pause(context, rowId) }) { EmojiText("⏸️ 받는 중 ${((dl ?: 0f) * 100).toInt()}%") }
+                                TextButton(onClick = { AudioDownloads.cancel(context, rowId) }) { EmojiText("✖️ 취소") }
                             }
-                            kept -> Text("⬇️ 폰에 받음 (오프라인으로 들을 수 있음)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
+                            kept -> EmojiText("⬇️ 폰에 받음 (오프라인으로 들을 수 있음)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
                             else -> TextButton(onClick = {
                                 scope.launch {
                                     runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
@@ -526,11 +527,11 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
                 // 소장 오디오북 (and books with a 서재 cover): the phone's copy
                 localCover != null && (b.own || web == null) -> com.oasisreader.app.ui.BookCover(localCover, b.title, coverMod)
                 web != null -> RemoteCover(b.coverUrl, b.title, { u -> web.bytes(u) }, coverMod)
-                else -> Box(coverMod, contentAlignment = Alignment.Center) { Text("🎧", fontSize = 64.sp) }
+                else -> Box(coverMod, contentAlignment = Alignment.Center) { EmojiText("🎧", fontSize = 64.sp) }
             }
             Spacer(Modifier.height(10.dp))
             PlayerHeadline(b) { picking = true }
-            AudioPlayback.error?.let { Text("⚠️ $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            AudioPlayback.error?.let { EmojiText("⚠️ $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Spacer(Modifier.height(6.dp))
             PlayerSeek()
             Spacer(Modifier.height(8.dp))
@@ -653,7 +654,7 @@ private fun PlayerChips() {
                 DropdownMenuItem(text = { Text("타이머 끄기") }, onClick = { tOpen = false; AudioPlayback.sleepIn(0) })
             }
         }
-        // 📌 책갈피 (TODO 36): the place playing now, or the stretch just heard, with a note
+        // 🔖 책갈피 (TODO 36): the place playing now, or the stretch just heard, with a note
         val b = AudioPlayback.book
         if (b != null && b.rowId().isNotEmpty()) {
             var mOpen by remember { mutableStateOf(false) }
@@ -666,11 +667,11 @@ private fun PlayerChips() {
                 }
             }
             Box {
-                AssistChip(onClick = { mOpen = true }, label = { Text("📌 책갈피") })
+                AssistChip(onClick = { mOpen = true }, label = { EmojiText("🔖 책갈피") })
                 DropdownMenu(mOpen, { mOpen = false }) {
-                    DropdownMenuItem(text = { Text("📌 지금 자리에 남기기") }, onClick = { mOpen = false; mark(0.0) })
+                    DropdownMenuItem(text = { EmojiText("🔖 지금 자리에 남기기") }, onClick = { mOpen = false; mark(0.0) })
                     DropdownMenuItem(text = { Text("⏪ 방금 들은 30초 남기기") }, onClick = { mOpen = false; mark(30.0) })
-                    DropdownMenuItem(text = { Text("📋 이 책의 책갈피 보기") }, onClick = { mOpen = false; listOpen = true })
+                    DropdownMenuItem(text = { EmojiText("📋 이 책의 책갈피 보기") }, onClick = { mOpen = false; listOpen = true })
                 }
             }
             // just added: a note can be typed right away (closing keeps the mark)
@@ -782,7 +783,7 @@ fun AudioMiniBar(onOpen: () -> Unit, modifier: Modifier = Modifier) {
             when {
                 local != null -> com.oasisreader.app.ui.BookCover(local, b.title, coverMod)
                 w != null && b.coverUrl != null -> RemoteCover(b.coverUrl, b.title, { u -> w.bytes(u) }, coverMod)
-                else -> Text("🎧", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                else -> EmojiText("🎧", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
@@ -795,7 +796,7 @@ fun AudioMiniBar(onOpen: () -> Unit, modifier: Modifier = Modifier) {
             IconButton(onClick = { AudioPlayback.toggle() }) { Text(if (AudioPlayback.playing) "⏸" else "▶", fontSize = 20.sp) }
             // stop and put the player away (the place is saved)
             IconButton(onClick = { AudioPlayback.close(context) }, modifier = Modifier.semantics { contentDescription = "재생 끝내기" }) {
-                Text("✕", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                EmojiText("✕", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -896,7 +897,7 @@ fun PlaceChoiceDialog() {
                 )
                 Spacer(Modifier.height(10.dp))
                 Text("📱 이 폰: ${where(c.phoneIdx, c.phoneSec)}", style = MaterialTheme.typography.bodyMedium)
-                Text("☁️ 북오아시스: ${where(c.serverIdx, c.serverSec)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+                EmojiText("☁️ 북오아시스: ${where(c.serverIdx, c.serverSec)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
             }
         },
         confirmButton = { TextButton(onClick = { AudioPlayback.choosePlace(useServer = false) }) { Text("이 폰 위치") } },

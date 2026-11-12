@@ -39,7 +39,7 @@ fun DownloadControl(key: String, progress: Float?, onStart: () -> Unit, size: Dp
             ) {
                 if (progress < 0f) CircularProgressIndicator(Modifier.size(ring), strokeWidth = 2.5.dp)
                 else CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(ring), strokeWidth = 2.5.dp)
-                Text("⏸", fontSize = (size.value * 0.28f).sp, color = MaterialTheme.colorScheme.primary)
+                EmojiText("⏸", fontSize = (size.value * 0.28f).sp, color = MaterialTheme.colorScheme.primary)
             }
             job != null && job.state != BookQueue.State.WAITING -> Box(
                 Modifier.size(size).clickable { BookQueue.resume(context, key) }
@@ -49,7 +49,7 @@ fun DownloadControl(key: String, progress: Float?, onStart: () -> Unit, size: Dp
             else -> Box(
                 Modifier.size(size).clickable(onClick = onStart).semantics { contentDescription = "서재에 담기" },
                 contentAlignment = Alignment.Center,
-            ) { Text("⬇️", style = MaterialTheme.typography.titleMedium) }
+            ) { EmojiText("⬇️", style = MaterialTheme.typography.titleMedium) }
         }
         if (progress != null || job != null) Text(
             "✖️", fontSize = 13.sp,

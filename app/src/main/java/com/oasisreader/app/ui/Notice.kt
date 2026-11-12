@@ -175,7 +175,7 @@ fun NoticeHost() {
                                 strokeWidth = 3.dp,
                                 trackColor = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.18f),
                             )
-                            Text("📚", style = MaterialTheme.typography.labelMedium)
+                            EmojiText("📚", style = MaterialTheme.typography.labelMedium)
                         }
                         Text(
                             "서재에서 보기", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.inversePrimary,

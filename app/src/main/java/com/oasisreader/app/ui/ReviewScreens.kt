@@ -209,13 +209,13 @@ fun ReviewEditorScreen(bookId: String, onBack: () -> Unit) {
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "독후감 메뉴") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("🖍️ 하이라이트 넣기") }, onClick = { menu = false; pickHighlights = true })
-                    DropdownMenuItem(text = { Text("📄 글 파일에서 가져오기") }, onClick = { menu = false; runCatching { openFile.launch(arrayOf("text/*")) } })
-                    DropdownMenuItem(text = { Text("📝 마크다운 파일로 저장 (하이라이트 포함)") }, onClick = {
+                    DropdownMenuItem(text = { EmojiText("🖍️ 하이라이트 넣기") }, onClick = { menu = false; pickHighlights = true })
+                    DropdownMenuItem(text = { EmojiText("📄 글 파일에서 가져오기") }, onClick = { menu = false; runCatching { openFile.launch(arrayOf("text/*")) } })
+                    DropdownMenuItem(text = { EmojiText("📝 마크다운 파일로 저장 (하이라이트 포함)") }, onClick = {
                         menu = false
                         runCatching { saveFile.launch(HighlightExport.fileName(title, "md")) }
                     })
-                    DropdownMenuItem(text = { Text("🗑️ 독후감 지우기", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; confirmDelete = true })
+                    DropdownMenuItem(text = { EmojiText("🗑️ 독후감 지우기", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; confirmDelete = true })
                 }
             }
         }
@@ -254,7 +254,7 @@ fun ReviewEditorScreen(bookId: String, onBack: () -> Unit) {
             text = {
                 Column {
                     Text(add, style = MaterialTheme.typography.bodySmall, maxLines = 6, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = { text = ReviewText.append(text, add); incoming = null }) { Text("➕ 지금 글 뒤에 이어 붙이기") }
+                    TextButton(onClick = { text = ReviewText.append(text, add); incoming = null }) { EmojiText("➕ 지금 글 뒤에 이어 붙이기") }
                     TextButton(onClick = { text = add; incoming = null }) { Text("♻️ 지금 글을 지우고 이 글로 바꾸기") }
                 }
             },
@@ -305,7 +305,7 @@ private fun HighlightPickDialog(bookId: String, onDismiss: () -> Unit, onPick: (
                             Checkbox(checked = h.id in on, onCheckedChange = { v -> on = if (v) on + h.id else on - h.id })
                             Column(Modifier.weight(1f)) {
                                 Text(h.text, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                                h.note?.takeIf { it.isNotBlank() }?.let { Text("📝 $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                h.note?.takeIf { it.isNotBlank() }?.let { EmojiText("📝 $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             }
                         }
                     }
@@ -356,7 +356,7 @@ fun ReviewsScreen(onBack: () -> Unit, onOpen: (bookId: String) -> Unit) {
         }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
-            placeholder = { Text("🔍 독후감 · 책 제목 찾기") },
+            placeholder = { EmojiText("🔍 독후감 · 책 제목 찾기") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         )
         CountLine(reviews?.let { "📝 ${shown.size}편" })
@@ -397,12 +397,12 @@ fun ReviewPickBookScreen(books: List<BookEntity>, onPick: (bookId: String) -> Un
         ReviewInbox.fileUri?.let { file ->
             val ctx = LocalContext.current
             TextButton(onClick = { ReviewInbox.fileUri = null; ShareImport.run(ctx, listOf(file)); onCancel() }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                Text("📖 독후감이 아니라 책입니다 — 이 글 파일을 서재에 담기")
+                EmojiText("📖 독후감이 아니라 책입니다 — 이 글 파일을 서재에 담기")
             }
         }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
-            placeholder = { Text("🔍 책 제목 · 저자 (초성도 됩니다)") },
+            placeholder = { EmojiText("🔍 책 제목 · 저자 (초성도 됩니다)") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         )
         if (books.isEmpty()) Text("서재에 책이 없습니다. 책을 먼저 서재에 담아 주세요.", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.EmojiText
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -211,7 +212,7 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                     Text("🔔 알림을 켜면 받는 동안 진행 상황이 보입니다", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     TextButton(onClick = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("켜기") }
                 }
-                TextButton(onClick = onStorage, modifier = Modifier.padding(horizontal = 4.dp)) { Text("📦 다 받은 책·오디오북은 보관함 관리에서 →") }
+                TextButton(onClick = onStorage, modifier = Modifier.padding(horizontal = 4.dp)) { EmojiText("📦 다 받은 책·오디오북은 보관함 관리에서 →") }
                 HorizontalDivider(thickness = 0.5.dp)
             }
             // ⚡ 바로 읽기 (and 다음 권): received straight away, not queued
@@ -234,11 +235,11 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
             }
             // 📖 책 · 만화 · PDF being received or waiting
             if (jobs.isNotEmpty()) item {
-                Text("📖 책 · 만화 · PDF", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+                EmojiText("📖 책 · 만화 · PDF", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             }
             items(jobs, key = { "job_" + it.key }) { job -> BookJobRow(job, dlProgress[job.key]) }
             if (books.isNotEmpty()) item {
-                Text("🎧 오디오북", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+                EmojiText("🎧 오디오북", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             }
             if (books.isEmpty() && jobs.isEmpty() && direct.isEmpty()) item {
                 Text(
@@ -259,7 +260,7 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                         Modifier.fillMaxWidth().clickable { openRecent = !openRecent }.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("✅ 최근 받음 ${recent.size}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        EmojiText("✅ 최근 받음 ${recent.size}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                         Text(if (openRecent) "🔼" else "🔽", fontSize = 13.sp)
                     }
                     if (openRecent) {
@@ -382,7 +383,7 @@ private fun Cover(bookId: String) {
     }
     Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(width = 44.dp, height = 60.dp)) {
         if (bmp != null) Image(bmp, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        else Box(contentAlignment = Alignment.Center) { Text("🎧", fontSize = 20.sp) }
+        else Box(contentAlignment = Alignment.Center) { EmojiText("🎧", fontSize = 20.sp) }
     }
 }
 

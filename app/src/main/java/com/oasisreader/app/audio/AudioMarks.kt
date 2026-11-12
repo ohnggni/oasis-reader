@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.EmojiText
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -110,12 +111,12 @@ fun AudioMarkDialog(m: AudioMarkEntity, title: String, onPlay: (() -> Unit)?, on
     }
     AlertDialog(
         onDismissRequest = { close() },
-        title = { Text("📌 " + AudioMarks.label(m), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        title = { EmojiText("🔖 " + AudioMarks.label(m), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column {
                 Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 OutlinedTextField(
-                    value = note, onValueChange = { note = it }, label = { Text("📝 메모 (안 적어도 됩니다)") }, maxLines = 5,
+                    value = note, onValueChange = { note = it }, label = { EmojiText("📝 메모 (안 적어도 됩니다)") }, maxLines = 5,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 )
                 Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
@@ -151,9 +152,9 @@ fun AudioMarkRow(m: AudioMarkEntity, day: String, onClick: () -> Unit) {
         Box(Modifier.width(4.dp).height(48.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.tertiary))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("📌 " + AudioMarks.label(m), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            EmojiText("🔖 " + AudioMarks.label(m), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             m.note?.takeIf { it.isNotBlank() }?.let {
-                Text("📝 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                EmojiText("📝 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
             Text(day, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -179,8 +180,8 @@ fun AudioMarkHeader(title: String, onShelf: Boolean, count: Int, onCopyAll: () -
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "이 오디오북 책갈피 메뉴") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("📋 모두 복사") }, onClick = { menu = false; onCopyAll() })
-                DropdownMenuItem(text = { Text("🗑️ 이 오디오북 책갈피 모두 지우기", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onDeleteAll() })
+                DropdownMenuItem(text = { EmojiText("📋 모두 복사") }, onClick = { menu = false; onCopyAll() })
+                DropdownMenuItem(text = { EmojiText("🗑️ 이 오디오북 책갈피 모두 지우기", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onDeleteAll() })
             }
         }
     }
@@ -196,16 +197,16 @@ fun AudioMarksDialog(bookId: String, title: String, onDismiss: () -> Unit) {
     val fmt = remember { java.text.SimpleDateFormat("yyyy.M.d", java.util.Locale.KOREA) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("📌 책갈피 ${marks.size}개", style = MaterialTheme.typography.titleSmall) },
+        title = { EmojiText("🔖 책갈피 ${marks.size}개", style = MaterialTheme.typography.titleSmall) },
         text = {
-            if (marks.isEmpty()) Text("아직 책갈피가 없습니다.\n듣다가 📌 책갈피를 누르면 그 자리가 남습니다.")
+            if (marks.isEmpty()) Text("아직 책갈피가 없습니다.\n듣다가 🔖 책갈피를 누르면 그 자리가 남습니다.")
             else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                 items(marks, key = { it.id }) { m -> AudioMarkRow(m, fmt.format(java.util.Date(m.createdAt))) { picked = m } }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
         dismissButton = {
-            if (marks.isNotEmpty()) TextButton(onClick = { AudioMarks.copy(context, "「$title」\n\n" + marks.joinToString("\n") { AudioMarks.line(it) }) }) { Text("📋 모두 복사") }
+            if (marks.isNotEmpty()) TextButton(onClick = { AudioMarks.copy(context, "「$title」\n\n" + marks.joinToString("\n") { AudioMarks.line(it) }) }) { EmojiText("📋 모두 복사") }
         },
     )
     picked?.let { m ->

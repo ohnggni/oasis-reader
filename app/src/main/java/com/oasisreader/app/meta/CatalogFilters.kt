@@ -1,5 +1,6 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.ui.EmojiText
 import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -247,7 +248,7 @@ fun PresetSettings(server: Server, audio: Boolean = false) {
             }
         }
         when {
-            libraries != null -> OutlinedButton(onClick = { editing = -1 }) { Text("➕ 프리셋 추가") }
+            libraries != null -> OutlinedButton(onClick = { editing = -1 }) { EmojiText("➕ 프리셋 추가") }
             libError != null -> Text((if (audio) "북오아시스에 연결하지 못해" else "메타 API에 연결하지 못해") + " 카테고리를 불러올 수 없습니다: $libError", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             else -> Text("카테고리를 불러오는 중…", style = MaterialTheme.typography.bodySmall)
         }

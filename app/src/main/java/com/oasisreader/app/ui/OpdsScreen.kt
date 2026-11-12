@@ -237,7 +237,7 @@ fun OpdsScreen(
         val missing = list.count { it.id !in ownedSet }
         AlertDialog(
             onDismissRequest = { askFolder = null },
-            title = { Text("⬇️ 「$name」 모두 담기") },
+            title = { EmojiText("⬇️ 「$name」 모두 담기") },
             text = {
                 Text(
                     "이 폴더의 책 ${list.size}권 중 서재에 없는 ${missing}권을 받습니다.\n" +
@@ -478,14 +478,14 @@ fun OpdsScreen(
                     inLibrary -> TextButton(onClick = {
                         detail = null
                         scope.launch { db.books().findBySource(e.id, null)?.let { onOpenBook(it.id) } }
-                    }) { Text("📖 읽기") }
+                    }) { EmojiText("📖 읽기") }
                     p != null -> TextButton(onClick = {}, enabled = false) { Text("받는 중…") }
                     e.readable != null -> Row {
                         TextButton(onClick = {
                             detail = null
                             Downloads.start(app, server, e, pinned = false, onDone = { onOpenBook(it.id) }, origin = here())
-                        }) { Text("📖 바로 읽기") }
-                        TextButton(onClick = { Downloads.start(app, server, e, origin = here()) }) { Text("⬇️ 서재에 담기") }
+                        }) { EmojiText("📖 바로 읽기") }
+                        TextButton(onClick = { Downloads.start(app, server, e, origin = here()) }) { EmojiText("⬇️ 서재에 담기") }
                     }
                 }
             },
@@ -512,7 +512,7 @@ private fun EntryRow(
             RemoteCover(entry.thumb, entry.title, load = { client.bytes(it) }, modifier = Modifier.width(44.dp).height(64.dp))
         } else {
             Box(Modifier.width(44.dp).height(44.dp), contentAlignment = Alignment.Center) {
-                Text("📁", style = MaterialTheme.typography.titleLarge)
+                EmojiText("📁", style = MaterialTheme.typography.titleLarge)
             }
         }
         Spacer(Modifier.width(12.dp))
@@ -527,7 +527,7 @@ private fun EntryRow(
         if (entry.isBook) {
             Spacer(Modifier.width(8.dp))
             when {
-                owned -> Text("✅", style = MaterialTheme.typography.titleMedium)
+                owned -> EmojiText("✅", style = MaterialTheme.typography.titleMedium)
                 entry.readable != null -> DownloadControl(entry.id, progress, onDownload)
                 else -> Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -652,7 +652,7 @@ private fun EntryTile(
                     Modifier.fillMaxWidth().aspectRatio(0.68f)
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)),
                     contentAlignment = Alignment.Center,
-                ) { Text("📁", style = MaterialTheme.typography.displaySmall) }
+                ) { EmojiText("📁", style = MaterialTheme.typography.displaySmall) }
             }
             if (entry.isBook) {
                 Box(
@@ -661,7 +661,7 @@ private fun EntryTile(
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
-                        owned -> Text("✅")
+                        owned -> EmojiText("✅")
                         entry.readable != null -> DownloadControl(entry.id, progress, onDownload, size = 32.dp)
                         else -> Text("—")
                     }
@@ -691,7 +691,7 @@ private fun FavoritesEditDialog(list: List<OpdsFavorites.Place>, onChange: (List
                         }
                         TextButton(onClick = { if (i > 0) onChange(list.toMutableList().also { l -> val t = l[i]; l[i] = l[i - 1]; l[i - 1] = t }) }, enabled = i > 0) { Text("🔼") }
                         TextButton(onClick = { renaming = i }) { Text("✏️") }
-                        TextButton(onClick = { onChange(list.filterIndexed { j, _ -> j != i }) }) { Text("🗑️") }
+                        TextButton(onClick = { onChange(list.filterIndexed { j, _ -> j != i }) }) { EmojiText("🗑️") }
                     }
                 }
             }
