@@ -33,6 +33,13 @@ object Downloads {
     private val _direct = MutableStateFlow<Map<String, String>>(emptyMap())
     val direct: StateFlow<Map<String, String>> = _direct
 
+    /** The download running now, for the card over every screen (TODO 44): [fraction] 0..1, or -1 while the size is unknown. */
+    data class Receiving(val title: String, val fraction: Float, val left: Int)
+    private val _receiving = MutableStateFlow<Receiving?>(null)
+    val receiving: StateFlow<Receiving?> = _receiving
+    fun nowReceiving(title: String, fraction: Float, left: Int) { _receiving.value = Receiving(title, fraction, left) }
+    fun received() { _receiving.value = null }
+
     /** user-facing messages ("받았습니다", errors) */
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages: SharedFlow<String> = _messages
@@ -46,7 +53,11 @@ object Downloads {
         var last = -2f
         return { done, total ->
             val f = if (total > 0) done.toFloat() / total else -1f
-            if (f < 0f || f - last >= 0.01f) { last = f; _progress.update { it + (key to f) } }
+            if (f < 0f || f - last >= 0.01f) {
+                last = f
+                _progress.update { it + (key to f) }
+                _receiving.value = Receiving(_direct.value[key].orEmpty(), f, 0)
+            }
         }
     }
     fun message(text: String) { _messages.tryEmit(text) }
@@ -86,7 +97,7 @@ object Downloads {
             } finally {
                 tmp.delete()
                 _progress.update { it - entry.id }
-                _direct.update { it - entry.id }
+                _direct.update { it - entry.id }; _receiving.value = null
             }
         }
     }
@@ -130,7 +141,7 @@ object Downloads {
             } finally {
                 tmp.delete()
                 _progress.update { it - key }
-                _direct.update { it - key }
+                _direct.update { it - key }; _receiving.value = null
             }
         }
     }
@@ -172,7 +183,7 @@ object Downloads {
             } finally {
                 tmp.delete()
                 _progress.update { it - url }
-                _direct.update { it - url }
+                _direct.update { it - url }; _receiving.value = null
             }
         }
     }

@@ -112,6 +112,13 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 com.oasisreader.app.reader.VoiceDialog(ra) { voiceEdit = false }
             }
 
+            Section("독서 습관")
+            var habitOpen by remember { mutableStateOf(false) }
+            var habitRev by remember { mutableStateOf(0) }
+            val habitSub = remember(habitRev) { com.oasisreader.app.stats.ReadingHabit.summary(app) }
+            Item("⏰", "독서 습관 알림: $habitSub", "정한 시각(요일)에 알림을 받고, 누르면 마지막에 읽던 책이 바로 열립니다", enabled = true) { habitOpen = true }
+            if (habitOpen) com.oasisreader.app.stats.ReadingHabitDialog { habitOpen = false; habitRev++ }
+
             Section("동기화")
             var kosyncOpen by remember { mutableStateOf(false) }
             var kosyncRev by remember { mutableStateOf(0) }

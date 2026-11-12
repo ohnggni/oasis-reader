@@ -57,6 +57,33 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- 독후감: text shared from another app (notes, a messenger, an AI chat …) -->
+            <!-- books from other apps: 공유 › OG Reader in a file manager or a cloud app (one or several) -->
+            <intent-filter android:label="OG Reader 서재에 담기">
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-cbz" />
+                <data android:mimeType="application/vnd.comicbook+zip" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <!-- …and "다른 앱으로 열기" -->
+            <intent-filter android:label="OG Reader">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-cbz" />
+                <data android:mimeType="application/vnd.comicbook+zip" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <intent-filter android:label="OG Reader 독후감">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

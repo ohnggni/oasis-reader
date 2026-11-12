@@ -78,8 +78,10 @@ private const val MAX_TEXT_BYTES = 1024 * 1024
 object ReviewInbox {
     var pending by mutableStateOf<String?>(null)
     private var forEditor: String? = null
+    /** the text came as a file: it can go into the 서재 as a TXT book instead */
+    var fileUri by mutableStateOf<Uri?>(null)
 
-    fun handOver() { forEditor = pending; pending = null }
+    fun handOver() { forEditor = pending; pending = null; fileUri = null }
 
     fun take(): String? = forEditor.also { forEditor = null }
 
@@ -87,13 +89,13 @@ object ReviewInbox {
     fun offer(context: Context, intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND || intent.type?.startsWith("text/") != true) return
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-        if (!text.isNullOrBlank()) { pending = text.trim(); return }
+        if (!text.isNullOrBlank()) { fileUri = null; pending = text.trim(); return }
         @Suppress("DEPRECATION")
         val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: return
         val app = context.applicationContext
         ShelfActions.scope.launch {
             val read = withContext(Dispatchers.IO) { runCatching { readText(app, uri) }.getOrNull() }
-            if (!read.isNullOrBlank()) pending = read.trim() else Notice.show(app, "공유받은 글을 읽지 못했습니다.")
+            if (!read.isNullOrBlank()) { fileUri = uri; pending = read.trim() } else Notice.show(app, "공유받은 글을 읽지 못했습니다.")
         }
     }
 }
@@ -392,6 +394,12 @@ fun ReviewPickBookScreen(books: List<BookEntity>, onPick: (bookId: String) -> Un
             "받은 글: " + incoming.take(200), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
+        ReviewInbox.fileUri?.let { file ->
+            val ctx = LocalContext.current
+            TextButton(onClick = { ReviewInbox.fileUri = null; ShareImport.run(ctx, listOf(file)); onCancel() }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                Text("📖 독후감이 아니라 책입니다 — 이 글 파일을 서재에 담기")
+            }
+        }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
             placeholder = { Text("🔍 책 제목 · 저자 (초성도 됩니다)") },

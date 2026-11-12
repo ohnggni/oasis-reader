@@ -146,6 +146,8 @@ object BookQueue {
                     change(app) { l -> l.map { if (it.key == job.key) it.copy(error = e.message) else it } }
                     retry = true
                     break
+                } finally {
+                    Downloads.received()
                 }
             }
             return if (retry && runAttemptCount < 20) Result.retry() else Result.success()
@@ -157,7 +159,7 @@ object BookQueue {
             var lastFrac = -1f
             val progress = { done: Long, total: Long ->
                 val f = if (total > 0) done.toFloat() / total else -1f
-                if (f < 0 || f - lastFrac >= 0.01f) { lastFrac = f; Downloads.setProgress(job.key, f) }
+                if (f < 0 || f - lastFrac >= 0.01f) { lastFrac = f; Downloads.setProgress(job.key, f); Downloads.nowReceiving(job.title, f, left) }
                 note(job.title, left, f)
             }
             // paused or cancelled meanwhile?

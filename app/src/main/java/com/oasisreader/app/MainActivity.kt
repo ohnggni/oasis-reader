@@ -77,8 +77,14 @@ class MainActivity : ComponentActivity() {
         com.oasisreader.app.audio.AudioProgressSync.schedule(this)      // listening places that did not go out yet
         com.oasisreader.app.data.BookQueue.resumeWaiting(this)          // books still waiting to be received
         // 독후감: text shared from another app (not again when the activity is rebuilt with the same intent)
-        if (savedInstanceState == null) com.oasisreader.app.ui.ReviewInbox.offer(this, intent)
-        addOnNewIntentListener { i -> com.oasisreader.app.ui.ReviewInbox.offer(this, i) }
+        // …or book files (공유 › OG Reader, 다른 앱으로 열기), or a tap on the 독서 습관 알림
+        fun incoming(i: android.content.Intent?) {
+            com.oasisreader.app.stats.ReadingHabit.offer(i)
+            if (!com.oasisreader.app.ui.ShareImport.offer(this, i)) com.oasisreader.app.ui.ReviewInbox.offer(this, i)
+        }
+        if (savedInstanceState == null) incoming(intent)
+        addOnNewIntentListener { i -> incoming(i) }
+        com.oasisreader.app.stats.ReadingHabit.ensure(this)
         setContent {
             OasisTheme {
                 // Surface supplies onBackground as the default text colour (dark mode)
@@ -228,6 +234,14 @@ private fun App() {
                 }
             } else route = Route.READER + b.id
     }
+    // 독서 습관 알림을 눌러 들어옴: the book read last, straight away
+    val habitBook = com.oasisreader.app.stats.ReadingHabit.openBook
+    LaunchedEffect(habitBook, books) {
+        val id = habitBook ?: return@LaunchedEffect
+        val list = books ?: return@LaunchedEffect
+        com.oasisreader.app.stats.ReadingHabit.openBook = null
+        list.firstOrNull { it.id == id }?.let { openShelfBook(it) }
+    }
     /** 📂 있던 폴더 열기: the OPDS folder or meta series a book was received from. */
     fun openOrigin(b: BookEntity) {
         val o = com.oasisreader.app.data.BookOrigin.decode(b.origin) ?: return
@@ -347,7 +361,7 @@ private fun App() {
         route == Route.REVIEW_PICK -> com.oasisreader.app.ui.ReviewPickBookScreen(
             books = books.orEmpty(),
             onPick = { id -> com.oasisreader.app.ui.ReviewInbox.handOver(); reviewReturn = Route.LIBRARY; route = Route.REVIEW + id },
-            onCancel = { com.oasisreader.app.ui.ReviewInbox.pending = null; route = Route.LIBRARY },
+            onCancel = { com.oasisreader.app.ui.ReviewInbox.pending = null; com.oasisreader.app.ui.ReviewInbox.fileUri = null; route = Route.LIBRARY },
         )
         route.startsWith(Route.REVIEW) -> key(route) {
             com.oasisreader.app.ui.ReviewEditorScreen(bookId = route.removePrefix(Route.REVIEW), onBack = { route = reviewReturn })

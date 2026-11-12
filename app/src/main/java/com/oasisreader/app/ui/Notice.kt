@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -101,15 +102,58 @@ fun NoticeHost() {
         } else delay(3_500L + shown.length * 45L)
         if (Notice.text == shown) Notice.dismiss()
     }
+    // what is being received now (TODO 44): a ring with the percent, gone when it is done
+    val rec by com.oasisreader.app.data.Downloads.receiving.collectAsState()
+    val lastRec = androidx.compose.runtime.remember { arrayOfNulls<com.oasisreader.app.data.Downloads.Receiving>(1) }
+    rec?.let { lastRec[0] = it }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+      androidx.compose.foundation.layout.Column(
+          Modifier.navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 72.dp),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+      ) {
+        AnimatedVisibility(visible = rec != null, enter = fadeIn(), exit = fadeOut()) {
+            val r = lastRec[0]
+            if (r != null) Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                shadowElevation = 6.dp,
+                modifier = Modifier.widthIn(max = 480.dp),
+            ) {
+                androidx.compose.foundation.layout.Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (r.fraction >= 0f) androidx.compose.material3.CircularProgressIndicator(
+                            progress = { r.fraction.coerceIn(0f, 1f) },
+                            modifier = Modifier.size(36.dp),
+                            color = MaterialTheme.colorScheme.inversePrimary,
+                            strokeWidth = 3.dp,
+                            trackColor = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.18f),
+                        ) else androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(36.dp), color = MaterialTheme.colorScheme.inversePrimary, strokeWidth = 3.dp,
+                        )
+                        if (r.fraction >= 0f) Text("${(r.fraction * 100).toInt()}", style = MaterialTheme.typography.labelSmall)
+                    }
+                    androidx.compose.foundation.layout.Column(Modifier.padding(start = 12.dp).weight(1f, fill = false)) {
+                        Text(
+                            r.title.ifBlank { "받는 중" }, style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "⬇️ 받는 중" + (if (r.fraction >= 0f) " ${(r.fraction * 100).toInt()}%" else "…") + (if (r.left > 1) " · 남은 ${r.left}권" else ""),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        }
         AnimatedVisibility(visible = t != null, enter = fadeIn(), exit = fadeOut()) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.inverseSurface,
                 contentColor = MaterialTheme.colorScheme.inverseOnSurface,
                 shadowElevation = 6.dp,
-                modifier = Modifier.navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 72.dp)
-                    .widthIn(max = 480.dp).clickable { Notice.dismiss() },
+                modifier = Modifier.widthIn(max = 480.dp).clickable { Notice.dismiss() },
             ) {
                 androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -141,5 +185,6 @@ fun NoticeHost() {
                 }
             }
         }
+      }
     }
 }
