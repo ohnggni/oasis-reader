@@ -60,7 +60,7 @@ fun TurnStyleDialog(
 ) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text("넘김 효과") },
+        title = { com.oasisreader.app.ui.Text("넘김 효과") },
         text = {
             androidx.compose.foundation.layout.Column {
                 TurnStyle.entries.forEach { s ->
@@ -70,8 +70,8 @@ fun TurnStyleDialog(
                     ) {
                         androidx.compose.material3.RadioButton(selected = s == current, onClick = { onPick(s) })
                         androidx.compose.foundation.layout.Column(Modifier.padding(start = 8.dp)) {
-                            androidx.compose.material3.Text(s.label, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
-                            androidx.compose.material3.Text(
+                            com.oasisreader.app.ui.Text(s.label, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
+                            com.oasisreader.app.ui.Text(
                                 s.hint,
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
@@ -80,7 +80,7 @@ fun TurnStyleDialog(
                     }
                 }
                 if (current == TurnStyle.CURL || current == TurnStyle.COVER) {
-                    androidx.compose.material3.Text(
+                    com.oasisreader.app.ui.Text(
                         "속도", style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
                     )
@@ -88,7 +88,7 @@ fun TurnStyleDialog(
                         TurnSpeed.entries.forEach { sp ->
                             androidx.compose.material3.FilterChip(
                                 selected = sp == speed, onClick = { onSpeed(sp) },
-                                label = { androidx.compose.material3.Text(sp.label) },
+                                label = { com.oasisreader.app.ui.Text(sp.label) },
                                 modifier = Modifier.padding(end = 8.dp),
                             )
                         }
@@ -96,7 +96,7 @@ fun TurnStyleDialog(
                 }
             }
         },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { androidx.compose.material3.Text("닫기") } },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { com.oasisreader.app.ui.Text("닫기") } },
     )
 }
 

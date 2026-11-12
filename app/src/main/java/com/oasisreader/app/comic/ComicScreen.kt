@@ -67,7 +67,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -307,6 +307,8 @@ private fun ComicViewer(
     var panel by remember { mutableStateOf(com.oasisreader.app.ui.ReadPanel.NONE) }
     var autoHide by remember { mutableStateOf(readerPrefs.autoHideBars) }
     var turnStyle by remember { mutableStateOf(readerPrefs.turnStyle) }
+    // E-INK mode: pages change at once, whatever turn is chosen
+    val effTurn = if (com.oasisreader.app.ui.theme.ThemeMode.eink) com.oasisreader.app.ui.TurnStyle.NONE else turnStyle
     var turnShot by remember { mutableStateOf<com.oasisreader.app.ui.TurnShot?>(null) }
     var turnPicker by remember { mutableStateOf(false) }
     var turnSpeed by remember { mutableStateOf(readerPrefs.turnSpeed) }
@@ -511,9 +513,9 @@ private fun ComicViewer(
                     }
                     // what the pager last drew: the picture a curl turn rolls away
                     val pagerLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
-                    val stack = turnStyle == com.oasisreader.app.ui.TurnStyle.COVER || turnStyle == com.oasisreader.app.ui.TurnStyle.CURL
+                    val stack = effTurn == com.oasisreader.app.ui.TurnStyle.COVER || effTurn == com.oasisreader.app.ui.TurnStyle.CURL
                     // 종이 말림: a horizontal drag lifts the page under the finger (the pager does not slide)
-                    val curlDrag = turnStyle == com.oasisreader.app.ui.TurnStyle.CURL && com.oasisreader.app.ui.TurnStyle.curlSupported
+                    val curlDrag = effTurn == com.oasisreader.app.ui.TurnStyle.CURL && com.oasisreader.app.ui.TurnStyle.curlSupported
                     var dragShot by remember { mutableStateOf<com.oasisreader.app.ui.TurnShot?>(null) }
                     var dragFrom by remember { mutableIntStateOf(0) }
                     fun turnTo(target: Int, tapY: Float = 0.5f) {
@@ -522,12 +524,12 @@ private fun ComicViewer(
                         val next = t > pager.currentPage
                         scope.launch {
                             when {
-                                turnStyle == com.oasisreader.app.ui.TurnStyle.NONE -> pager.scrollToPage(t)
-                                turnStyle == com.oasisreader.app.ui.TurnStyle.CURL && com.oasisreader.app.ui.TurnStyle.curlSupported -> {
+                                effTurn == com.oasisreader.app.ui.TurnStyle.NONE -> pager.scrollToPage(t)
+                                effTurn == com.oasisreader.app.ui.TurnStyle.CURL && com.oasisreader.app.ui.TurnStyle.curlSupported -> {
                                     val img = runCatching { pagerLayer.toImageBitmap() }.getOrNull()
                                     if (img == null) { pager.animateScrollToPage(t); return@launch }
                                     // right-to-left books turn the other way on screen
-                                    turnShot = com.oasisreader.app.ui.TurnShot(img, forward = if (rtl) !next else next, style = turnStyle, tapY = tapY, speed = turnSpeed)
+                                    turnShot = com.oasisreader.app.ui.TurnShot(img, forward = if (rtl) !next else next, style = effTurn, tapY = tapY, speed = turnSpeed)
                                     androidx.compose.runtime.withFrameNanos { }
                                     pager.scrollToPage(t)
                                 }
@@ -573,7 +575,7 @@ private fun ComicViewer(
                                                 scope.launch {
                                                     val img = runCatching { pagerLayer.toImageBitmap() }.getOrNull() ?: return@launch
                                                     val shot = com.oasisreader.app.ui.TurnShot(
-                                                        img, forward = leftward, style = turnStyle, tapY = startY, speed = turnSpeed, interactive = true,
+                                                        img, forward = leftward, style = effTurn, tapY = startY, speed = turnSpeed, interactive = true,
                                                     )
                                                     shot.finger = pendingFinger
                                                     dragFrom = pager.currentPage
@@ -702,7 +704,7 @@ private fun ComicViewer(
                                 androidx.compose.runtime.withFrameNanos { }
                                 androidx.compose.runtime.withFrameNanos { }
                                 // fade the picture out rather than letting it vanish in one frame
-                                overlayAlpha.animateTo(0f, androidx.compose.animation.core.tween(140))
+                                if (com.oasisreader.app.ui.theme.ThemeMode.eink) overlayAlpha.snapTo(0f) else overlayAlpha.animateTo(0f, androidx.compose.animation.core.tween(140))
                                 if (turnShot === done) turnShot = null
                                 overlayAlpha.snapTo(1f)
                             }
@@ -813,17 +815,17 @@ private fun ComicViewer(
         }
         AnimatedVisibility(
             visible = !barsVisible,
-            enter = fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 250)), exit = fadeOut(androidx.compose.animation.core.tween(0)),
+            enter = com.oasisreader.app.ui.theme.calm(fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 250))), exit = fadeOut(androidx.compose.animation.core.tween(0)),
             modifier = Modifier.align(Alignment.TopStart),
         ) {
             com.oasisreader.app.reader.StatusLine(readingChrome, cut, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), title = book.title)
         }
         AnimatedVisibility(
             visible = barsVisible,
-            enter = fadeIn(), exit = fadeOut(),
+            enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
             modifier = Modifier.barTopInset(readingChrome, cut),
         ) {
-            Surface(color = barColor, contentColor = chrome) {
+            Surface(color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder()) {
                 Column {
                     Row(Modifier.fillMaxWidth().height(60.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
@@ -850,7 +852,11 @@ private fun ComicViewer(
                         }
                     }
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                    AnimatedVisibility(visible = panel != com.oasisreader.app.ui.ReadPanel.NONE) {
+                    AnimatedVisibility(
+                        visible = panel != com.oasisreader.app.ui.ReadPanel.NONE,
+                        enter = com.oasisreader.app.ui.theme.calm(androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically()),
+                        exit = com.oasisreader.app.ui.theme.calm(androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()),
+                    ) {
                         Column(
                             Modifier.fillMaxWidth()
                                 .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.42f).dp)
@@ -956,7 +962,7 @@ private fun ComicViewer(
         // the bottom bar with the top bar: title · page, −/+ (one page) and a slider to jump
         AnimatedVisibility(
             visible = barsVisible && panel == com.oasisreader.app.ui.ReadPanel.NONE && pageCount > 1,
-            enter = fadeIn(), exit = fadeOut(),
+            enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             ComicSeekBar(
@@ -997,7 +1003,7 @@ private fun ComicSeekBar(
     val p = drag ?: page
     val last = (count - 1).coerceAtLeast(1)
     fun go(t: Int) { val c = t.coerceIn(0, count - 1); drag = c; onTouch(); onJump(c) }
-    Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder(), modifier = Modifier.fillMaxWidth()) {
         Column(
             Modifier.let { if (navPad) it.navigationBarsPadding() else it }
                 .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 20.dp),

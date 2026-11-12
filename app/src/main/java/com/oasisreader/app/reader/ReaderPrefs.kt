@@ -25,7 +25,8 @@ enum class ReaderTheme(
     PINK("pink", "분홍", false, 0xFFF8E8EA, 0xFF3A2428, 0xFF7A5A60, 0xFFA8405A, 0xFFEBCFD4),
     NIGHT("night", "밤", true, 0xFF1B2420, 0xFFD6DDD6, 0xFF8F9C94, 0xFF9CC8B4, 0xFF2E3A34),
     NAVY("navy", "남색", true, 0xFF141C2B, 0xFFC9D3E0, 0xFF8090A6, 0xFF8FB4E0, 0xFF26324A),
-    BLACK("black", "검정", true, 0xFF000000, 0xFFBDBDBD, 0xFF7A7A7A, 0xFF9CC8B4, 0xFF222222);
+    BLACK("black", "검정", true, 0xFF000000, 0xFFBDBDBD, 0xFF7A7A7A, 0xFF9CC8B4, 0xFF222222),
+    EINK("eink", "E-INK (흑백)", false, 0xFFFFFFFF, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000);
 
     /** AUTO resolved against the app theme: the same reading theme if the app wears one, else its light/dark. */
     fun resolve(appDark: Boolean) =

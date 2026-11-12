@@ -70,7 +70,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -215,6 +215,8 @@ private fun ReaderBody(
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var viewerFile by remember { mutableStateOf<File?>(null) }
     var turnStyle by remember { mutableStateOf(prefs.turnStyle) }
+    // E-INK mode: pages change at once, whatever turn is chosen
+    val effTurn = if (com.oasisreader.app.ui.theme.ThemeMode.eink) com.oasisreader.app.ui.TurnStyle.NONE else turnStyle
     var turnShot by remember { mutableStateOf<com.oasisreader.app.ui.TurnShot?>(null) }
     var turnPicker by remember { mutableStateOf(false) }
     var turnSpeed by remember { mutableStateOf(prefs.turnSpeed) }
@@ -377,13 +379,13 @@ private fun ReaderBody(
                     padBottom = padBottom,
                     padLeft = padLeft,
                     padRight = padRight,
-                    turn = turnStyle.id,
+                    turn = effTurn.id,
                     fontFamily = font.cssStack(),
                     highlights = hls,
                     focus = t.focus,
                     find = t.find,
                     findNth = t.findNth,
-                    animate = turnStyle != com.oasisreader.app.ui.TurnStyle.NONE,
+                    animate = effTurn != com.oasisreader.app.ui.TurnStyle.NONE,
                     spread = spread,
                     weight = weight,
                     colors = ReaderHtml.COLORS,
@@ -816,7 +818,7 @@ private fun ReaderBody(
     val chapterTitle = remember(p, curIndex) { p?.let { chapterTitleFor(it, curIndex) } ?: "" }
     val overall = p?.overall(curIndex, curFraction) ?: 0f
     val paper = Color(rTheme.bg)
-    val chrome = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+    val chrome = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.75f)
     // bars sit two shades off the page so they read as separate from the text
     val barColor = com.oasisreader.app.ui.theme.barColorFor(dark)
     val showBars = barsVisible || state !is LoadState.Ready
@@ -871,7 +873,7 @@ private fun ReaderBody(
                             val pnt = android.graphics.Paint().apply { color = paper.toArgb() }
                             val w = bmp.width.toFloat(); val h = bmp.height.toFloat()
                             cv.drawRect(w * 0.2f, h - 34 * densityF, w * 0.8f, h, pnt)
-                            val shot = com.oasisreader.app.ui.TurnShot(bmp.asImageBitmap(), forward, turnStyle, tapY, turnSpeed, interactive)
+                            val shot = com.oasisreader.app.ui.TurnShot(bmp.asImageBitmap(), forward, effTurn, tapY, turnSpeed, interactive)
                             if (interactive) {
                                 shot.finger = dragFinger
                                 val early = dragRelease
@@ -1016,7 +1018,7 @@ private fun ReaderBody(
                                     }
                                 }
                                 androidx.compose.runtime.withFrameNanos { }
-                                overlayAlpha.animateTo(0f, androidx.compose.animation.core.tween(140))
+                                if (com.oasisreader.app.ui.theme.ThemeMode.eink) overlayAlpha.snapTo(0f) else overlayAlpha.animateTo(0f, androidx.compose.animation.core.tween(140))
                                 if (turnShot === done) turnShot = null
                                 overlayAlpha.snapTo(1f)
                             }
@@ -1042,7 +1044,7 @@ private fun ReaderBody(
             // (it appears only once the bar has gone, not under it while it fades)
             AnimatedVisibility(
                 visible = state is LoadState.Ready && !showBars,
-                enter = fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 250)), exit = fadeOut(androidx.compose.animation.core.tween(0)),
+                enter = com.oasisreader.app.ui.theme.calm(fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 250))), exit = fadeOut(androidx.compose.animation.core.tween(0)),
                 modifier = Modifier.align(Alignment.TopStart),
             ) {
                 StatusLine(readingChrome, cut, chrome.copy(alpha = 0.6f), title = chapterTitle.ifBlank { title })
@@ -1064,9 +1066,9 @@ private fun ReaderBody(
             ImmersiveBars(readingChrome, appBarsUp = barsVisible)
 
             // compact overlay bar: it only ever covers the top margin, never text
-            AnimatedVisibility(visible = showBars, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(visible = showBars, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut())) {
                 Surface(
-                    color = barColor, contentColor = chrome,
+                    color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder(),
                     modifier = Modifier.fillMaxWidth().let { if (readingChrome.hideStatus) it.padding(start = cut.left, end = cut.right) else it },
                 ) {
                     Column {
@@ -1108,8 +1110,8 @@ private fun ReaderBody(
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                         AnimatedVisibility(
                             visible = panel != Panel.NONE,
-                            enter = expandVertically() + fadeIn(),
-                            exit = shrinkVertically() + fadeOut(),
+                            enter = com.oasisreader.app.ui.theme.calm(expandVertically() + fadeIn()),
+                            exit = com.oasisreader.app.ui.theme.calm(shrinkVertically() + fadeOut()),
                         ) {
                             Column {
                                 Column(
@@ -1298,7 +1300,7 @@ private fun ReaderBody(
             // with the top bar: a bottom bar whose thin slider spans the whole book
             if (p != null) AnimatedVisibility(
                 visible = showBars && state is LoadState.Ready,
-                enter = fadeIn(), exit = fadeOut(),
+                enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 ReaderSeekBar(
@@ -1404,7 +1406,7 @@ private fun ReaderSeekBar(
     val v = drag ?: overall
     val chapter = remember(pkg, v) { chapterTitleFor(pkg, seekTarget(pkg, v).first) }
     val accent = MaterialTheme.colorScheme.primary
-    Surface(color = barColor, contentColor = chrome, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder(), modifier = Modifier.fillMaxWidth()) {
         // lifted well clear of the bottom edge: with gesture navigation a swipe up from there
         // means home / recent apps, and the slider must not catch it (it may cover a line of text)
         Column(Modifier.navigationBarsPadding().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 20.dp)) {

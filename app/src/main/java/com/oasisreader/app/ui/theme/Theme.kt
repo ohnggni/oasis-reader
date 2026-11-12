@@ -1,5 +1,8 @@
 package com.oasisreader.app.ui.theme
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -8,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.unit.dp
 import com.oasisreader.app.reader.ReaderTheme
 
 // oasis green accent
@@ -60,7 +64,15 @@ fun OasisTheme(
 
 /** Bar colour for a screen of the given darkness: the worn reading theme's rule colour when it fits. */
 fun barColorFor(dark: Boolean): Color =
-    ThemeMode.reader?.takeIf { it.dark == dark }?.let { Color(it.rule) } ?: if (dark) BarColors.Dark else BarColors.Light
+    ThemeMode.reader?.takeIf { it.dark == dark }?.let { if (it == ReaderTheme.EINK) Color.White else Color(it.rule) }
+        ?: if (dark) BarColors.Dark else BarColors.Light
+
+/** E-INK: bars are white like the page, so they get an outline instead of a shade. */
+fun einkBorder(): BorderStroke? = if (ThemeMode.eink) BorderStroke(1.5.dp, Color.Black) else null
+
+/** E-INK: no fades or slides (the panel would ghost through every frame). */
+fun calm(e: EnterTransition): EnterTransition = if (ThemeMode.eink) EnterTransition.None else e
+fun calm(e: ExitTransition): ExitTransition = if (ThemeMode.eink) ExitTransition.None else e
 
 /** A whole Material colour set out of a reading theme's five colours. */
 private fun schemeOf(t: ReaderTheme): ColorScheme {
@@ -69,6 +81,20 @@ private fun schemeOf(t: ReaderTheme): ColorScheme {
     val soft = lerp(Color(t.muted), fg, if (t.dark) 0.10f else 0.35f)
     fun tone(f: Float) = lerp(bg, fg, f)
     val base = if (t.dark) darkColorScheme() else lightColorScheme()
+    // E-INK: no greys at all. Every surface is white, every line black, and what is selected is inverted.
+    if (t == ReaderTheme.EINK) return base.copy(
+        primary = fg, onPrimary = bg, primaryContainer = fg, onPrimaryContainer = bg, inversePrimary = bg,
+        secondary = fg, onSecondary = bg, secondaryContainer = fg, onSecondaryContainer = bg,
+        tertiary = fg, onTertiary = bg, tertiaryContainer = fg, onTertiaryContainer = bg,
+        background = bg, onBackground = fg, surface = bg, onSurface = fg,
+        surfaceVariant = bg, onSurfaceVariant = fg, surfaceTint = bg,
+        inverseSurface = fg, inverseOnSurface = bg,
+        outline = fg, outlineVariant = fg, scrim = fg,
+        surfaceBright = bg, surfaceDim = bg,
+        surfaceContainerLowest = bg, surfaceContainerLow = bg, surfaceContainer = bg,
+        surfaceContainerHigh = bg, surfaceContainerHighest = bg,
+        error = fg, onError = bg, errorContainer = bg, onErrorContainer = fg,
+    )
     return base.copy(
         primary = accent, onPrimary = bg,
         primaryContainer = lerp(bg, accent, 0.22f), onPrimaryContainer = fg,

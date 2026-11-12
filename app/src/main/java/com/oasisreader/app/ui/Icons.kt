@@ -102,10 +102,30 @@ object OgIconPaths {
         // 오디오
         "play" to "M8 5L19 12L8 19Z",
         "pause" to "M8.5 5.5V18.5M15.5 5.5V18.5",
-        "stop" to "M6.5 6.5H17.5V17.5H6.5Z",
+        "stop" to "M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0M11 11H13V13H11Z",
         "prev" to "M6 5.5V18.5M19 6L10 12L19 18Z",
         "next" to "M18 5.5V18.5M5 6L14 12L5 18Z",
         "sleep" to "M19.5 14.5A8 8 0 1 1 9.5 4.5a7.1 7.1 0 0 0 10 10z",
+        "volume" to "M4 9.5H7.5L12 5.5V18.5L7.5 14.5H4ZM15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11",
+        "volume_low" to "M4 9.5H7.5L12 5.5V18.5L7.5 14.5H4ZM15.5 9a4.5 4.5 0 0 1 0 6",
+        "mic" to "M9.5 5.5a2.5 2.5 0 0 1 5 0V11a2.5 2.5 0 0 1-5 0ZM6 11a6 6 0 0 0 12 0M12 17V20.5M9 20.5H15",
+        // 그 밖
+        "edit" to "M5 19l1-4L16 5l3 3L9 18zM14 7l3 3",
+        "star" to "M12 3.5L14.6 9.2L20.8 9.9L16.2 14.1L17.5 20.3L12 17.2L6.5 20.3L7.8 14.1L3.2 9.9L9.4 9.2Z",
+        "up" to "M6 15L12 9L18 15",
+        "down" to "M6 9L12 15L18 9",
+        "check" to "M5 12.5L10 17.5L19 7",
+        "undo" to "M9 6L4.5 10.5L9 15M4.5 10.5H15a4.5 4.5 0 0 1 0 9H12",
+        "clock" to "M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0M12 7V12L15.5 14",
+        "image" to "M3.5 5H20.5V19H3.5ZM3.5 16L9 11L13 15L16 12.5L20.5 16.5M15 8.5h.01",
+        "save" to "M4.5 4.5H16L19.5 8V19.5H4.5ZM8 4.5V9H14.5V4.5M8 19.5V14H16V19.5",
+        "server" to "M4 4.5H20V11H4ZM4 13H20V19.5H4ZM7.5 7.75h.01M7.5 16.25h.01",
+        "phone" to "M7.5 3.5H16.5V20.5H7.5ZM11 17.5H13",
+        "bell" to "M6 17V11a6 6 0 0 1 12 0V17M4 17H20M10.5 20.5H13.5",
+        "bolt" to "M13 3L5.5 13.5H11.5L10.5 21L18.5 10H12.5Z",
+        "globe" to "M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0M3.5 12H20.5M12 3.5a13 13 0 0 0 0 17M12 3.5a13 13 0 0 1 0 17",
+        "stats" to "M5.5 19.5V12M10.5 19.5V5M15.5 19.5V9M20 19.5V14",
+        "theme" to "M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0M12 3.5V20.5M12 8H19.5M12 12H20.5M12 16H19.5",
     )
 
     /** Emoji (without the variation selector) -> icon name. */
@@ -117,6 +137,11 @@ object OgIconPaths {
         "⬇" to "download", "☁" to "cloud", "✅" to "done", "⚠" to "warning", "📌" to "pin", "☑" to "select_all", "📋" to "copy",
         "🖍" to "highlight", "📝" to "review", "🔖" to "bookmark", "☀" to "brightness", "🔗" to "link",
         "▶" to "play", "⏸" to "pause", "⏹" to "stop", "⏮" to "prev", "⏭" to "next", "🌙" to "sleep",
+        "🔊" to "volume", "🔈" to "volume_low", "🎙" to "mic",
+        "✏" to "edit", "⭐" to "star", "🔼" to "up", "🔽" to "down", "✔" to "check", "↩" to "undo",
+        "🕒" to "clock", "🕘" to "clock", "⏰" to "clock", "⏳" to "clock", "🔁" to "refresh", "♻" to "refresh",
+        "🖼" to "image", "💾" to "save", "🗄" to "server", "📱" to "phone", "🔔" to "bell", "⚡" to "bolt",
+        "🌐" to "globe", "📊" to "stats", "🌓" to "theme", "📘" to "book", "📕" to "book", "🗂" to "folder", "🗃" to "storage",
     )
 
     /**

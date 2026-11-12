@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -87,7 +87,7 @@ fun BoxScope.FastScroller(target: ScrollTarget, label: (Int) -> String? = { null
 
     // ⬆️ 맨 위로
     AnimatedVisibility(
-        visible = first > visible, enter = fadeIn(), exit = fadeOut(),
+        visible = first > visible, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = bottomPadding),
     ) {
         SmallFloatingActionButton(onClick = { scope.launch { target.scrollTo(0) } }) { Text("⬆️") }

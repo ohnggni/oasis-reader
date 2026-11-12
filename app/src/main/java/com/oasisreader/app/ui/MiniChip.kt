@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +43,7 @@ fun MiniChip(
         shape = RoundedCornerShape(8.dp),
         color = if (selected) cs.secondaryContainer else Color.Transparent,
         contentColor = if (selected) cs.onSecondaryContainer else if (plain) cs.primary else cs.onSurface,
-        border = if (selected || plain) null else BorderStroke(0.8.dp, cs.outlineVariant),
+        border = if (selected || plain) null else BorderStroke(if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1.5.dp else 0.8.dp, cs.outlineVariant),
         modifier = modifier.heightIn(min = 28.dp).let { m -> if (description != null) m.semantics { contentDescription = description } else m },
     ) {
         Box(Modifier.padding(horizontal = if (plain) 4.dp else 8.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {

@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -98,7 +98,8 @@ fun NoticeHost() {
         val shown = Notice.text ?: return@LaunchedEffect
         if (Notice.book != null) {
             ring.snapTo(1f)
-            ring.animateTo(0f, androidx.compose.animation.core.tween(Notice.ADDED_MS, easing = androidx.compose.animation.core.LinearEasing))
+            if (com.oasisreader.app.ui.theme.ThemeMode.eink) delay(Notice.ADDED_MS.toLong())
+            else ring.animateTo(0f, androidx.compose.animation.core.tween(Notice.ADDED_MS, easing = androidx.compose.animation.core.LinearEasing))
         } else delay(3_500L + shown.length * 45L)
         if (Notice.text == shown) Notice.dismiss()
     }
@@ -112,7 +113,7 @@ fun NoticeHost() {
           horizontalAlignment = Alignment.CenterHorizontally,
           verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
       ) {
-        AnimatedVisibility(visible = rec != null, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(visible = rec != null, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut())) {
             val r = lastRec[0]
             if (r != null) Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -147,7 +148,7 @@ fun NoticeHost() {
                 }
             }
         }
-        AnimatedVisibility(visible = t != null, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(visible = t != null, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut())) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.inverseSurface,

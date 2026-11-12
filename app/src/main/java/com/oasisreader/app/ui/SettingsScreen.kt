@@ -20,7 +20,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -96,9 +96,9 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             Section("화면")
             val tm = com.oasisreader.app.ui.theme.ThemeMode
             var themeOpen by remember { mutableStateOf(false) }
-            Item("🌓", "테마: ${tm.label(tm.mode)}", "앱 전체 색. 종이·세피아·분홍·밤 같은 읽기 테마를 서재와 메뉴에도 입힐 수 있습니다", enabled = true) { themeOpen = true }
+            Item("🌓", "테마: ${tm.label(tm.mode)}", "앱 전체 색. 종이·세피아·분홍·밤 같은 읽기 테마를 서재와 메뉴에도 입힙니다. E-INK(흑백)는 전자잉크 화면용으로 움직임도 끕니다", enabled = true) { themeOpen = true }
             if (themeOpen) com.oasisreader.app.ui.theme.ThemePickDialog { themeOpen = false }
-            Item("🎨", "아이콘: ${OgIcons.label(OgIcons.style)}", "단색(앱이 직접 그린 선 아이콘) ↔ 이모지 (누를 때마다 바뀝니다). 지금은 화면 위쪽 버튼부터 바뀝니다", enabled = true) {
+            Item("🎨", "아이콘: ${OgIcons.label(OgIcons.style)}", "단색(앱이 직접 그린 선 아이콘) ↔ 이모지 (누를 때마다 바뀝니다)", enabled = true) {
                 OgIcons.set(app, if (OgIcons.style == OgIcons.MONO) OgIcons.EMOJI else OgIcons.MONO)
             }
 

@@ -24,6 +24,9 @@ object ThemeMode {
     /** The reading theme the app is wearing, or null for system / light / dark. */
     val reader: ReaderTheme? get() = readerOf(mode)
 
+    /** E-INK mode (the app wears the E-INK theme): black on white only, thick lines, no animation. */
+    val eink: Boolean get() = mode == ReaderTheme.EINK.id
+
     var mode by mutableStateOf(SYSTEM)
         private set
 

@@ -6,13 +6,15 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.Text
+import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -46,14 +48,15 @@ fun EmojiText(
     softWrap: Boolean = true,
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     style: TextStyle = LocalTextStyle.current,
 ) {
     val lead = if (OgIcons.style == OgIcons.EMOJI) null else OgIconPaths.leading(text)
     val icon = lead?.let { OgIcons.icon(it.first) }
     if (lead == null || icon == null) {
-        Text(
+        M3Text(
             text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration,
-            textAlign, lineHeight, overflow, softWrap, maxLines, minLines, style = style,
+            textAlign, lineHeight, overflow, softWrap, maxLines, minLines, onTextLayout = onTextLayout ?: {}, style = style,
         )
         return
     }
@@ -67,8 +70,62 @@ fun EmojiText(
             Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.fillMaxSize())
         },
     )
-    Text(
+    M3Text(
         body, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration,
-        textAlign, lineHeight, overflow, softWrap, maxLines, minLines, inlineContent = inline, style = style,
+        textAlign, lineHeight, overflow, softWrap, maxLines, minLines, inlineContent = inline, onTextLayout = onTextLayout ?: {}, style = style,
     )
 }
+
+/**
+ * The app's Text: screens import this one instead of Material's, so any label that starts with an
+ * emoji the app has an icon for is drawn with that icon (see [EmojiText]). Same parameters as Material's.
+ */
+@Composable
+fun Text(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontStyle: FontStyle? = null,
+    fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    textDecoration: TextDecoration? = null,
+    textAlign: TextAlign? = null,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
+    style: TextStyle = LocalTextStyle.current,
+) = EmojiText(
+    text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration,
+    textAlign, lineHeight, overflow, softWrap, maxLines, minLines, onTextLayout, style,
+)
+
+/** Styled text passes straight through to Material's. */
+@Composable
+fun Text(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontStyle: FontStyle? = null,
+    fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    textDecoration: TextDecoration? = null,
+    textAlign: TextAlign? = null,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    inlineContent: Map<String, InlineTextContent> = mapOf(),
+    onTextLayout: (TextLayoutResult) -> Unit = {},
+    style: TextStyle = LocalTextStyle.current,
+) = M3Text(
+    text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration,
+    textAlign, lineHeight, overflow, softWrap, maxLines, minLines, inlineContent = inlineContent, onTextLayout = onTextLayout, style = style,
+)

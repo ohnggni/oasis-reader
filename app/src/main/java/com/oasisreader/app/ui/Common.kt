@@ -23,7 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +56,7 @@ fun TopBar(
     brandSub: String? = null,        // app header: one small line under the logo
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Surface(color = barColor(), contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Surface(color = barColor(), contentColor = MaterialTheme.colorScheme.onSurfaceVariant, border = com.oasisreader.app.ui.theme.einkBorder()) {
         Row(
             Modifier.fillMaxWidth().shelfTopInset().height(if (brand) 60.dp else 56.dp).padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,

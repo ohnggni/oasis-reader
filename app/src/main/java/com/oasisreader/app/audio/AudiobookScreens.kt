@@ -45,7 +45,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -487,7 +487,11 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
         kotlinx.coroutines.delay(2_500)
         barShown = false
     }
-    val barAlpha by androidx.compose.animation.core.animateFloatAsState(if (barShown) 1f else 0f, label = "bar")
+    val barAlpha by androidx.compose.animation.core.animateFloatAsState(
+        if (barShown) 1f else 0f,
+        animationSpec = if (com.oasisreader.app.ui.theme.ThemeMode.eink) androidx.compose.animation.core.snap<Float>() else androidx.compose.animation.core.spring<Float>(),
+        label = "bar",
+    )
     var picking by remember { mutableStateOf(false) }
     // The place in the track changes twice a second: only the small pieces below that show it
     // (BookPlaceLine, PlayerHeadline, PlayerSeek) read it, so the rest of the screen stays put.
