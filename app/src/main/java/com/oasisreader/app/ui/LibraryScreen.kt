@@ -667,7 +667,7 @@ fun LibraryScreen(
                         when (e) {
                             is ShelfEntry.Book -> GridBook(
                                 e.b, store, onClick = { clickBook(e.b) }, onLongClick = { toggle(listOf(e.b.id)) },
-                                onMenu = { menuFor = e.b }, compact = tileDp < 110, ahead = aheadMap[e.b.id], selected = selState(listOf(e.b.id)),
+                                onMenu = { menuFor = e.b }, compact = tileDp < 110, ahead = aheadMap[e.b.id], selected = selState(listOf(e.b.id)), showKind = kind == null,
                             )
                             is ShelfEntry.Folder -> FolderTile(
                                 e.c, e.books, store, stack = stackFolders, compact = tileDp < 110, selected = selState(e.bookIds()),
@@ -877,7 +877,7 @@ fun LibraryScreen(
                         }) { EmojiText("☁️ 폰에서 지우고 스트리밍으로 듣기") }
                     } else TextButton(onClick = { menuFor = null; exportFor = b }) { EmojiText("📝 하이라이트 내보내기") }
                     if (b.sourceUrl != null && !isAudio) TextButton(onClick = { menuFor = null; onPin(b, !b.pinned) }) {
-                        Text(if (b.pinned) "☁️ 임시로 두기 (공간 부족하면 파일만 지워짐)" else "📌 서재에 보관 (지금은 임시)")
+                        Text(if (b.pinned) "☁️ 임시로 두기" else "📌 서재에 보관")
                     }
                     TextButton(onClick = { menuFor = null; selected = selected + b.id }) { EmojiText("☑️ 여러 권 고르기") }
                 }
@@ -964,7 +964,7 @@ private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onS
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.size(size)) {
-            Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, contentDescription = "컬렉션 메뉴", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, contentDescription = "컬렉션 메뉴", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(if (size < 36.dp) 18.dp else 24.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { EmojiText("☑️ 모두 고르기") }, onClick = { open = false; onSelectAll() })
@@ -1035,6 +1035,9 @@ private fun FolderTile(
                 }
             }
             if (allKept != null) Box(Modifier.align(Alignment.BottomEnd).padding(4.dp)) { MarkDisc(allKept == true, compact) }
+            if (selected == null) MenuDisc(compact) {
+                CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, size = if (compact) 24.dp else 28.dp, onMakeCollection = onMakeCollection, onUngroup = onUngroup)
+            }
             selected?.let { SelectBadge(it) }
         }
         if (reading && read < books.size) LinearProgressIndicator(
@@ -1044,13 +1047,12 @@ private fun FolderTile(
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(ShelfSearch.labeled(if (c.id.startsWith("s:")) "🔗" else "📚", c.name), style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(ShelfSearch.labeled(if (c.id.startsWith("s:")) "🔗" else "📚", c.name), style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     "${books.size}권" + if (read > 0) " · ${read}권 읽음" else "",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                 )
             }
-            CollectionMenuButton(onRename, onDelete, onSelectAll = onLongClick, size = if (compact) 26.dp else 36.dp, onMakeCollection = onMakeCollection, onUngroup = onUngroup)
         }
     }
 }
@@ -1092,7 +1094,8 @@ private fun MoreButton(onClick: () -> Unit, size: Dp = 36.dp) {
         Icon(
             androidx.compose.material.icons.Icons.Filled.MoreVert,
             contentDescription = "책 메뉴",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(if (size < 36.dp) 18.dp else 24.dp),
         )
     }
 }
@@ -1127,7 +1130,7 @@ private fun progressText(b: BookEntity): String = when {
 @Composable
 private fun GridBook(
     b: BookEntity, store: BookStore, onClick: () -> Unit, onLongClick: () -> Unit, onMenu: () -> Unit,
-    compact: Boolean = false, ahead: Float? = null, selected: Boolean? = null,
+    compact: Boolean = false, ahead: Float? = null, selected: Boolean? = null, showKind: Boolean = true,
 ) {
     Column(Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
         Box {
@@ -1137,6 +1140,8 @@ private fun GridBook(
                 modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
             )
             CoverMarks(b, store, small = compact)
+            // ⋮ sits on the cover (bottom-left) so the title below gets the tile's full width
+            if (selected == null) MenuDisc(compact) { MoreButton(onMenu, if (compact) 24.dp else 28.dp) }
             selected?.let { SelectBadge(it) }
         }
         if (b.lastReadAt != null && b.finishedAt == null) {
@@ -1148,7 +1153,10 @@ private fun GridBook(
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(ShelfSearch.labeled(ShelfKind.of(b).emoji, b.title), style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (showKind) ShelfSearch.labeled(ShelfKind.of(b).emoji, b.title) else b.title,
+                    style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     listOfNotNull(b.author, progressText(b) + aheadText(ahead)).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
@@ -1156,9 +1164,20 @@ private fun GridBook(
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            MoreButton(onMenu, if (compact) 26.dp else 36.dp)
         }
     }
+}
+
+/** The disc a tile's ⋮ sits in, on the cover's bottom-left: page colour with a thin rim, so it reads on any cover. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.MenuDisc(small: Boolean, content: @Composable () -> Unit) {
+    val size = if (small) 24.dp else 28.dp
+    Box(
+        Modifier.align(Alignment.BottomStart).padding(4.dp).size(size)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { content() }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

@@ -143,7 +143,7 @@ fun AnnotatedString.Builder.appendWithIcons(text: String, icons: Boolean) {
     while (i < text.length) {
         val cp = text.codePointAt(i)
         val len = Character.charCount(cp)
-        val name = if (cp < 0x2190) null else OgIconPaths.byEmoji[text.substring(i, i + len)]
+        val name = if (cp < 0x2139) null else OgIconPaths.byEmoji[text.substring(i, i + len)]
         if (name == null) { i += len; continue }
         append(text.substring(plain, i))
         var end = i + len

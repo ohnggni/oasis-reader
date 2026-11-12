@@ -43,7 +43,11 @@ import androidx.compose.ui.unit.sp
 fun DocScreen(title: String, asset: String, onBack: () -> Unit, shareable: Boolean = false, script: String? = null) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
-    val text = remember(asset) { runCatching { context.assets.open(asset).bufferedReader().use { it.readText() } }.getOrDefault("") }
+    // the guide opens on a one-screen overview; the full guide is the second tab
+    val tabs = if (asset == "guide.md") listOf("한눈에 보기" to "features.md", "자세한 사용법" to "guide.md") else null
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(0) }
+    val shown = tabs?.get(tab)?.second ?: asset
+    val text = remember(shown) { runCatching { context.assets.open(shown).bufferedReader().use { it.readText() } }.getOrDefault("") }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(title, onBack = onBack) {
             if (shareable) {
@@ -91,11 +95,23 @@ fun DocScreen(title: String, asset: String, onBack: () -> Unit, shareable: Boole
                 }
             }
         }
-        SelectionContainer {
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()
-                    .padding(horizontal = 18.dp, vertical = 14.dp).widthIn(max = 760.dp),
-            ) { Markdown(text) }
+        if (tabs != null) androidx.compose.material3.TabRow(
+            selectedTabIndex = tab,
+            containerColor = barColor(),
+            contentColor = MaterialTheme.colorScheme.primary,
+            divider = { androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant) },
+        ) {
+            tabs.forEachIndexed { i, t ->
+                androidx.compose.material3.Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t.first, fontWeight = if (tab == i) FontWeight.Bold else FontWeight.Normal) })
+            }
+        }
+        androidx.compose.runtime.key(shown) {
+            SelectionContainer {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()
+                        .padding(horizontal = 18.dp, vertical = 14.dp).widthIn(max = 760.dp),
+                ) { Markdown(text) }
+            }
         }
     }
 }
