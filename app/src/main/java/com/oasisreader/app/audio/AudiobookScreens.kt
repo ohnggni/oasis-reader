@@ -652,6 +652,30 @@ private fun PlayerChips() {
                 DropdownMenuItem(text = { Text("타이머 끄기") }, onClick = { tOpen = false; AudioPlayback.sleepIn(0) })
             }
         }
+        // 📌 책갈피 (TODO 36): the place playing now, or the stretch just heard, with a note
+        val b = AudioPlayback.book
+        if (b != null && b.rowId().isNotEmpty()) {
+            var mOpen by remember { mutableStateOf(false) }
+            var listOpen by remember { mutableStateOf(false) }
+            var added by remember { mutableStateOf<com.oasisreader.app.data.db.AudioMarkEntity?>(null) }
+            fun mark(backSec: Double) {
+                com.oasisreader.app.ui.ShelfActions.scope.launch {
+                    val m = AudioMarks.add(context, backSec)
+                    if (m == null) com.oasisreader.app.ui.Notice.show(context, "책갈피를 남기지 못했습니다.") else added = m
+                }
+            }
+            Box {
+                AssistChip(onClick = { mOpen = true }, label = { Text("📌 책갈피") })
+                DropdownMenu(mOpen, { mOpen = false }) {
+                    DropdownMenuItem(text = { Text("📌 지금 자리에 남기기") }, onClick = { mOpen = false; mark(0.0) })
+                    DropdownMenuItem(text = { Text("⏪ 방금 들은 30초 남기기") }, onClick = { mOpen = false; mark(30.0) })
+                    DropdownMenuItem(text = { Text("📋 이 책의 책갈피 보기") }, onClick = { mOpen = false; listOpen = true })
+                }
+            }
+            // just added: a note can be typed right away (closing keeps the mark)
+            added?.let { m -> AudioMarkDialog(m, b.title, onPlay = null, onDismiss = { added = null }) }
+            if (listOpen) AudioMarksDialog(b.rowId(), b.title) { listOpen = false }
+        }
     }
 }
 

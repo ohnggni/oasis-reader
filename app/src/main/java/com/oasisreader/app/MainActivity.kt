@@ -349,6 +349,16 @@ private fun App() {
         route == Route.HIGHLIGHTS -> HighlightsScreen(
             onBack = { route = Route.LIBRARY },
             onOpen = { h -> route = Route.READER + h.bookId + ":" + h.spineIndex + ":" + h.id },
+            // 🎧 오디오북 책갈피: open the book in the player at that place
+            onPlayMark = { m ->
+                scope.launch {
+                    val ap = com.oasisreader.app.audio.AudioPlayback
+                    val loaded = ap.book?.rowId() == m.bookId
+                    val ok = loaded || (db.books().get(m.bookId)?.let { b -> runCatching { com.oasisreader.app.audio.AudioLibraryLink.play(context, b) }.isSuccess } ?: false)
+                    if (ok) { ap.goTo(m.track, m.startSec); audioReturn = Route.HIGHLIGHTS; route = Route.AUDIO_PLAYER }
+                    else com.oasisreader.app.ui.Notice.show(context, "이 오디오북을 열지 못했습니다.")
+                }
+            },
         )
         route == Route.STATS -> {
             val ui by remember {

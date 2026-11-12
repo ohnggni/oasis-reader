@@ -61,7 +61,7 @@ import java.util.Date
 import java.util.Locale
 
 /** Which highlights the screen shows. */
-private enum class HlFilter(val label: String) { ALL("전체"), ON_SHELF("📚 서재에 있는 책"), REMOVED("🗑️ 지운 책") }
+private enum class HlFilter(val label: String) { ALL("전체"), ON_SHELF("📚 서재에 있는 책"), REMOVED("🗑️ 지운 책"), AUDIO("🎧 오디오북 책갈피") }
 
 /**
  * All highlights, by book (newest first). A book still on the 서재: tap a highlight to open it
@@ -70,7 +70,7 @@ private enum class HlFilter(val label: String) { ALL("전체"), ON_SHELF("📚 �
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit) {
+fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPlayMark: (com.oasisreader.app.data.db.AudioMarkEntity) -> Unit = {}) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val db = AppDatabase.get(context.applicationContext)
@@ -78,6 +78,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit) {
     val highlights by remember { db.highlights().observeAll() }.collectAsState(initial = null)
     val books by remember { db.books().observeAll() }.collectAsState(initial = emptyList())
     val removed by remember { db.removedBooks().observeAll() }.collectAsState(initial = emptyList())
+    val marks by remember { db.audioMarks().observeAll() }.collectAsState(initial = emptyList())
     val titles = remember(books) { books.associate { it.id to it.title } }
     val removedTitles = remember(removed) { removed.associate { it.id to it.title } }
     val fmt = remember { SimpleDateFormat("yyyy.M.d", Locale.KOREA) }
@@ -97,6 +98,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit) {
                     HlFilter.ALL -> true
                     HlFilter.ON_SHELF -> titles.containsKey(h.bookId)
                     HlFilter.REMOVED -> !titles.containsKey(h.bookId)
+                    HlFilter.AUDIO -> false
                 }
             }
             .filter { h -> q.isEmpty() || h.text.contains(q, true) || (h.note?.contains(q, true) == true) || titleOf(h.bookId).contains(q, true) }
@@ -107,7 +109,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit) {
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar("하이라이트", onBack = onBack) { HighlightJsonExportMenu(enabled = !highlights.isNullOrEmpty()) }
-        if (highlights != null && highlights!!.isEmpty()) {
+        if (highlights != null && highlights!!.isEmpty() && marks.isEmpty()) {
             Text(
                 "아직 하이라이트가 없습니다.\n책에서 글을 길게 눌러 고르고 색을 누르면 여기에 모입니다.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -126,6 +128,10 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
         ) {
             HlFilter.entries.forEach { f -> MiniChip(f.label, selected = filter == f.name, onClick = { filter = f.name }) }
+        }
+        if (filter == HlFilter.AUDIO.name) {
+            com.oasisreader.app.audio.AudioMarksPanel(marks, query, ::titleOf, { id -> titles.containsKey(id) }, onPlayMark)
+            return@Column
         }
         CountLine(groups.sumOf { it.second.size }.takeIf { highlights != null }?.let { "🖍️ ${it}개 · 책 ${groups.size}권" })
         LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(2.dp)) {

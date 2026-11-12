@@ -292,6 +292,11 @@ object AudioPlayback {
     fun chapterAt(b: AudioBook, track: Int, posSec: Double): Int =
         b.chapters.indexOfLast { it.track < track || (it.track == track && it.startSec <= posSec + 0.5) }
     fun chapterIndex(): Int { val b = book ?: return -1; return chapterAt(b, trackIndex, positionMs / 1000.0) }
+    /** Jump to a place in the book (a 책갈피) and play. */
+    fun goTo(track: Int, sec: Double) {
+        player?.let { if (track in 0 until it.mediaItemCount) { it.seekTo(track, (sec * 1000).toLong().coerceAtLeast(0)); it.play() } }
+        tick()
+    }
     fun goChapter(i: Int) {
         val c = book?.chapters?.getOrNull(i) ?: return
         player?.let { it.seekTo(c.track, (c.startSec * 1000).toLong().coerceAtLeast(0)); it.play() }
