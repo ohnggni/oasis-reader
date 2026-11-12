@@ -185,6 +185,8 @@ fun LibraryScreen(
     onSettings: () -> Unit,
     onStats: () -> Unit,
     onHighlights: () -> Unit,
+    onReviews: () -> Unit = {},
+    onReview: (BookEntity) -> Unit = {},
     onDownloads: () -> Unit = {},
     onStorage: () -> Unit = {},
     onDelete: (BookEntity, Boolean) -> Unit,
@@ -393,6 +395,7 @@ fun LibraryScreen(
                         Triple("🗂️", "폴더에서 가져오기", onImportFolder),
                         Triple("🎧", "폰 폴더에서 오디오북 가져오기", onImportAudio),
                         Triple("🖍️", "하이라이트", onHighlights),
+                        Triple("📝", "독후감", onReviews),
                         Triple("📊", "독서 통계", onStats),
                         Triple("📦", "보관함 관리", onStorage),
                         Triple("⬇️", "받기 관리", onDownloads),
@@ -802,6 +805,7 @@ fun LibraryScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { menuFor = null; infoFor = b }) { Text("ℹ️ 책 정보") }
+                    TextButton(onClick = { menuFor = null; onReview(b) }) { Text("📝 독후감") }
                     TextButton(onClick = { menuFor = null; pickColFor = b }) {
                         val n = links.count { it.bookId == b.id }
                         Text("📚 컬렉션에 넣기" + if (n > 0) " (${n}곳에 있음)" else "")

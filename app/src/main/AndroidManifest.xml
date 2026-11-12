@@ -56,6 +56,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- 독후감: text shared from another app (notes, a messenger, an AI chat …) -->
+            <intent-filter android:label="OG Reader 독후감">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <!-- 오디오북 (Media3): notification / lock screen / headset buttons -->

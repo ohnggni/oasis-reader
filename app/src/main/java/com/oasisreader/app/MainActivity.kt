@@ -76,6 +76,9 @@ class MainActivity : ComponentActivity() {
         com.oasisreader.app.audio.AudioDownloads.migrateLegacy(this)   // plain kept tracks → encrypted (once)
         com.oasisreader.app.audio.AudioProgressSync.schedule(this)      // listening places that did not go out yet
         com.oasisreader.app.data.BookQueue.resumeWaiting(this)          // books still waiting to be received
+        // 독후감: text shared from another app (not again when the activity is rebuilt with the same intent)
+        if (savedInstanceState == null) com.oasisreader.app.ui.ReviewInbox.offer(this, intent)
+        addOnNewIntentListener { i -> com.oasisreader.app.ui.ReviewInbox.offer(this, i) }
         setContent {
             OasisTheme {
                 // Surface supplies onBackground as the default text colour (dark mode)
@@ -112,6 +115,9 @@ private object Route {
     const val AUDIO_PLAYER = "audio_player"
     const val DOWNLOADS = "downloads"    // ⬇️ 받기 관리
     const val STORAGE = "storage"        // 📦 보관함 관리
+    const val REVIEWS = "reviews"        // 📝 독후감 (all)
+    const val REVIEW = "review:"         // review:<bookId>
+    const val REVIEW_PICK = "review_pick" // text shared from another app: pick its book
 }
 
 @Composable
@@ -131,6 +137,10 @@ private fun App() {
     var importing by remember { mutableStateOf(false) }
 
     val books by remember { db.books().observeAll() }.collectAsState(initial = null)
+    var reviewReturn by rememberSaveable { mutableStateOf(Route.LIBRARY) }      // where the 독후감 editor goes back to
+    // text shared to the app: ask which book it is about
+    val sharedText = com.oasisreader.app.ui.ReviewInbox.pending
+    LaunchedEffect(sharedText) { if (sharedText != null) route = Route.REVIEW_PICK }
 
     LaunchedEffect(Unit) {
         Downloads.messages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
@@ -324,6 +334,18 @@ private fun App() {
             onStorage = { storageReturn = Route.DOWNLOADS; route = Route.STORAGE },
             onOpen = { id -> books?.firstOrNull { it.id == id }?.let { openShelfBook(it) } },
         )
+        route == Route.REVIEWS -> com.oasisreader.app.ui.ReviewsScreen(
+            onBack = { route = Route.LIBRARY },
+            onOpen = { id -> reviewReturn = Route.REVIEWS; route = Route.REVIEW + id },
+        )
+        route == Route.REVIEW_PICK -> com.oasisreader.app.ui.ReviewPickBookScreen(
+            books = books.orEmpty(),
+            onPick = { id -> com.oasisreader.app.ui.ReviewInbox.handOver(); reviewReturn = Route.LIBRARY; route = Route.REVIEW + id },
+            onCancel = { com.oasisreader.app.ui.ReviewInbox.pending = null; route = Route.LIBRARY },
+        )
+        route.startsWith(Route.REVIEW) -> key(route) {
+            com.oasisreader.app.ui.ReviewEditorScreen(bookId = route.removePrefix(Route.REVIEW), onBack = { route = reviewReturn })
+        }
         route == Route.HIGHLIGHTS -> HighlightsScreen(
             onBack = { route = Route.LIBRARY },
             onOpen = { h -> route = Route.READER + h.bookId + ":" + h.spineIndex + ":" + h.id },
@@ -383,6 +405,8 @@ private fun App() {
             onSettings = { route = Route.SETTINGS },
             onStats = { route = Route.STATS },
             onHighlights = { route = Route.HIGHLIGHTS },
+            onReviews = { route = Route.REVIEWS },
+            onReview = { b -> reviewReturn = Route.LIBRARY; route = Route.REVIEW + b.id },
             onDownloads = { downloadsReturn = Route.LIBRARY; route = Route.DOWNLOADS },
             onStorage = { storageReturn = Route.LIBRARY; route = Route.STORAGE },
             onDelete = { b, keepHl -> scope.launch {

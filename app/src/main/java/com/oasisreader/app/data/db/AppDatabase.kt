@@ -221,6 +221,83 @@ interface RemovedBookDao {
     suspend fun delete(id: String)
 }
 
+/** 독후감: the reader's own writing about a book, one per book. It stays when the book is removed (DB v9). */
+@Entity(tableName = "reviews")
+data class ReviewEntity(
+    @PrimaryKey val bookId: String,
+    val text: String,
+    val rating: Int = 0,          // 0 = none, 1..5 stars
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Dao
+interface ReviewDao {
+    @Query("SELECT * FROM reviews ORDER BY updatedAt DESC")
+    fun observeAll(): Flow<List<ReviewEntity>>
+
+    @Query("SELECT * FROM reviews WHERE bookId = :bookId")
+    suspend fun get(bookId: String): ReviewEntity?
+
+    @Upsert
+    suspend fun upsert(r: ReviewEntity)
+
+    @Query("DELETE FROM reviews WHERE bookId = :bookId")
+    suspend fun delete(bookId: String)
+}
+
+/**
+ * 오디오북 책갈피: a place in an audiobook (track + seconds, with [lengthSec] > 0 for a stretch),
+ * with the reader's note. [text] is for words heard there (captions, later). [trackTitle] is kept
+ * so the mark still reads well when the book is gone (DB v9).
+ */
+@Entity(tableName = "audio_marks", indices = [Index("bookId")])
+data class AudioMarkEntity(
+    @PrimaryKey val id: String,
+    val bookId: String,
+    val track: Int,
+    val startSec: Double,
+    val lengthSec: Double,
+    val trackTitle: String,
+    val note: String? = null,
+    val text: String? = null,
+    val createdAt: Long,
+)
+
+@Dao
+interface AudioMarkDao {
+    @Query("SELECT * FROM audio_marks WHERE bookId = :bookId ORDER BY track, startSec")
+    fun observeFor(bookId: String): Flow<List<AudioMarkEntity>>
+
+    @Query("SELECT * FROM audio_marks ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<AudioMarkEntity>>
+
+    @Query("SELECT * FROM audio_marks WHERE bookId = :bookId ORDER BY track, startSec")
+    suspend fun allFor(bookId: String): List<AudioMarkEntity>
+
+    @Upsert
+    suspend fun upsert(m: AudioMarkEntity)
+
+    @Query("DELETE FROM audio_marks WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM audio_marks WHERE bookId = :bookId")
+    suspend fun deleteForBook(bookId: String)
+
+    @Query("UPDATE audio_marks SET bookId = :to WHERE bookId = :from")
+    suspend fun moveBook(from: String, to: String)
+
+    @Query("SELECT COUNT(*) FROM audio_marks WHERE bookId = :bookId")
+    suspend fun countFor(bookId: String): Int
+}
+
+/** A removed book is forgotten once nothing of it is kept any more (highlights, 책갈피, 독후감). */
+suspend fun AppDatabase.forgetRemovedIfEmpty(id: String) {
+    if (books().get(id) == null && highlights().countFor(id) == 0 && audioMarks().countFor(id) == 0 && reviews().get(id) == null) {
+        removedBooks().delete(id)
+    }
+}
+
 /** A shelf of the user's own (컬렉션): "출퇴근용", "아이들과 함께" … */
 @Entity(tableName = "collections")
 data class CollectionEntity(
@@ -293,8 +370,11 @@ interface ReadingTimeDao {
 }
 
 @Database(
-    entities = [BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class, CollectionEntity::class, BookCollectionEntity::class, RemovedBookEntity::class],
-    version = 8,
+    entities = [
+        BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class, CollectionEntity::class,
+        BookCollectionEntity::class, RemovedBookEntity::class, ReviewEntity::class, AudioMarkEntity::class,
+    ],
+    version = 9,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -304,6 +384,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarks(): BookmarkDao
     abstract fun collections(): CollectionDao
     abstract fun removedBooks(): RemovedBookDao
+    abstract fun reviews(): ReviewDao
+    abstract fun audioMarks(): AudioMarkDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -311,7 +393,7 @@ abstract class AppDatabase : RoomDatabase() {
         // NOTE: once real data exists, schema changes need real Migrations — never a destructive fallback.
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "oasis.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build().also { instance = it }
         }
 
@@ -372,5 +454,14 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
 val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE `books` ADD COLUMN `origin` TEXT")
+    }
+}
+
+/** v9: 독후감 (one per book) and 오디오북 책갈피. */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `reviews` (`bookId` TEXT NOT NULL, `text` TEXT NOT NULL, `rating` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`bookId`))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `audio_marks` (`id` TEXT NOT NULL, `bookId` TEXT NOT NULL, `track` INTEGER NOT NULL, `startSec` REAL NOT NULL, `lengthSec` REAL NOT NULL, `trackTitle` TEXT NOT NULL, `note` TEXT, `text` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_audio_marks_bookId` ON `audio_marks` (`bookId`)")
     }
 }

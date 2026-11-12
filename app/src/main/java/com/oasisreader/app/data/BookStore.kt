@@ -198,6 +198,11 @@ class BookStore(private val context: Context) {
                 (!book.identifier.isNullOrBlank() && r.identifier == book.identifier && r.format == book.format)
         } ?: return
         db.highlights().moveBook(match.id, book.id)
+        db.audioMarks().moveBook(match.id, book.id)
+        db.reviews().get(match.id)?.let { r ->
+            if (db.reviews().get(book.id) == null) db.reviews().upsert(r.copy(bookId = book.id))
+            db.reviews().delete(match.id)
+        }
         db.removedBooks().delete(match.id)
     }
 
@@ -229,11 +234,14 @@ class BookStore(private val context: Context) {
 
     /**
      * Remove a book from the 서재. With [keepHighlights] (and highlights to keep) its highlights
-     * stay, with the title, author and chapter titles they need, in removed_books.
+     * stay, with the title, author and chapter titles they need, in removed_books. Its 독후감
+     * stays either way.
      */
     suspend fun delete(id: String, keepHighlights: Boolean = false) = withContext(Dispatchers.IO) {
         val keep = keepHighlights && db.highlights().countFor(id) > 0
-        if (keep) db.books().get(id)?.let { b ->
+        val keepMarks = keepHighlights && db.audioMarks().countFor(id) > 0     // 오디오북 책갈피 go with the highlights
+        val hasReview = db.reviews().get(id) != null                           // a 독후감 always stays
+        if (keep || keepMarks || hasReview) db.books().get(id)?.let { b ->
             val pkg = if (File(dir(id), "book.json").isFile) runCatching { readPackage(id) }.getOrNull() else null
             val chapters = db.highlights().allFor(id).map { it.spineIndex }.distinct()
                 .associate { i -> i.toString() to HighlightExport.chapterTitle(pkg, i) }
@@ -246,6 +254,7 @@ class BookStore(private val context: Context) {
             )
         }
         if (!keep) db.highlights().deleteForBook(id)
+        if (!keepMarks) db.audioMarks().deleteForBook(id)
         db.bookmarks().deleteForBook(id)
         db.collections().unlinkBook(id)
         db.books().delete(id)

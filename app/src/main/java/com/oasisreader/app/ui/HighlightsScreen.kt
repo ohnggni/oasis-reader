@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.HighlightEntity
+import com.oasisreader.app.data.db.forgetRemovedIfEmpty
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -208,7 +209,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit) {
                     scope.launch {
                         db.highlights().deleteForBook(id)
                         // a removed book with nothing left to keep: forget it too
-                        if (!titles.containsKey(id)) db.removedBooks().delete(id)
+                        db.forgetRemovedIfEmpty(id)
                     }
                 }) { Text("지우기", color = MaterialTheme.colorScheme.error) }
             },
