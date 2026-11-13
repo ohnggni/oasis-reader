@@ -194,8 +194,9 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 
 /* highlight palette shown over a text selection */
 #hlbar {
-  position: fixed; z-index: 10; display: none; gap: 10px; padding: 8px 12px;
+  position: fixed; z-index: 10; display: none; gap: 8px; padding: 8px 12px;
   border-radius: 22px; background: var(--fg); box-shadow: 0 4px 16px rgba(0,0,0,.25);
+  align-items: center; justify-content: center; flex-wrap: wrap; box-sizing: border-box; max-width: calc(100vw - 16px);
 }
 #hlbar button {
   width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bg); padding: 0;
@@ -225,6 +226,35 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   width: auto; border-radius: 14px; padding: 0 10px; margin-left: 4px;
   background: var(--bg); color: var(--fg); font: 600 13px/24px sans-serif; border: 0;
 }
+/* a highlight across pages: start button, "N쪽부터" label, cancel, the start mark and the strip */
+#hlbar button.start {
+  width: auto; border-radius: 14px; padding: 0 10px;
+  background: var(--accent); color: var(--bg); font: 700 13px/24px sans-serif; border: 0;
+}
+#hlbar .from { color: var(--bg); font: 700 12.5px/28px sans-serif; padding: 0 2px; white-space: nowrap; }
+#hlbar button.cancel { background: var(--bg); color: var(--fg); font: 700 15px/24px sans-serif; border: 0; }
+#hlstart {
+  position: fixed; z-index: 6; display: none; width: 3px; border-radius: 2px;
+  background: var(--accent); pointer-events: none;
+}
+#hlstart::before {
+  content: ''; position: absolute; left: -3px; top: -7px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--accent);
+}
+#hlstrip {
+  position: fixed; z-index: 11; left: 12px; right: 12px; bottom: 8px; display: none;
+  align-items: center; gap: 10px; padding: 8px 8px 8px 12px; box-sizing: border-box;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--rule); border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25); font: 13px/1.35 sans-serif; text-align: left;
+}
+#hlstrip .sm { width: 3px; align-self: stretch; border-radius: 2px; background: var(--accent); flex: none; }
+#hlstrip .sx { flex: 1; min-width: 0; }
+#hlstrip .st { font-weight: 700; }
+#hlstrip .ss { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hlstrip button {
+  flex: none; height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--rule);
+  background: transparent; color: var(--fg); font: 600 12.5px/30px sans-serif;
+}
 </style>
 </head>
 <body>
@@ -233,6 +263,8 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   <div id="chapnav"><button id="cprev">◀ 이전 장</button><button id="cnext">다음 장 ▶</button></div>
 </div>
 <div id="hlbar"></div>
+<div id="hlstart"></div>
+<div id="hlstrip"><div class="sm"></div><div class="sx"><div class="st"></div><div class="ss"></div></div><button id="hlcancel">취소</button></div>
 <div id="notepop"><div class="nbody"></div><div class="nbar"><button id="ngo">본문에서 보기</button><button id="nclose">닫기</button></div></div>
 <div id="rhead"></div>
 <script>
@@ -493,7 +525,11 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     }
   }
 
-  /* palette over a selection */
+  /* palette over a selection; with a start kept ("여기서 시작") it reads "N쪽부터 ● ● ● ● ● ×" */
+  var fromLbl = document.createElement('span');
+  fromLbl.className = 'from';
+  fromLbl.style.display = 'none';
+  bar.appendChild(fromLbl);
   CFG.colors.forEach(function (c) {
     var btn = document.createElement('button');
     btn.style.background = c;
@@ -516,6 +552,24 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     });
     bar.appendChild(btn);
   })();
+  var startBtn = document.createElement('button');
+  startBtn.className = 'start';
+  startBtn.textContent = '여기서 시작';
+  startBtn.addEventListener('click', function (e) { e.preventDefault(); startHere(); });
+  bar.appendChild(startBtn);
+  var cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel';
+  cancelBtn.textContent = '✕';
+  cancelBtn.setAttribute('aria-label', '취소');
+  cancelBtn.style.display = 'none';
+  cancelBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    window.getSelection().removeAllRanges();
+    bar.style.display = 'none';
+    clearStart();
+  });
+  bar.appendChild(cancelBtn);
+  var lookBtn = bar.querySelector('button.look');
   bar.style.display = 'none';
 
   function currentSelection() {
@@ -530,7 +584,13 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 
   function showBar() {
     var s = currentSelection();
-    if (!s) { bar.style.display = 'none'; return; }
+    if (!s) { bar.style.display = 'none'; if (hlStart) refreshStrip(); return; }
+    var ending = !!hlStart;
+    fromLbl.style.display = ending ? '' : 'none';
+    cancelBtn.style.display = ending ? '' : 'none';
+    lookBtn.style.display = ending ? 'none' : '';
+    startBtn.style.display = ending ? 'none' : '';
+    if (ending) { fromLbl.textContent = startLabel() + '부터'; strip.style.display = 'none'; }
     /* above the first line of the selection: a selection is usually dragged downward, so the
        bar stays out of the way of the end handle (below only when there is no room above) */
     var rects = s.range.getClientRects();
@@ -548,16 +608,122 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   function createFromSelection(color) {
     var s = currentSelection();
     if (!s) return;
+    var range = s.range, text = s.text, from = -1, to = -1;
+    if (hlStart) {
+      /* from the kept start to this selection (or from this selection to the kept one, if it is earlier) */
+      range = document.createRange();
+      if (hlStart.start.compareBoundaryPoints(Range.START_TO_START, s.range) <= 0) {
+        range.setStart(hlStart.start.startContainer, hlStart.start.startOffset);
+        range.setEnd(s.range.endContainer, s.range.endOffset);
+      } else {
+        range.setStart(s.range.startContainer, s.range.startOffset);
+        range.setEnd(hlStart.end.startContainer, hlStart.end.startOffset);
+      }
+      if (range.compareBoundaryPoints(Range.END_TO_END, s.range) < 0) range.setEnd(s.range.endContainer, s.range.endOffset);
+      if (range.compareBoundaryPoints(Range.END_TO_END, hlStart.end) < 0) range.setEnd(hlStart.end.startContainer, hlStart.end.startOffset);
+      text = range.toString();
+      from = hlStart.page; to = selPage(s.range);
+    }
     var pre = document.createRange();
     pre.setStart(content, 0);
-    pre.setEnd(s.range.endContainer, s.range.endOffset);
+    pre.setEnd(range.endContainer, range.endOffset);
     var anchor = pre.toString().slice(-50);
     var id = String(Date.now());
-    if (s.text.trim().length < 2) return;
-    var h = { id: id, text: s.text.trim(), color: color, anchor: anchor };
+    if (text.trim().length < 2) return;
+    var h = { id: id, text: text.trim(), color: color, anchor: anchor };
     window.getSelection().removeAllRanges();
     bar.style.display = 'none';
-    if (applyHighlight(h)) bridge.addHighlight(h.id, h.text, h.color, h.anchor);
+    var across = hlStart && paged && from >= 0 && to >= 0 && from !== to;
+    clearStart();
+    if (applyHighlight(h)) {
+      bridge.addHighlight(h.id, h.text, h.color, h.anchor);
+      if (across) toast(Math.min(from, to) + 1 + '–' + (Math.max(from, to) + 1) + '쪽에 걸쳐 하이라이트를 남겼어요');
+    }
+  }
+
+  /* ── a highlight across pages: "여기서 시작" keeps where the selection began and lets go of it,
+     so taps, swipes and the volume keys turn pages as usual; the next selection is the end.
+     A new chapter is a new page, so a start never outlives its chapter. ── */
+  var hlStart = null;   /* { start, end: collapsed live Ranges, page, snippet } */
+  var strip = document.getElementById('hlstrip'), startMark = document.getElementById('hlstart');
+  var stripTimer = 0;
+  document.getElementById('hlcancel').addEventListener('click', function (e) { e.preventDefault(); clearStart(); });
+
+  function selPage(r) {
+    if (!paged) return -1;
+    var rs = r.getClientRects(), rc = rs.length ? rs[0] : r.getBoundingClientRect();
+    return Math.max(0, Math.min(total - 1, Math.floor((rc.left + book.scrollLeft + 1) / W())));
+  }
+  function startLabel() { return hlStart && hlStart.page >= 0 ? (hlStart.page + 1) + '쪽' : '시작점'; }
+
+  function startHere() {
+    var s = currentSelection();
+    if (!s) return;
+    var a = document.createRange(); a.setStart(s.range.startContainer, s.range.startOffset); a.collapse(true);
+    var b = document.createRange(); b.setStart(s.range.endContainer, s.range.endOffset); b.collapse(true);
+    var after = document.createRange();
+    after.setStart(s.range.startContainer, s.range.startOffset);
+    after.setEnd(content, content.childNodes.length);
+    var snip = after.toString().replace(/\s+/g, ' ').trim();
+    hlStart = { start: a, end: b, page: selPage(s.range), snippet: snip.length > 14 ? snip.slice(0, 14) + '…' : snip };
+    window.getSelection().removeAllRanges();
+    bar.style.display = 'none';
+    clearTimeout(stripTimer);
+    refreshStrip();
+    requestAnimationFrame(tickStart);
+  }
+  function clearStart() {
+    hlStart = null;
+    startMark.style.display = 'none';
+    if (!stripTimer) strip.style.display = 'none';
+  }
+  function refreshStrip() {
+    if (!hlStart) return;
+    var here = !paged || hlStart.page === page;
+    strip.querySelector('.st').textContent = here ? '시작점을 잡았어요' : startLabel() + '에서 시작';
+    strip.querySelector('.ss').textContent = (here ? '' : '“' + hlStart.snippet + '” · ') +
+      (here ? '쪽을 넘겨 끝낼 글자를 길게 누르세요' : '끝낼 글자를 길게 누르세요');
+    document.getElementById('hlcancel').style.display = '';
+    strip.querySelector('.sm').style.display = '';
+    if (bar.style.display !== 'flex') strip.style.display = 'flex';
+  }
+  function toast(msg) {
+    strip.querySelector('.st').textContent = msg;
+    strip.querySelector('.ss').textContent = '';
+    document.getElementById('hlcancel').style.display = 'none';
+    strip.querySelector('.sm').style.display = 'none';
+    strip.style.display = 'flex';
+    clearTimeout(stripTimer);
+    stripTimer = setTimeout(function () { stripTimer = 0; if (hlStart) refreshStrip(); else strip.style.display = 'none'; }, 2500);
+  }
+  /* the mark before the first kept letter follows the page while it turns */
+  function startRect() {
+    var r = hlStart.start, rs = r.getClientRects();
+    if (rs.length && (rs[0].height || rs[0].width)) return rs[0];
+    try {
+      var n = r.startContainer;
+      if (n.nodeType === 3 && r.startOffset < n.nodeValue.length) {
+        var x = document.createRange(); x.setStart(n, r.startOffset); x.setEnd(n, r.startOffset + 1);
+        rs = x.getClientRects();
+        if (rs.length) return rs[0];
+      }
+    } catch (e) {}
+    return null;
+  }
+  var lastStripPage = -2;
+  function tickStart() {
+    if (!hlStart) return;
+    var rc = startRect();
+    if (!rc || rc.right < 0 || rc.left > W() || rc.bottom < 0 || rc.top > window.innerHeight) {
+      startMark.style.display = 'none';
+    } else {
+      startMark.style.display = 'block';
+      startMark.style.left = (rc.left - 4) + 'px';
+      startMark.style.top = rc.top + 'px';
+      startMark.style.height = Math.max(12, rc.height) + 'px';
+    }
+    if (paged && page !== lastStripPage && !stripTimer) { lastStripPage = page; refreshStrip(); }
+    requestAnimationFrame(tickStart);
   }
 
   var selTimer = null;
@@ -924,6 +1090,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     var dx = t.clientX - sx, dy = t.clientY - sy;
     var target = e.target;
     if (target.closest && target.closest('#hlbar')) return;
+    if (target.closest && target.closest('#hlstrip')) return;
     if (target.closest && target.closest('#chapnav')) return;
     if (currentSelection()) return;                 /* selecting text: don't page */
     var isTap = Math.abs(dx) < 10 && Math.abs(dy) < 10 && Date.now() - st < 400;
