@@ -194,7 +194,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 
 /* highlight palette shown over a text selection */
 #hlbar {
-  position: fixed; z-index: 10; display: none; gap: 8px; padding: 8px 12px;
+  position: fixed; z-index: 13; display: none; gap: 8px; padding: 8px 12px;
   border-radius: 22px; background: var(--fg); box-shadow: 0 4px 16px rgba(0,0,0,.25);
   align-items: center; justify-content: center; flex-wrap: wrap; box-sizing: border-box; max-width: calc(100vw - 16px);
 }
@@ -218,6 +218,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 }
 #notepop .nbody p { margin: 0 0 .5em !important; }
 #notepop .nbody img { max-width: 100%; height: auto; }
+#notepop .nbody a[data-url] { color: var(--accent) !important; text-decoration: underline !important; word-break: break-all; }
 #notepop .nbar { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 #notepop .nbar button { background: none; border: 0; color: var(--accent); font: 600 14px/32px sans-serif; padding: 0 10px; }
 /* read aloud: the sentence being spoken (CSS Custom Highlight, no DOM change) */
@@ -530,8 +531,10 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   fromLbl.className = 'from';
   fromLbl.style.display = 'none';
   bar.appendChild(fromLbl);
+  var colorBtns = [];
   CFG.colors.forEach(function (c) {
     var btn = document.createElement('button');
+    colorBtns.push(btn);
     btn.style.background = c;
     btn.addEventListener('click', function (e) { e.preventDefault(); createFromSelection(c); });
     bar.appendChild(btn);
@@ -543,7 +546,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     btn.textContent = '찾아보기';
     btn.addEventListener('click', function (e) {
       e.preventDefault();
-      var s = currentSelection();
+      var s = currentSelection() || noteSelection();
       if (!s) return;
       var t = s.text.trim();
       window.getSelection().removeAllRanges();
@@ -569,6 +572,35 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     clearStart();
   });
   bar.appendChild(cancelBtn);
+  /* inside a footnote: copy and, for an address, open */
+  var copyBtn = document.createElement('button');
+  copyBtn.className = 'look';
+  copyBtn.textContent = '복사';
+  copyBtn.style.display = 'none';
+  copyBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    var s = noteSelection() || currentSelection();
+    if (!s) return;
+    var t = s.text.trim();
+    window.getSelection().removeAllRanges();
+    bar.style.display = 'none';
+    if (bridge.copy) bridge.copy(t);
+    else if (navigator.clipboard) navigator.clipboard.writeText(t).catch(noop);
+  });
+  bar.appendChild(copyBtn);
+  var openBtn = document.createElement('button');
+  openBtn.className = 'start';
+  openBtn.textContent = '열기';
+  openBtn.style.display = 'none';
+  openBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    var s = noteSelection() || currentSelection();
+    var u = s ? looseUrl(s.text) : null;
+    window.getSelection().removeAllRanges();
+    bar.style.display = 'none';
+    if (u) bridge.link(u);
+  });
+  bar.appendChild(openBtn);
   var lookBtn = bar.querySelector('button.look');
   bar.style.display = 'none';
 
@@ -582,15 +614,84 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     return { range: r, text: text };
   }
 
+  /* a selection inside the footnote popup (no highlight there: the note lives elsewhere in the book) */
+  function noteSelection() {
+    if (!popOpen()) return null;
+    var sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+    var r = sel.getRangeAt(0);
+    if (!popBody.contains(r.commonAncestorContainer)) return null;
+    var text = sel.toString();
+    if (!text.trim()) return null;
+    return { range: r, text: text };
+  }
+
+  /* ── addresses in notes. Strict (drawn as links without selecting): http(s)://…, www.…,
+     doi:10.…, or name.known-ending followed by a path (doi.org/…, bit.ly/…, x.co.kr/…).
+     Loose (the 열기 button on a selection the reader picked): any word.word without spaces. ── */
+  var URL_TLD = '(?:com|net|org|edu|gov|mil|int|info|biz|io|co|me|ly|ai|app|dev|tv|us|uk|ca|au|eu|de|fr|jp|cn|kr|ac\\.kr|go\\.kr|or\\.kr|co\\.kr|ne\\.kr|re\\.kr|co\\.jp|ac\\.jp|co\\.uk|ac\\.uk)';
+  var URL_CH = "[A-Za-z0-9\\-._~:/?#\\[\\]@!&'()*+,;=%]";
+  var URL_RE = new RegExp('(^|[^A-Za-z0-9.@/_-])(' +
+    'https?://' + URL_CH + '+' +
+    '|www\\.' + URL_CH + '+' +
+    '|doi:\\s?10\\.[0-9]{4,9}/' + URL_CH + '+' +
+    '|(?:[A-Za-z0-9-]+\\.)+' + URL_TLD + '/' + URL_CH + '*' +
+    ')', 'gi');
+  function trimUrl(u) { return u.replace(/[.,;:!?'")\]]+$/, ''); }
+  function hrefOf(u) {
+    if (/^https?:\/\//i.test(u)) return u;
+    if (/^doi:/i.test(u)) return 'https://doi.org/' + u.replace(/^doi:\s?/i, '');
+    return 'https://' + u;
+  }
+  function looseUrl(t) {
+    t = trimUrl((t || '').trim());
+    if (!t || /\s/.test(t) || t.length > 2000) return null;
+    if (/^doi:\s?10\./i.test(t)) return hrefOf(t);
+    if (/^https?:\/\/[^/]+\.[^/]+/i.test(t)) return t;
+    var host = t.split(/[/?#]/)[0];
+    if (host === t && /\.(jpe?g|png|gif|webp|svg|pdf|epub|txt|md|x?html?|css|js|zip)$/i.test(host)) return null;   /* a file name */
+    if (/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(host)) return 'https://' + t;
+    return null;
+  }
+  function linkify(root) {
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n, list = [];
+    while ((n = w.nextNode())) { if (!n.parentNode.closest('a')) list.push(n); }
+    list.forEach(function (node) {
+      var t = node.nodeValue, m, last = 0, frag = null;
+      URL_RE.lastIndex = 0;
+      while ((m = URL_RE.exec(t))) {
+        var u = trimUrl(m[2]);
+        if (!u) continue;
+        var at = m.index + m[1].length;
+        if (!frag) frag = document.createDocumentFragment();
+        frag.appendChild(document.createTextNode(t.slice(last, at)));
+        var a = document.createElement('a');
+        a.setAttribute('data-url', hrefOf(u));
+        a.textContent = u;
+        frag.appendChild(a);
+        last = at + u.length;
+        URL_RE.lastIndex = last;
+      }
+      if (!frag) return;
+      frag.appendChild(document.createTextNode(t.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
   function showBar() {
     var s = currentSelection();
-    if (!s) { bar.style.display = 'none'; if (hlStart) refreshStrip(); return; }
-    var ending = !!hlStart;
+    var note = s ? null : noteSelection();
+    if (!s && !note) { bar.style.display = 'none'; if (hlStart) refreshStrip(); return; }
+    if (note) s = note;
+    var ending = !note && !!hlStart;
+    for (var ci = 0; ci < colorBtns.length; ci++) colorBtns[ci].style.display = note ? 'none' : '';
     fromLbl.style.display = ending ? '' : 'none';
     cancelBtn.style.display = ending ? '' : 'none';
     lookBtn.style.display = ending ? 'none' : '';
-    startBtn.style.display = ending ? 'none' : '';
-    if (ending) { fromLbl.textContent = startLabel() + '부터'; strip.style.display = 'none'; }
+    startBtn.style.display = (note || ending) ? 'none' : '';
+    copyBtn.style.display = note ? '' : 'none';
+    openBtn.style.display = note && looseUrl(note.text) ? '' : 'none';
+    if (ending) { fromLbl.textContent = startLabel() + '부터'; setStrip(false); }
     /* above the first line of the selection: a selection is usually dragged downward, so the
        bar stays out of the way of the end handle (below only when there is no room above) */
     var rects = s.range.getClientRects();
@@ -654,6 +755,12 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     var rs = r.getClientRects(), rc = rs.length ? rs[0] : r.getBoundingClientRect();
     return Math.max(0, Math.min(total - 1, Math.floor((rc.left + book.scrollLeft + 1) / W())));
   }
+  /* the strip sits over the page number: the app hides its number while the strip is up */
+  var stripUp = false;
+  function setStrip(on) {
+    strip.style.display = on ? 'flex' : 'none';
+    if (stripUp !== !!on) { stripUp = !!on; if (bridge.cover) bridge.cover(stripUp); }
+  }
   function startLabel() { return hlStart && hlStart.page >= 0 ? (hlStart.page + 1) + '쪽' : '시작점'; }
 
   function startHere() {
@@ -675,7 +782,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   function clearStart() {
     hlStart = null;
     startMark.style.display = 'none';
-    if (!stripTimer) strip.style.display = 'none';
+    if (!stripTimer) setStrip(false);
   }
   function refreshStrip() {
     if (!hlStart) return;
@@ -685,16 +792,16 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
       (here ? '쪽을 넘겨 끝낼 글자를 길게 누르세요' : '끝낼 글자를 길게 누르세요');
     document.getElementById('hlcancel').style.display = '';
     strip.querySelector('.sm').style.display = '';
-    if (bar.style.display !== 'flex') strip.style.display = 'flex';
+    if (bar.style.display !== 'flex') setStrip(true);
   }
   function toast(msg) {
     strip.querySelector('.st').textContent = msg;
     strip.querySelector('.ss').textContent = '';
     document.getElementById('hlcancel').style.display = 'none';
     strip.querySelector('.sm').style.display = 'none';
-    strip.style.display = 'flex';
+    setStrip(true);
     clearTimeout(stripTimer);
-    stripTimer = setTimeout(function () { stripTimer = 0; if (hlStart) refreshStrip(); else strip.style.display = 'none'; }, 2500);
+    stripTimer = setTimeout(function () { stripTimer = 0; if (hlStart) refreshStrip(); else setStrip(false); }, 2500);
   }
   /* the mark before the first kept letter follows the page while it turns */
   function startRect() {
@@ -982,8 +1089,12 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     c.querySelectorAll('script, style').forEach(function (x) { x.remove(); });
     c.querySelectorAll('a').forEach(function (x) {
       var t = typeOf(x), s = (x.textContent || '').trim();
+      var href = x.getAttribute('href') || '';
       if (/backlink/.test(t) || /^[↩↑⤴︎]/.test(s) || /^(돌아가기|back)$/i.test(s)) x.remove();
-      else x.removeAttribute('href');
+      else {
+        if (/^(https?:|mailto:)/i.test(href)) x.setAttribute('data-url', href);
+        x.removeAttribute('href');
+      }
     });
     c.querySelectorAll('[id], [class], [style]').forEach(function (x) {
       x.removeAttribute('id'); x.removeAttribute('class'); x.removeAttribute('style');
@@ -992,6 +1103,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   }
   function showNote(html, href) {
     popBody.innerHTML = html; popHref = href;
+    try { linkify(popBody); } catch (e) {}
     /* sizes in px from the window: 52vh can resolve to 0 in a WebView laid out late,
        which squeezed the popup to its padding (one cut line, no buttons) */
     var vh = window.innerHeight || document.documentElement.clientHeight || 600;
@@ -1019,7 +1131,11 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   }
 
   document.addEventListener('click', function (e) {
-    if (popOpen() && pop.contains(e.target)) return;
+    if (popOpen() && pop.contains(e.target)) {
+      var u = e.target.closest && e.target.closest('#notepop a[data-url]');
+      if (u && !noteSelection()) { e.preventDefault(); bridge.link(u.getAttribute('data-url')); }
+      return;
+    }
     var a = e.target.closest && e.target.closest('a[href]');
     if (!a || !content.contains(a)) return;
     e.preventDefault();
@@ -1079,7 +1195,7 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     clearTimeout(pressTimer);
     if (pressOpened) { pressOpened = false; return; }   /* the long press already opened the picture */
     if (popOpen()) {
-      if (!pop.contains(e.target) && dragTurn === null) closePop();
+      if (!pop.contains(e.target) && !bar.contains(e.target) && dragTurn === null) closePop();
       if (dragTurn === null) return;
     }
     if (dragTurn !== null) {

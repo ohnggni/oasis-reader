@@ -205,6 +205,7 @@ private fun ReaderBody(
 
     var barsVisible by remember { mutableStateOf(true) }
     var pageLabel by remember { mutableStateOf("") }
+    var pageCovered by remember { mutableStateOf(false) }   // the page's own strip (multi-page highlight) is over the number
     var pageTotal by remember { mutableIntStateOf(0) }
     var fontPx by remember { mutableIntStateOf(prefs.fontPx) }
     var lineHeight by remember { mutableIntStateOf(prefs.lineHeight) }
@@ -401,6 +402,7 @@ private fun ReaderBody(
             )
             curIndex = t.index
             pageLabel = ""
+            pageCovered = false
             LoadState.Ready(html, doc.url, t.token)
         } catch (e: Exception) {
             LoadState.Failed("이 장을 여는 중 문제가 생겼습니다: ${e.message}")
@@ -939,6 +941,13 @@ private fun ReaderBody(
                         onLink = { url -> openLink(url) },
                         onJump = { rememberJump() },
                         onReady = { aloudOnReady() },   // a chapter opened while reading aloud
+                        onCover = { on -> pageCovered = on },
+                        onCopy = { t ->
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("text", t))
+                            // Android 13+ shows its own copied notice
+                            if (android.os.Build.VERSION.SDK_INT < 33) android.widget.Toast.makeText(context, "복사했습니다", android.widget.Toast.LENGTH_SHORT).show()
+                        },
                         onDrag = { phase, x, y, extra ->
                             // a curl dragged with the finger: x, y in page CSS px (scaled to the view)
                             val wv = webView
@@ -1273,7 +1282,7 @@ private fun ReaderBody(
             )
 
             // page indicator — book mode: "3 / 34 · 12%", scroll mode: "12%"
-            if (readingChrome.pageNum && (state is LoadState.Ready || turnShot != null)) {
+            if (readingChrome.pageNum && !pageCovered && (state is LoadState.Ready || turnShot != null)) {
                 val pct = "${(overall * 100).roundToInt()}%"
                 val label = if (mode == ReaderMode.PAGE && pageLabel.isNotEmpty()) "$pageLabel  ·  $pct" else pct
                 if (mode == ReaderMode.SCROLL) {
@@ -1594,6 +1603,8 @@ private fun ReaderWebView(
     onTurn: (Boolean, Float) -> Unit,
     onDrag: (Int, Float, Float, Float) -> Unit,
     onReady: () -> Unit = {},
+    onCover: (Boolean) -> Unit = {},
+    onCopy: (String) -> Unit = {},
     sidePad: Dp = 0.dp,
 ) {
     val context = LocalContext.current
@@ -1622,6 +1633,8 @@ private fun ReaderWebView(
     callbacks.onTurn = onTurn
     callbacks.onDrag = onDrag
     callbacks.onReady = onReady
+    callbacks.onCover = onCover
+    callbacks.onCopy = onCopy
     val bridge = remember { JsBridge(main, callbacks) }
 
     AndroidView(
@@ -1674,6 +1687,8 @@ private class Callbacks {
     var onTurn: (Boolean, Float) -> Unit = { _, _ -> }
     var onDrag: (Int, Float, Float, Float) -> Unit = { _, _, _, _ -> }
     var onReady: () -> Unit = {}
+    var onCover: (Boolean) -> Unit = {}
+    var onCopy: (String) -> Unit = {}
 }
 
 /** Called from the page script (window.Oasis). Calls arrive on a background thread. */
@@ -1695,6 +1710,8 @@ private class JsBridge(private val main: Handler, private val cb: Callbacks) {
     @JavascriptInterface fun dragMove(x: Float, y: Float) { main.post { cb.onDrag(1, x, y, 0f) } }
     @JavascriptInterface fun dragEnd(dx: Float, vx: Float) { main.post { cb.onDrag(2, dx, 0f, vx) } }
     @JavascriptInterface fun ready() { main.post { cb.onReady() } }
+    @JavascriptInterface fun cover(on: Boolean) { main.post { cb.onCover(on) } }
+    @JavascriptInterface fun copy(text: String) { main.post { cb.onCopy(text) } }
 }
 
 private fun android.content.Context.findActivity(): Activity? {
