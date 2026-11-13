@@ -63,12 +63,13 @@ fun OasisTheme(
     // theme): then the app's reading-theme colours do not fit, and the plain light / dark set is used.
     val worn = ThemeMode.reader?.takeIf { it.dark == darkTheme }
     val scheme = if (worn != null) remember(worn) { schemeOf(worn) } else if (darkTheme) DarkColors else LightColors
+    // Always the same shape, whatever the size step: switching between "provide" and "don't" at
+    // 보통 (factor 1) would drop and rebuild everything below, and the app's screen (route) with it.
     val d = LocalDensity.current
-    if (scaleText && UiScale.factor != 1f) {
-        CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * UiScale.factor)) {
-            MaterialTheme(colorScheme = scheme, content = content)
-        }
-    } else MaterialTheme(colorScheme = scheme, content = content)
+    val f = if (scaleText) UiScale.factor else 1f
+    CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * f)) {
+        MaterialTheme(colorScheme = scheme, content = content)
+    }
 }
 
 /** Bar colour for a screen of the given darkness: the worn reading theme's rule colour when it fits. */
