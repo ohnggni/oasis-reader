@@ -7,6 +7,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
+import android.media.AudioManager
 import android.content.pm.ServiceInfo
 import android.media.MediaMetadata
 import android.media.session.MediaSession
@@ -33,6 +36,20 @@ class ReadAloudService : Service() {
 
     private var session: MediaSession? = null
 
+    /**
+     * Earphones out / Bluetooth gone (a headset put in its case): pause, as the audiobook player
+     * does. Without this the reading went on out of the phone's speaker (TODO 54). A "play" sent by
+     * the headset or the phone in the next 10 s is ignored; ▶ in the app or the notification works.
+     */
+    private var noisyAt = 0L
+    private val noisy = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            if (i?.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
+            if (player?.playing == true) { noisyAt = android.os.SystemClock.elapsedRealtime(); player?.toggle() }
+        }
+    }
+    private fun playBlocked() = noisyAt != 0L && android.os.SystemClock.elapsedRealtime() - noisyAt < 10_000L
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -48,7 +65,7 @@ class ReadAloudService : Service() {
         }
         session = MediaSession(this, "OGReaderReadAloud").apply {
             setCallback(object : MediaSession.Callback() {
-                override fun onPlay() { if (player?.playing == false) player?.toggle() }
+                override fun onPlay() { if (player?.playing == false && !playBlocked()) player?.toggle() }
                 override fun onPause() { if (player?.playing == true) player?.toggle() }
                 override fun onSkipToNext() { player?.skip(1) }
                 override fun onSkipToPrevious() { player?.skip(-1) }
@@ -57,6 +74,8 @@ class ReadAloudService : Service() {
             isActive = true
         }
         instance = this
+        val f = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(noisy, f, Context.RECEIVER_NOT_EXPORTED) else registerReceiver(noisy, f)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -127,6 +146,7 @@ class ReadAloudService : Service() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        runCatching { unregisterReceiver(noisy) }
         session?.release(); session = null
         super.onDestroy()
     }
