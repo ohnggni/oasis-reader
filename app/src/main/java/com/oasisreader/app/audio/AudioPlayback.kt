@@ -97,7 +97,7 @@ object AudioPlayback {
     var book by mutableStateOf<AudioBook?>(null)
         private set
     var playing by mutableStateOf(false)
-
+        private set
     /** When playback last stopped because the earphones went away (0 = not since the last play). */
     @Volatile var noisyAt = 0L
     private const val NOISY_GUARD_MS = 10_000L
@@ -105,7 +105,6 @@ object AudioPlayback {
     /** A play from outside the app (headset, notification, lock screen) within 10 s of that is ignored. */
     fun externalPlayBlocked(): Boolean =
         noisyAt != 0L && android.os.SystemClock.elapsedRealtime() - noisyAt < NOISY_GUARD_MS
-        private set
     var trackIndex by mutableIntStateOf(0)
         private set
     var positionMs by mutableLongStateOf(0L)
