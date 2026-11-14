@@ -97,6 +97,14 @@ object AudioPlayback {
     var book by mutableStateOf<AudioBook?>(null)
         private set
     var playing by mutableStateOf(false)
+
+    /** When playback last stopped because the earphones went away (0 = not since the last play). */
+    @Volatile var noisyAt = 0L
+    private const val NOISY_GUARD_MS = 10_000L
+
+    /** A play from outside the app (headset, notification, lock screen) within 10 s of that is ignored. */
+    fun externalPlayBlocked(): Boolean =
+        noisyAt != 0L && android.os.SystemClock.elapsedRealtime() - noisyAt < NOISY_GUARD_MS
         private set
     var trackIndex by mutableIntStateOf(0)
         private set
@@ -144,6 +152,12 @@ object AudioPlayback {
             .build()
         p.setPlaybackSpeed(speed)
         p.addListener(object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                // earphones out / Bluetooth gone: remember when, so a "play" sent right after by the
+                // headset or the phone does not start it again on the speaker (see AudioService)
+                noisyAt = if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY)
+                    android.os.SystemClock.elapsedRealtime() else if (playWhenReady) 0L else noisyAt
+            }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
                 if (!isPlaying) save()

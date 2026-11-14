@@ -2,6 +2,7 @@ package com.oasisreader.app.audio
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -22,7 +23,7 @@ class AudioService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        session = MediaSession.Builder(this, p).setId("og-audiobook").setSessionActivity(open).build()
+        session = MediaSession.Builder(this, GuardedPlayer(p)).setId("og-audiobook").setSessionActivity(open).build()
             .also { addSession(it) }
     }
 
@@ -33,6 +34,19 @@ class AudioService : MediaSessionService() {
         val p = session?.player
         if (p == null || !p.playWhenReady || p.mediaItemCount == 0 || p.playbackState == Player.STATE_ENDED) {
             AudioPlayback.save(); stopSelf()
+        }
+    }
+
+    /**
+     * The player as the outside world sees it. Right after the earphones went away (a Bluetooth
+     * headset put in its case), some headsets and phones send "play" again, and the book went on
+     * out loud. Those plays are ignored for a few seconds; ▶ inside the app uses the player itself.
+     */
+    private class GuardedPlayer(p: Player) : ForwardingPlayer(p) {
+        override fun play() { if (!AudioPlayback.externalPlayBlocked()) super.play() }
+        override fun setPlayWhenReady(playWhenReady: Boolean) {
+            if (playWhenReady && AudioPlayback.externalPlayBlocked()) return
+            super.setPlayWhenReady(playWhenReady)
         }
     }
 
