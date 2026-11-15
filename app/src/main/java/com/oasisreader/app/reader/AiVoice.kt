@@ -68,7 +68,7 @@ object AiVoice {
     }
 }
 
-/** The card at the top of the voice dialog: install → use → download voices → in use. */
+/** The card at the top of the voice dialog: install → use → download voices → in use (no button). */
 @Composable
 internal fun AiVoiceCard(ra: ReadAloud, engines: List<Pair<String, String>>, engine: String?, voiceCount: Int, onChanged: () -> Unit) {
     val ctx = LocalContext.current
@@ -96,8 +96,8 @@ internal fun AiVoiceCard(ra: ReadAloud, engines: List<Pair<String, String>>, eng
             label = "목소리 받기"; act = { AiVoice.openApp(ctx) }
         }
         else -> {
+            // BookFusion downloads its voices all at once: nothing more to get here
             note = "AI가 만든 목소리로 읽습니다. 아래 목소리를 누르면 바로 들어 볼 수 있습니다."
-            label = "목소리 더 받기"; act = { AiVoice.openApp(ctx) }
         }
     }
     val button = label
