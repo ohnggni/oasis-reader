@@ -200,6 +200,14 @@ class ReadAloud(context: Context) {
         if (wasPlaying) pending = { speakFrom(index) }
     }
 
+    /** Reconnect to the engine: it may have new voices after downloading some in its own app. */
+    fun reload() {
+        if (playing) return
+        session++
+        runCatching { tts.stop(); tts.shutdown() }
+        tts = create()
+    }
+
     /** Voices of the engine for the book's language (all voices if [all]). */
     fun voices(all: Boolean = false): List<Voice> {
         val vs = runCatching { tts.voices?.toList() }.getOrNull().orEmpty()

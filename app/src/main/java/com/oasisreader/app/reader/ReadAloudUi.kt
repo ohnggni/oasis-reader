@@ -34,6 +34,11 @@ import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -143,12 +148,27 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
     val voices = remember(rev, ra.available, all) { ra.voices(all) }
     var picked by remember(rev) { mutableStateOf(ra.voiceName()) }
     val sample = "안녕하세요. 이 목소리로 책을 읽어 드립니다."
+    // back from the store / the AI voice app: pick it up (new engine, or new voices in it)
+    val ctx = LocalContext.current
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            if (AiVoice.takeReturn(ctx) && ra.engines().any { it.first == AiVoice.PKG }) {
+                if (ra.engine() != AiVoice.PKG) ra.setEngine(AiVoice.PKG) else ra.reload()
+            }
+            rev++
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("목소리") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
                 if (engines.size > 1) {
                     Text("음성 엔진", style = MaterialTheme.typography.labelLarge)
                     engines.forEach { (pkg, label) ->
@@ -178,7 +198,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                         }
                         items(voices, key = { it.name }) { v ->
                             VoiceRow(voiceLabel(v, voices), voiceNote(v), picked == v.name,
-                                onPick = { picked = v.name; ra.setVoice(v) }, onPlay = { ra.preview(v, sample) })
+                                onPick = { picked = v.name; ra.setVoice(v); if (!ra.playing) ra.preview(v, sample) }, onPlay = { ra.preview(v, sample) })
                         }
                     }
                 }
