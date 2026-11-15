@@ -79,7 +79,7 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
         shadowElevation = 6.dp,
     ) {
         Row(Modifier.height(44.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("≡", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 8.dp, end = 2.dp))
+            DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
             BarButton("⏮", "이전 문장") { ra.skip(-1) }
             BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기") { ra.toggle() }
             BarButton("⏭", "다음 문장") { ra.skip(1) }
@@ -246,3 +246,34 @@ private fun voiceNote(v: Voice): String = listOfNotNull(
     if (v.isNetworkConnectionRequired) "인터넷 필요" else null,
     v.name,
 ).joinToString(" · ")
+
+/**
+ * The bar's drag handle: six dots (the common "move me" mark). It used to be "≡", which reads as a
+ * menu button, so readers tapped it and nothing happened; a tap now says what it is for.
+ */
+@Composable
+private fun DragGrip(color: Color) {
+    val ctx = LocalContext.current
+    Box(
+        Modifier
+            .padding(start = 4.dp)
+            .size(width = 22.dp, height = 36.dp)
+            .clickable { com.oasisreader.app.ui.Notice.show(ctx, "막대를 끌어서 원하는 곳으로 옮길 수 있습니다") }
+            .semantics { contentDescription = "끌어서 막대 옮기기" },
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.size(width = 8.dp, height = 14.dp)) {
+            val r = size.width * 0.16f
+            for (col in 0..1) for (row in 0..2) {
+                drawCircle(
+                    color,
+                    radius = r,
+                    center = androidx.compose.ui.geometry.Offset(
+                        x = r + col * (size.width - 2 * r),
+                        y = r + row * (size.height - 2 * r) / 2f,
+                    ),
+                )
+            }
+        }
+    }
+}
