@@ -852,6 +852,11 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
   var tts = null;
   var TTS_BLOCK = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, td, th, figcaption, caption, pre, div, section, article, aside, header, footer, table';
   var TTS_END = '.!?。！？…', TTS_CLOSE = '.!?。！？…"\'”’」』)]）〉》';
+  /* a sentence also ends with no space before a Korean letter or an opening quote (텍본 EPUBs);
+     invisible spaces count as spaces; a long sentence is cut again at a comma or a space */
+  var TTS_OPEN = '“‘「『（〈《([', TTS_LONG = 120, TTS_MIN = 30;
+  function ttsSpace(c) { return /\s/.test(c) || /[\u200B-\u200D\u2060\uFEFF]/.test(c); }
+  function ttsAfter(c) { return ttsSpace(c) || TTS_OPEN.indexOf(c) >= 0 || /[\uAC00-\uD7A3\u3131-\u318E]/.test(c); }
   /* note references are not read: a note link (any form), or a small raised number / mark */
   var skipCache = new Map();
   function ttsSkip(el) {
@@ -888,10 +893,10 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
       if (!seg) return;
       var s = seg.text, a = 0;
       function push(x, y) {
-        while (x < y && /\s/.test(s.charAt(x))) x++;
-        while (y > x && /\s/.test(s.charAt(y - 1))) y--;
+        while (x < y && ttsSpace(s.charAt(x))) x++;
+        while (y > x && ttsSpace(s.charAt(y - 1))) y--;
         if (y <= x) return;
-        var t = s.slice(x, y).replace(/\s+/g, ' ');
+        var t = s.slice(x, y).replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
         if (!/[0-9A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7A3]/.test(t)) return;
         var r = document.createRange();
         var A = at(x, false), B = at(y, true);
@@ -907,17 +912,31 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
         var last = ns[ns.length - 1];
         return { node: last.node, off: last.node.nodeValue.length };
       }
+      /* a long sentence: cut at the last comma (then the last space) before TTS_LONG letters */
+      function piece(x, y) {
+        while (y - x > TTS_LONG) {
+          var lim = x + TTS_LONG, cut = -1, k;
+          for (k = lim; k > x + TTS_MIN; k--) if (',，、'.indexOf(s.charAt(k - 1)) >= 0 && ttsSpace(s.charAt(k))) { cut = k; break; }
+          if (cut < 0) for (k = lim; k > x + TTS_MIN; k--) if (ttsSpace(s.charAt(k))) { cut = k; break; }
+          if (cut < 0) cut = lim;
+          if (y - cut < TTS_MIN) break;
+          push(x, cut); x = cut;
+        }
+        push(x, y);
+      }
       for (var i = 0; i < s.length; i++) {
         if (TTS_END.indexOf(s.charAt(i)) < 0) continue;
         var j = i + 1;
         while (j < s.length && TTS_CLOSE.indexOf(s.charAt(j)) >= 0) j++;
-        if (j >= s.length || /\s/.test(s.charAt(j))) { push(a, j); a = j; i = j - 1; }
+        if (j >= s.length || ttsAfter(s.charAt(j))) { piece(a, j); a = j; i = j - 1; }
       }
-      push(a, s.length);
+      piece(a, s.length);
       seg = null;
     }
-    var w = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null), n;
+    var w = document.createTreeWalker(content, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null), n;
     while ((n = w.nextNode())) {
+      /* <br> ends a sentence (텍본 EPUBs put whole chapters in one <p> split by <br>) */
+      if (n.nodeType === 1) { if (n.tagName === 'BR') flush(); continue; }
       var par = n.parentNode;
       if (!par || !par.closest) continue;
       if (par.closest('rt, rp, script, style, noscript')) continue;
