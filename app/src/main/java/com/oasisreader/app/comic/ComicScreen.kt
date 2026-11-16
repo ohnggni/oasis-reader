@@ -317,6 +317,11 @@ private fun ComicViewer(
     var finished by remember { mutableStateOf(book.finishedAt != null) }
     // 다음 권 (looked up at the last page)
     var nextVol by remember { mutableStateOf<com.oasisreader.app.data.NextVolume?>(null) }
+    // 이전 권 (웹툰 스크롤: asked after pulling down at the top)
+    var prevVol by remember { mutableStateOf<com.oasisreader.app.data.NextVolume?>(null) }
+    var prevAsked by remember { mutableStateOf(false) }
+    var prevSearching by remember { mutableStateOf(false) }
+    var prevAsk by remember { mutableStateOf(false) }
     var nextAsked by remember { mutableStateOf(false) }
     var nextClosed by remember { mutableStateOf(false) }
     var nextSearching by remember { mutableStateOf(false) }
@@ -747,6 +752,9 @@ private fun ComicViewer(
                     val pullPx = with(density) { 110.dp.toPx() }
                     var pulled by remember { mutableFloatStateOf(0f) }
                     var pullOpened by remember { mutableStateOf(false) }
+                    // at the very top, pulling down a little more asks about the volume before (going
+                    // back is rarer, so it asks instead of opening straight away)
+                    var pulledTop by remember { mutableFloatStateOf(0f) }
                     val pullToNext = remember(listState) {
                         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
                             override fun onPostScroll(
@@ -764,10 +772,25 @@ private fun ComicViewer(
                                         com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook)
                                     }
                                 } else if (consumed.y > 0f || available.y > 0f) pulled = 0f
+                                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput &&
+                                    available.y > 0f && !listState.canScrollBackward
+                                ) {
+                                    pulledTop += available.y
+                                    if (pulledTop >= pullPx && !prevAsk) {
+                                        prevAsk = true
+                                        if (!prevAsked) {
+                                            prevAsked = true; prevSearching = true
+                                            scope.launch {
+                                                prevVol = runCatching { com.oasisreader.app.data.NextVolumes.findPrevious(app, book) }.getOrNull()
+                                                prevSearching = false
+                                            }
+                                        }
+                                    }
+                                } else if (consumed.y < 0f || available.y < 0f) pulledTop = 0f
                                 return androidx.compose.ui.geometry.Offset.Zero
                             }
                             override suspend fun onPostFling(consumed: androidx.compose.ui.unit.Velocity, available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
-                                pulled = 0f
+                                pulled = 0f; pulledTop = 0f
                                 return androidx.compose.ui.unit.Velocity.Zero
                             }
                         }
@@ -974,6 +997,29 @@ private fun ComicViewer(
                 }
             }
         }
+
+        if (prevAsk) androidx.compose.material3.AlertDialog(
+            onDismissRequest = { prevAsk = false },
+            title = { Text("이전 권으로 갈까요?") },
+            text = {
+                val p = prevVol
+                Text(
+                    when {
+                        p != null -> p.title
+                        prevSearching -> "이전 권을 찾는 중…"
+                        else -> "이전 권을 찾지 못했습니다."
+                    }
+                )
+            },
+            confirmButton = {
+                val p = prevVol
+                TextButton(
+                    enabled = p != null,
+                    onClick = { prevAsk = false; if (p != null) com.oasisreader.app.reader.openNextVolume(context, p, onOpenBook) },
+                ) { Text("열기") }
+            },
+            dismissButton = { TextButton(onClick = { prevAsk = false }) { Text("취소") } },
+        )
 
         // the last page: the next volume, one tap away
         // 쪽 넘기기: a card on the last page. 웹툰 스크롤: the button in the "— 끝 —" tail (the card came

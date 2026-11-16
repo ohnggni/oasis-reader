@@ -71,14 +71,19 @@ sealed interface NextVolume {
 object NextVolumes {
     private const val MAX_PAGES = 10
 
-    suspend fun find(app: Context, book: BookEntity): NextVolume? {
-        inCollection(app, book)?.let { return NextVolume.InLibrary(it) }
-        return runCatching { fromOrigin(app, book) }.getOrNull()
+    suspend fun find(app: Context, book: BookEntity): NextVolume? = find(app, book, 1)
+
+    /** The volume before, found the same way (웹툰: pulled down at the very top, then asked). */
+    suspend fun findPrevious(app: Context, book: BookEntity): NextVolume? = find(app, book, -1)
+
+    private suspend fun find(app: Context, book: BookEntity, step: Int): NextVolume? {
+        inCollection(app, book, step)?.let { return NextVolume.InLibrary(it) }
+        return runCatching { fromOrigin(app, book, step) }.getOrNull()
     }
 
     private val byTitle = Comparator<BookEntity> { a, b -> ShelfSearch.naturalCompare(a.title, b.title) }
 
-    private suspend fun inCollection(app: Context, book: BookEntity): BookEntity? {
+    private suspend fun inCollection(app: Context, book: BookEntity, step: Int): BookEntity? {
         val db = AppDatabase.get(app)
         val links = db.collections().observeLinks().first()
         val mine = links.filter { it.bookId == book.id }.map { it.collectionId }.toSet()
@@ -87,17 +92,17 @@ object NextVolumes {
         for (c in db.collections().all().filter { it.id in mine }) {
             val list = links.filter { it.collectionId == c.id }.mapNotNull { books[it.bookId] }.sortedWith(byTitle)
             val i = list.indexOfFirst { it.id == book.id }
-            list.getOrNull(i + 1)?.let { return it }
+            if (i >= 0) list.getOrNull(i + step)?.let { return it }
         }
         return null
     }
 
-    private suspend fun fromOrigin(app: Context, book: BookEntity): NextVolume? {
+    private suspend fun fromOrigin(app: Context, book: BookEntity, step: Int): NextVolume? {
         val o = BookOrigin.decode(book.origin) ?: return null
         val db = AppDatabase.get(app)
         return when (o.type) {
             BookOrigin.FOLDER -> db.books().withOrigin(book.origin!!).sortedWith(byTitle).let { list ->
-                list.getOrNull(list.indexOfFirst { it.id == book.id } + 1)?.let { NextVolume.InLibrary(it) }
+                list.indexOfFirst { it.id == book.id }.takeIf { it >= 0 }?.let { i -> list.getOrNull(i + step) }?.let { NextVolume.InLibrary(it) }
             }
             BookOrigin.OPDS -> {
                 val server = ServerSettings(app).get(o.server) ?: return null
@@ -112,9 +117,9 @@ object NextVolumes {
                     entries.addAll(f.entries.filter { it.isBook && it.readable != null })
                     next = f.next; pages++
                     found = entries.indexOfFirst { it.id == book.opdsId || it.readable?.href == book.sourceUrl }
-                    if (found >= 0 && found < entries.size - 1) break
+                    if (found >= 0 && (step < 0 || found < entries.size - 1)) break
                 }
-                val e = entries.getOrNull(found + 1)?.takeIf { found >= 0 } ?: return null
+                val e = entries.getOrNull(found + step)?.takeIf { found >= 0 } ?: return null
                 db.books().findBySource(e.id, e.readable?.href)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(e.title) { c, done ->
                     Downloads.start(c, server, e, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin)
@@ -128,7 +133,7 @@ object NextVolumes {
                     .sortedWith { a, b -> ShelfSearch.naturalCompare(a.name, b.name) }
                 val i = list.indexOfFirst { api.downloadUrl(it) == book.sourceUrl || api.key(it) == book.opdsId }
                 if (i < 0) return null
-                val m = list.getOrNull(i + 1) ?: return null
+                val m = list.getOrNull(i + step) ?: return null
                 val href = api.downloadUrl(m) ?: return null
                 db.books().findBySource(api.key(m), href)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(m.name) { c, done ->
@@ -144,7 +149,7 @@ object NextVolumes {
                 }.filter { it.isBook }.sortedWith { a, b -> ShelfSearch.naturalCompare(a.name, b.name) }
                 val i = list.indexOfFirst { it.path == mine }
                 if (i < 0) return null
-                val f = list.getOrNull(i + 1) ?: return null
+                val f = list.getOrNull(i + step) ?: return null
                 val url = com.oasisreader.app.remote.Remote.url(server.id, f.path)
                 db.books().findBySource(url, url)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(f.name.substringBeforeLast('.')) { c, done ->
