@@ -111,6 +111,29 @@ fun OpdsScreen(
     val extra = remember { mutableStateListOf<OpdsEntry>() }   // "more" pages appended
     var nextUrl by remember { mutableStateOf<String?>(null) }
     var loadingMore by remember { mutableStateOf(false) }
+    var failedMore by remember { mutableStateOf<String?>(null) }
+    // the end of the list on screen: the next page comes by itself (a failed page waits for the button)
+    fun loadMore(more: String) {
+        if (loadingMore) return
+        loadingMore = true
+        scope.launch {
+            try {
+                val f = client.fetch(more)
+                extra.addAll(f.entries); nextUrl = f.next; failedMore = null
+            } catch (e: Exception) {
+                failedMore = more
+                com.oasisreader.app.ui.Notice.show(context, e.message ?: "불러오기 실패")
+            } finally { loadingMore = false }
+        }
+    }
+    @Composable
+    fun MoreRow(more: String) {
+        LaunchedEffect(more) { if (failedMore != more) loadMore(more) }
+        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+            if (loadingMore) CircularProgressIndicator(Modifier.size(24.dp))
+            else TextButton(onClick = { loadMore(more) }) { Text(if (failedMore == more) "다시 불러오기" else "더 보기") }
+        }
+    }
     var query by remember { mutableStateOf("") }
     var rootSearch by remember { mutableStateOf<OpdsFeed?>(null) }   // feed that carries the search link
     var detail by remember { mutableStateOf<OpdsEntry?>(null) }
@@ -387,20 +410,7 @@ fun OpdsScreen(
                         }
                         nextUrl?.let { more ->
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                    if (loadingMore) CircularProgressIndicator(Modifier.size(24.dp))
-                                    else TextButton(onClick = {
-                                        loadingMore = true
-                                        scope.launch {
-                                            try {
-                                                val f = client.fetch(more)
-                                                extra.addAll(f.entries); nextUrl = f.next
-                                            } catch (e: Exception) {
-                                                com.oasisreader.app.ui.Notice.show(context, e.message ?: "불러오기 실패")
-                                            } finally { loadingMore = false }
-                                        }
-                                    }) { Text("더 보기") }
-                                }
+                                MoreRow(more)
                             }
                         }
                     }
@@ -421,20 +431,7 @@ fun OpdsScreen(
                     }
                     nextUrl?.let { more ->
                         item {
-                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                if (loadingMore) CircularProgressIndicator(Modifier.size(24.dp))
-                                else TextButton(onClick = {
-                                    loadingMore = true
-                                    scope.launch {
-                                        try {
-                                            val f = client.fetch(more)
-                                            extra.addAll(f.entries); nextUrl = f.next
-                                        } catch (e: Exception) {
-                                            com.oasisreader.app.ui.Notice.show(context, e.message ?: "불러오기 실패")
-                                        } finally { loadingMore = false }
-                                    }
-                                }) { Text("더 보기") }
-                            }
+                            MoreRow(more)
                         }
                     }
                 }

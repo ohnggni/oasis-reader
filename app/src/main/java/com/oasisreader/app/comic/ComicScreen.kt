@@ -279,7 +279,10 @@ private fun ComicViewer(
     val context = LocalContext.current
     val app = context.applicationContext
     val prefs = remember { app.getSharedPreferences("comic", android.content.Context.MODE_PRIVATE) }
-    val readerPrefs = remember { com.oasisreader.app.reader.ReaderPrefs(app, book.id) }
+    // a comic in a 컬렉션 or a series group (웹툰 episodes) shares its view with the rest of it
+    val group = remember(book.id) { com.oasisreader.app.data.SettingsGroup.of(app, book.id) }
+    val modeKey = "mode_" + (group ?: book.id)
+    val readerPrefs = remember { com.oasisreader.app.reader.ReaderPrefs(app, book.id, group) }
     // 상태바·내비게이션 바 숨기기 (읽기 기본값, shared with books)
     var readingChrome by remember { mutableStateOf(com.oasisreader.app.reader.ReadingChrome.of(readerPrefs)) }
     val cut = com.oasisreader.app.reader.rememberCutoutRoom()
@@ -293,7 +296,8 @@ private fun ComicViewer(
         // shape any more (TODO 42: webtoons cut to book-sized pages cannot be told from comics);
         // an old "AUTO" default reads as 책처럼 넘기기
         mutableStateOf(
-            runCatching { ComicMode.valueOf(prefs.getString("mode_${book.id}", null) ?: "") }.getOrNull()
+            runCatching { ComicMode.valueOf(prefs.getString(modeKey, null) ?: "") }.getOrNull()
+                ?: runCatching { ComicMode.valueOf(prefs.getString("mode_${book.id}", null) ?: "") }.getOrNull()
                 ?: runCatching { ComicMode.valueOf(prefs.getString("default_mode", null) ?: "") }.getOrNull()
                 ?: ComicMode.PAGE
         )
@@ -321,6 +325,17 @@ private fun ComicViewer(
     var prevAsked by remember { mutableStateOf(false) }
     var prevSearching by remember { mutableStateOf(false) }
     var prevAsk by remember { mutableStateOf(false) }
+    fun askPrevious() {
+        if (prevAsk) return
+        prevAsk = true
+        if (!prevAsked) {
+            prevAsked = true; prevSearching = true
+            scope.launch {
+                prevVol = runCatching { com.oasisreader.app.data.NextVolumes.findPrevious(app, book) }.getOrNull()
+                prevSearching = false
+            }
+        }
+    }
     var nextAsked by remember { mutableStateOf(false) }
     var nextClosed by remember { mutableStateOf(false) }
     var nextSearching by remember { mutableStateOf(false) }
@@ -525,6 +540,8 @@ private fun ComicViewer(
                     var dragShot by remember { mutableStateOf<com.oasisreader.app.ui.TurnShot?>(null) }
                     var dragFrom by remember { mutableIntStateOf(0) }
                     fun turnTo(target: Int, tapY: Float = 0.5f) {
+                        // back from the first page: the volume before? (asked, not opened)
+                        if (target < 0 && pager.currentPage == 0) { askPrevious(); return }
                         val t = target.coerceIn(0, groups.size - 1)
                         if (t == pager.currentPage) return
                         val next = t > pager.currentPage
@@ -552,6 +569,24 @@ private fun ComicViewer(
                         val d = if (horizontal && rtl) -dir else dir
                         turnTo(pager.currentPage + d)
                     }
+                    val backPx = with(density) { 110.dp.toPx() }
+                    val swipeBackFirst = Modifier.pointerInput(rtl) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            var back = 0f
+                            while (true) {
+                                val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                val c = e.changes.firstOrNull() ?: break
+                                if (!c.pressed) break
+                                if (e.changes.size > 1 || zoom > 1.01f || pager.currentPage != 0) { back = 0f; continue }
+                                val dx = c.position.x - c.previousPosition.x
+                                // the way back: finger to the right (to the left when read right to left)
+                                val d = if (rtl) -dx else dx
+                                back = if (d > 0f) back + d else 0f
+                                if (back >= backPx) { back = 0f; askPrevious() }
+                            }
+                        }
+                    }
                     HorizontalPager(
                         state = pager,
                         reverseLayout = rtl,
@@ -559,6 +594,7 @@ private fun ComicViewer(
                         userScrollEnabled = zoom <= 1.01f && !curlDrag,
                         key = { groups[it].first() },
                         modifier = Modifier.fillMaxSize()
+                            .then(swipeBackFirst)
                             .then(if (!curlDrag) Modifier else Modifier.pointerInput(groups, rtl) {
                                 var total = 0f
                                 var started = false
@@ -756,17 +792,6 @@ private fun ComicViewer(
                     var pulledTop by remember { mutableFloatStateOf(0f) }
                     // measured from the finger itself: at an edge the stretch effect takes the scroll
                     // left over, so leftovers (nested scroll) never added up (1.9 브랜치 빌드)
-                    fun askPrevious() {
-                        if (prevAsk) return
-                        prevAsk = true
-                        if (!prevAsked) {
-                            prevAsked = true; prevSearching = true
-                            scope.launch {
-                                prevVol = runCatching { com.oasisreader.app.data.NextVolumes.findPrevious(app, book) }.getOrNull()
-                                prevSearching = false
-                            }
-                        }
-                    }
                     val pullToNext = Modifier.pointerInput(listState) {
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
@@ -942,7 +967,7 @@ private fun ComicViewer(
                                 com.oasisreader.app.ui.ReadPanel.TEXT -> {
                                     com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "세로 스크롤 (웹툰)"), if (mode == ComicMode.PAGE) 0 else 1) { i ->
                                         mode = if (i == 0) ComicMode.PAGE else ComicMode.SCROLL
-                                        prefs.edit().putString("mode_${book.id}", mode.name).apply()
+                                        prefs.edit().putString(modeKey, mode.name).apply()
                                     }
                                     if (mode == ComicMode.PAGE) {
                                         com.oasisreader.app.ui.PanelChoice("방향", listOf("왼쪽 → 오른쪽", "오른쪽 → 왼쪽 (일본 만화)"), if (rtl) 1 else 0) { i ->

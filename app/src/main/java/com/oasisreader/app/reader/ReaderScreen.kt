@@ -165,7 +165,8 @@ fun ReaderScreen(
     onOpenBook: (String) -> Unit = {}, onOpenFolder: (com.oasisreader.app.data.db.BookEntity) -> Unit = {},
 ) {
     val app = LocalContext.current.applicationContext
-    val prefs = remember(bookId) { ReaderPrefs(app, bookId) }
+    // a book in a 컬렉션 or a series group shares its settings with the rest of it
+    val prefs = remember(bookId) { ReaderPrefs(app, bookId, com.oasisreader.app.data.SettingsGroup.of(app, bookId)) }
     var theme by remember(bookId) { mutableStateOf(prefs.theme) }
     val rTheme = theme.resolve(isAppDark())
     com.oasisreader.app.ui.theme.OasisTheme(darkTheme = rTheme.dark, scaleText = false) {

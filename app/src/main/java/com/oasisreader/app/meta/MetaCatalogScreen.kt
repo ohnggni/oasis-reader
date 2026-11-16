@@ -468,7 +468,7 @@ fun MetaCatalogScreen(
                         onClick = { openBook = b }, onAction = { openOrDownload(b) })
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                item { MoreFooter(loading, hasMore, empty = bookItems.isEmpty()) { scope.launch { loadPage(page + 1) } } }
+                item { MoreFooter(loading, hasMore, empty = bookItems.isEmpty(), autoKey = page) { scope.launch { loadPage(page + 1) } } }
             }
             seriesList -> LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
                 items(seriesItems.size, key = { i -> seriesItems[i].libraryId.toString() + "|" + seriesItems[i].seriesName }) { i ->
@@ -490,7 +490,7 @@ fun MetaCatalogScreen(
                     }
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                item { MoreFooter(loading, hasMore, empty = seriesItems.isEmpty()) { scope.launch { loadPage(page + 1) } } }
+                item { MoreFooter(loading, hasMore, empty = seriesItems.isEmpty(), autoKey = page) { scope.launch { loadPage(page + 1) } } }
             }
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(seriesTile.dp),
@@ -516,7 +516,7 @@ fun MetaCatalogScreen(
                     }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    MoreFooter(loading, hasMore, empty = seriesItems.isEmpty()) { scope.launch { loadPage(page + 1) } }
+                    MoreFooter(loading, hasMore, empty = seriesItems.isEmpty(), autoKey = page) { scope.launch { loadPage(page + 1) } }
                 }
             }
         }
@@ -526,7 +526,10 @@ fun MetaCatalogScreen(
 }
 
 @Composable
-private fun MoreFooter(loading: Boolean, hasMore: Boolean, empty: Boolean, onMore: () -> Unit) {
+private fun MoreFooter(loading: Boolean, hasMore: Boolean, empty: Boolean, autoKey: Int, onMore: () -> Unit) {
+    // reached the end of the list: fetch the next page by itself, once per page (after a failure
+    // the page stays the same, so it waits for the button instead of retrying in a loop)
+    androidx.compose.runtime.LaunchedEffect(autoKey, hasMore) { if (hasMore && !loading) onMore() }
     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
         when {
             loading -> CircularProgressIndicator(Modifier.size(28.dp))

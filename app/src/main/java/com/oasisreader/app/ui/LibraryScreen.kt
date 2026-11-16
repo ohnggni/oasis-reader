@@ -1341,7 +1341,7 @@ private fun KindOrderDialog(initial: List<ShelfKind>, onDismiss: () -> Unit, onS
  * (since 1.2), else its title without the volume number; per kind, so a novel and a comic of the same
  * name stay apart. Null: not part of a series.
  */
-private fun seriesKeyOf(b: BookEntity): String? {
+internal fun seriesKeyOf(b: BookEntity): String? {
     val kind = ShelfKind.of(b).name
     com.oasisreader.app.data.BookOrigin.decode(b.origin)?.let { o ->
         when (o.type) {

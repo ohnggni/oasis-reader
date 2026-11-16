@@ -43,23 +43,33 @@ enum class ReaderTheme(
  * book with no change of its own follows the defaults. Without a [bookId] (or for brightness,
  * screen-on, bar hiding) the defaults themselves are read and written.
  */
-class ReaderPrefs(context: Context, private val bookId: String? = null) {
+class ReaderPrefs(context: Context, private val bookId: String? = null, private val group: String? = null) {
+    /**
+     * Whose settings these are: a book in a 컬렉션 or an automatic series group shares them with the
+     * rest of it ([group], from [com.oasisreader.app.data.SettingsGroup]); otherwise the book alone.
+     * A book's own settings from before still count until the group has its own.
+     */
+    private val owner: String? get() = group ?: bookId
     private val prefs = context.getSharedPreferences("reader", Context.MODE_PRIVATE)
     private val book = context.getSharedPreferences("reader_book", Context.MODE_PRIVATE)
 
-    private fun bk(key: String) = "$bookId:$key"
+    private fun bk(key: String) = "$owner:$key"
+    /** the book's own key from before groups shared settings */
+    private fun legacy(key: String): String? = if (group != null && bookId != null) "$bookId:$key" else null
     private fun perBook(key: String) = bookId != null && key in BOOK_KEYS
 
+    private fun own(key: String): String? = if (!perBook(key)) null
+        else if (book.contains(bk(key))) bk(key) else legacy(key)?.takeIf { book.contains(it) }
     private fun int(key: String, def: Int): Int =
-        if (perBook(key) && book.contains(bk(key))) book.getInt(bk(key), def) else prefs.getInt(key, def)
+        own(key)?.let { book.getInt(it, def) } ?: prefs.getInt(key, def)
     private fun setInt(key: String, v: Int) =
         if (perBook(key)) book.edit().putInt(bk(key), v).apply() else prefs.edit().putInt(key, v).apply()
     private fun bool(key: String, def: Boolean): Boolean =
-        if (perBook(key) && book.contains(bk(key))) book.getBoolean(bk(key), def) else prefs.getBoolean(key, def)
+        own(key)?.let { book.getBoolean(it, def) } ?: prefs.getBoolean(key, def)
     private fun setBool(key: String, v: Boolean) =
         if (perBook(key)) book.edit().putBoolean(bk(key), v).apply() else prefs.edit().putBoolean(key, v).apply()
     private fun str(key: String): String? =
-        if (perBook(key) && book.contains(bk(key))) book.getString(bk(key), null) else prefs.getString(key, null)
+        own(key)?.let { book.getString(it, null) } ?: prefs.getString(key, null)
     private fun setStr(key: String, v: String) =
         if (perBook(key)) book.edit().putString(bk(key), v).apply() else prefs.edit().putString(key, v).apply()
 
@@ -175,15 +185,16 @@ class ReaderPrefs(context: Context, private val bookId: String? = null) {
     val font: FontOption get() = FontManager.byId(fontId)
 
     /** Does this book have settings of its own? */
-    val hasOwn: Boolean get() = bookId != null && book.all.keys.any { it.startsWith("$bookId:") }
+    val hasOwn: Boolean get() = bookId != null && book.all.keys.any { it.startsWith("$owner:") || it.startsWith("$bookId:") }
 
     /** Make this book's settings the defaults for every book without its own. */
     fun saveAsDefaults() {
         if (bookId == null) return
         val e = prefs.edit()
-        for ((k, v) in book.all) {
-            if (!k.startsWith("$bookId:")) continue
-            val key = k.removePrefix("$bookId:")
+        // the book's old keys first, the group's on top
+        val mine = book.all.entries.filter { it.key.startsWith("$bookId:") }.map { it.key.removePrefix("$bookId:") to it.value } +
+            (if (owner != bookId) book.all.entries.filter { it.key.startsWith("$owner:") }.map { it.key.removePrefix("$owner:") to it.value } else emptyList())
+        for ((key, v) in mine) {
             when (v) {
                 is Int -> e.putInt(key, v)
                 is Boolean -> e.putBoolean(key, v)
@@ -203,7 +214,7 @@ class ReaderPrefs(context: Context, private val bookId: String? = null) {
     fun resetBook() {
         if (bookId == null) return
         val e = book.edit()
-        book.all.keys.filter { it.startsWith("$bookId:") }.forEach { e.remove(it) }
+        book.all.keys.filter { it.startsWith("$bookId:") || it.startsWith("$owner:") }.forEach { e.remove(it) }
         e.apply()
     }
 

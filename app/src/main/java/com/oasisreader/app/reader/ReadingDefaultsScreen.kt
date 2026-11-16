@@ -119,7 +119,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
 
-            PanelTitle("글자 · 책마다 따로")
+            PanelTitle("글자 · 책마다 따로 (컬렉션·묶음은 함께)")
             FontPanel(
                 fonts = fonts, selectedId = fontId, busyId = fontBusy, progress = fontProgress,
                 onPick = ::pickFont,
@@ -134,7 +134,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
             PanelSwitch("책 디자인 사용 (제목·문단 모양)", null, publisher, { publisher = it; prefs.publisherStyle = it })
 
             Spacer(Modifier.height(8.dp))
-            PanelTitle("쪽 · 책(EPUB·TXT), 책마다 따로")
+            PanelTitle("쪽 · 책(EPUB·TXT), 책마다 따로 (컬렉션·묶음은 함께)")
             PanelChoice("보기", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) {
                 mode = if (it == 0) ReaderMode.PAGE else ReaderMode.SCROLL; prefs.mode = mode
             }
