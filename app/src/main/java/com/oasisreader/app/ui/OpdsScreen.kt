@@ -576,12 +576,13 @@ private fun shortDate(s: String): String? = epoch(s)?.let {
 private fun sortEntries(all: List<OpdsEntry>, sort: CatalogSort, desc: Boolean): List<OpdsEntry> {
     val (books, folders) = all.partition { it.isBook }
     if (sort == CatalogSort.SERVER) return if (desc) folders.reversed() + books.reversed() else all
-    val byTitle = Comparator<OpdsEntry> { a, b -> collator.compare(a.title, b.title) }
+    // natural order: "A2" before "A11" (digit runs compare as numbers)
+    val byTitle = Comparator<OpdsEntry> { a, b -> ShelfSearch.naturalCompare(a.title, b.title) }
     val asc: Comparator<OpdsEntry> = when (sort) {
         CatalogSort.DATE -> compareBy<OpdsEntry> { epoch(it.updated) ?: 0L }.then(byTitle)
         CatalogSort.AUTHOR -> Comparator { a, b ->
             val c = collator.compare(a.author ?: "\uFFFF", b.author ?: "\uFFFF")
-            if (c != 0) c else collator.compare(a.title, b.title)
+            if (c != 0) c else ShelfSearch.naturalCompare(a.title, b.title)
         }
         else -> byTitle
     }

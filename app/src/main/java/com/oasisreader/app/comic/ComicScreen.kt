@@ -90,6 +90,8 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.positionChanged
@@ -740,6 +742,36 @@ private fun ComicViewer(
                                 label = "${s0.page + 1} / $pageCount"
                             }
                     }
+                    // at the very end (the "— 끝 —" tail on screen), pulling up a little more opens the
+                    // next volume — as asked from the community; the button stays for a plain tap
+                    val pullPx = with(density) { 110.dp.toPx() }
+                    var pulled by remember { mutableFloatStateOf(0f) }
+                    var pullOpened by remember { mutableStateOf(false) }
+                    val pullToNext = remember(listState) {
+                        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+                            override fun onPostScroll(
+                                consumed: androidx.compose.ui.geometry.Offset,
+                                available: androidx.compose.ui.geometry.Offset,
+                                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource,
+                            ): androidx.compose.ui.geometry.Offset {
+                                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput &&
+                                    available.y < 0f && !listState.canScrollForward
+                                ) {
+                                    pulled += -available.y
+                                    val n = nextVol
+                                    if (pulled >= pullPx && n != null && !pullOpened) {
+                                        pullOpened = true
+                                        com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook)
+                                    }
+                                } else if (consumed.y > 0f || available.y > 0f) pulled = 0f
+                                return androidx.compose.ui.geometry.Offset.Zero
+                            }
+                            override suspend fun onPostFling(consumed: androidx.compose.ui.unit.Velocity, available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
+                                pulled = 0f
+                                return androidx.compose.ui.unit.Velocity.Zero
+                            }
+                        }
+                    }
                     val viewW = if (narrow) minOf(maxWidth, 600.dp) else maxWidth
                     val targetPx = with(density) { viewW.roundToPx() }
                     val viewportH = hPx.toFloat()
@@ -752,6 +784,7 @@ private fun ComicViewer(
                         modifier = Modifier
                             .widthIn(max = viewW)
                             .fillMaxSize()
+                            .nestedScroll(pullToNext)
                             .pointerInput(Unit) {
                                 detectTapGestures(onTap = { o ->
                                     lastActive = System.currentTimeMillis()
@@ -774,13 +807,17 @@ private fun ComicViewer(
                             ) {
                                 Text("— 끝 —", color = chrome)
                                 val n = nextVol
-                                when {
-                                    n != null -> androidx.compose.material3.FilledTonalButton(
+                                if (n != null) {
+                                    androidx.compose.material3.FilledTonalButton(
                                         onClick = { com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook) },
                                         modifier = Modifier.padding(top = 12.dp).widthIn(max = 420.dp).padding(horizontal = 24.dp),
                                     ) { EmojiText("▶ 다음 권  ${n.title}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
-                                    nextSearching -> Text("다음 권 찾는 중…", color = chrome, modifier = Modifier.padding(top = 12.dp))
-                                }
+                                    Text(
+                                        if (pulled > 0f) "조금 더 끌어 올리면 다음 권을 엽니다" else "끝에서 위로 더 끌어 올려도 다음 권으로 넘어갑니다",
+                                        color = chrome, style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = if (pulled > 0f) 1f else 0.7f },
+                                    )
+                                } else if (nextSearching) Text("다음 권 찾는 중…", color = chrome, modifier = Modifier.padding(top = 12.dp))
                                 TextButton(onClick = onBack) { Text("서재로") }
                             }
                         }

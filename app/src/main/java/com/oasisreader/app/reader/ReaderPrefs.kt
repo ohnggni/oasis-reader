@@ -97,6 +97,15 @@ class ReaderPrefs(context: Context, private val bookId: String? = null) {
         get() = int("line_height", 18)
         set(v) = setInt("line_height", v.coerceIn(14, 24))
 
+    /**
+     * Two facing pages (books): 0 = 자동 (fold open with the hinge vertical; elsewhere a wide
+     * window), 1 = 한 쪽만, 2 = 가로일 때만 (window wider than tall, fold or not). The whole device,
+     * not per book.
+     */
+    var spreadMode: Int
+        get() = prefs.getInt("spread_mode", 0)
+        set(v) = prefs.edit().putInt("spread_mode", v.coerceIn(0, 2)).apply()
+
     /** keep the screen on while reading (released after 10 min without a page turn) */
     var keepScreenOn: Boolean
         get() = prefs.getBoolean("keep_screen_on", true)

@@ -325,7 +325,8 @@ private fun ReaderBody(
 
     // facing pages only when the inner screen is open with the hinge vertical (book posture);
     // rotated (hinge horizontal) or the cover screen -> one page
-    val spread = rememberSpread()
+    var spreadMode by remember { mutableIntStateOf(prefs.spreadMode) }
+    val spread = rememberSpread(spreadMode)
     // Fold opened and turned sideways (hinge horizontal): the inner screen's punch hole
     // sits on a side edge. Samsung does not report it as a display cutout, so keep the
     // text clear of it with a fixed extra margin on both sides (only in this posture).
@@ -1188,6 +1189,9 @@ private fun ReaderBody(
                                             com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) { i ->
                                                 setMode(if (i == 0) ReaderMode.PAGE else ReaderMode.SCROLL)
                                             }
+                                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.PanelChoice("두 쪽 보기", SPREAD_LABELS, spreadMode) { i ->
+                                                spreadMode = i; prefs.spreadMode = i
+                                            }
                                             if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
                                                 current = turnStyle, speed = turnSpeed,
                                                 onPick = { st ->
@@ -1776,10 +1780,11 @@ private fun rememberSideways(): Boolean {
 /**
  * true = show two facing pages.
  * Foldables report a FoldingFeature: spread only while it is vertical (hinge between
- * left and right pages). Other devices: wide landscape windows only.
+ * left and right pages). Other devices: wide landscape windows only. [spreadMode] (읽기 기본값 ›
+ * 두 쪽 보기) can turn that into 한 쪽만 or 가로일 때만 (a Fold held sideways).
  */
 @Composable
-private fun rememberSpread(): Boolean {
+private fun rememberSpread(spreadMode: Int = 0): Boolean {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val cfg = LocalConfiguration.current
@@ -1787,12 +1792,18 @@ private fun rememberSpread(): Boolean {
         activity?.let { WindowInfoTracker.getOrCreate(it).windowLayoutInfo(it) } ?: flowOf(null)
     }.collectAsState(initial = null)
     val fold = info?.displayFeatures?.filterIsInstance<FoldingFeature>()?.firstOrNull()
+    val wide = cfg.screenWidthDp >= 600 && cfg.screenWidthDp > cfg.screenHeightDp
+    if (spreadMode == 1) return false
+    if (spreadMode == 2) return wide
     return if (fold != null) {
         fold.orientation == FoldingFeature.Orientation.VERTICAL
     } else {
         cfg.screenWidthDp >= 600 && cfg.screenWidthDp > cfg.screenHeightDp
     }
 }
+
+/** 두 쪽 보기 choices, in [ReaderPrefs.spreadMode] order. */
+internal val SPREAD_LABELS = listOf("자동", "한 쪽만", "가로일 때만")
 
 private enum class Panel {
     NONE, SCREEN, TEXT, PAGE, NAV;

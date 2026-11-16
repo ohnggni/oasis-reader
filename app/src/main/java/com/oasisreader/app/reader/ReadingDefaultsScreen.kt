@@ -66,6 +66,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
     var theme by remember { mutableStateOf(prefs.theme) }
     var mode by remember { mutableStateOf(prefs.mode) }
     var turn by remember { mutableStateOf(prefs.turnStyle) }
+    var spread by remember { mutableIntStateOf(prefs.spreadMode) }
     var speed by remember { mutableStateOf(prefs.turnSpeed) }
     var mTop by remember { mutableIntStateOf(prefs.marginTop) }
     var mBottom by remember { mutableIntStateOf(prefs.marginBottom) }
@@ -138,6 +139,7 @@ fun ReadingDefaultsScreen(onBack: () -> Unit) {
                 mode = if (it == 0) ReaderMode.PAGE else ReaderMode.SCROLL; prefs.mode = mode
             }
             TurnStylePicker(turn, speed, { turn = it; prefs.turnStyle = it }, { speed = it; prefs.turnSpeed = it })
+            PanelChoice("두 쪽 보기 (이 기기 전체)", SPREAD_LABELS, spread) { spread = it; prefs.spreadMode = it }
             MarginPanel(mTop, mBottom, mLeft, mRight) { t, b, l, r ->
                 mTop = t; mBottom = b; mLeft = l; mRight = r
                 prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
