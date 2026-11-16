@@ -90,7 +90,6 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -755,44 +754,42 @@ private fun ComicViewer(
                     // at the very top, pulling down a little more asks about the volume before (going
                     // back is rarer, so it asks instead of opening straight away)
                     var pulledTop by remember { mutableFloatStateOf(0f) }
-                    val pullToNext = remember(listState) {
-                        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
-                            override fun onPostScroll(
-                                consumed: androidx.compose.ui.geometry.Offset,
-                                available: androidx.compose.ui.geometry.Offset,
-                                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource,
-                            ): androidx.compose.ui.geometry.Offset {
-                                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput &&
-                                    available.y < 0f && !listState.canScrollForward
-                                ) {
-                                    pulled += -available.y
-                                    val n = nextVol
-                                    if (pulled >= pullPx && n != null && !pullOpened) {
-                                        pullOpened = true
-                                        com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook)
-                                    }
-                                } else if (consumed.y > 0f || available.y > 0f) pulled = 0f
-                                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput &&
-                                    available.y > 0f && !listState.canScrollBackward
-                                ) {
-                                    pulledTop += available.y
-                                    if (pulledTop >= pullPx && !prevAsk) {
-                                        prevAsk = true
-                                        if (!prevAsked) {
-                                            prevAsked = true; prevSearching = true
-                                            scope.launch {
-                                                prevVol = runCatching { com.oasisreader.app.data.NextVolumes.findPrevious(app, book) }.getOrNull()
-                                                prevSearching = false
-                                            }
-                                        }
-                                    }
-                                } else if (consumed.y < 0f || available.y < 0f) pulledTop = 0f
-                                return androidx.compose.ui.geometry.Offset.Zero
+                    // measured from the finger itself: at an edge the stretch effect takes the scroll
+                    // left over, so leftovers (nested scroll) never added up (1.9 브랜치 빌드)
+                    fun askPrevious() {
+                        if (prevAsk) return
+                        prevAsk = true
+                        if (!prevAsked) {
+                            prevAsked = true; prevSearching = true
+                            scope.launch {
+                                prevVol = runCatching { com.oasisreader.app.data.NextVolumes.findPrevious(app, book) }.getOrNull()
+                                prevSearching = false
                             }
-                            override suspend fun onPostFling(consumed: androidx.compose.ui.unit.Velocity, available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
-                                pulled = 0f; pulledTop = 0f
-                                return androidx.compose.ui.unit.Velocity.Zero
+                        }
+                    }
+                    val pullToNext = Modifier.pointerInput(listState) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            pulled = 0f; pulledTop = 0f
+                            while (true) {
+                                val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                val c = e.changes.firstOrNull() ?: break
+                                if (!c.pressed) break
+                                val dy = c.position.y - c.previousPosition.y
+                                // finger up = reading on: at the end, count it
+                                if (dy < 0f && !listState.canScrollForward) pulled += -dy
+                                else if (dy > 0f) pulled = 0f
+                                // finger down = going back: at the top, count it
+                                if (dy > 0f && !listState.canScrollBackward) pulledTop += dy
+                                else if (dy < 0f) pulledTop = 0f
+                                val n = nextVol
+                                if (pulled >= pullPx && n != null && !pullOpened) {
+                                    pullOpened = true
+                                    com.oasisreader.app.reader.openNextVolume(context, n, onOpenBook)
+                                }
+                                if (pulledTop >= pullPx) { pulledTop = 0f; askPrevious() }
                             }
+                            pulled = 0f; pulledTop = 0f
                         }
                     }
                     val viewW = if (narrow) minOf(maxWidth, 600.dp) else maxWidth
@@ -807,7 +804,7 @@ private fun ComicViewer(
                         modifier = Modifier
                             .widthIn(max = viewW)
                             .fillMaxSize()
-                            .nestedScroll(pullToNext)
+                            .then(pullToNext)
                             .pointerInput(Unit) {
                                 detectTapGestures(onTap = { o ->
                                     lastActive = System.currentTimeMillis()
