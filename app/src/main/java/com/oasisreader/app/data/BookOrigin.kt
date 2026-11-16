@@ -110,15 +110,15 @@ object NextVolumes {
                 val entries = ArrayList<OpdsEntry>()
                 var next: String? = o.urls.lastOrNull() ?: return null
                 var pages = 0
-                var found = -1
-                // pages until the book and the one after it are both in hand
+                // the whole folder (up to MAX_PAGES): servers often list "1, 11, 12, 2", so the
+                // volumes are put in natural order ("2" before "11") like everywhere else
                 while (next != null && pages < MAX_PAGES) {
                     val f = client.fetch(next)
                     entries.addAll(f.entries.filter { it.isBook && it.readable != null })
                     next = f.next; pages++
-                    found = entries.indexOfFirst { it.id == book.opdsId || it.readable?.href == book.sourceUrl }
-                    if (found >= 0 && (step < 0 || found < entries.size - 1)) break
                 }
+                entries.sortWith { a, b -> ShelfSearch.naturalCompare(a.title, b.title) }
+                val found = entries.indexOfFirst { it.id == book.opdsId || it.readable?.href == book.sourceUrl }
                 val e = entries.getOrNull(found + step)?.takeIf { found >= 0 } ?: return null
                 db.books().findBySource(e.id, e.readable?.href)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(e.title) { c, done ->
