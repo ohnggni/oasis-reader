@@ -1,5 +1,7 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.ui.OgMenu
+
 import com.oasisreader.app.ui.EmojiText
 import android.content.Context
 import androidx.compose.foundation.clickable
@@ -14,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -90,7 +91,7 @@ fun FormatFilterChip(selected: Set<String>, onChange: (Set<String>) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         com.oasisreader.app.ui.MiniChip(CatalogFormats.chip(selected), selected = selected.isNotEmpty(), onClick = { open = true }, description = CatalogFormats.label(selected))
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        OgMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text("전체") },
                 leadingIcon = { Checkbox(checked = selected.isEmpty(), onCheckedChange = null) },
@@ -126,7 +127,7 @@ fun PresetChip(
             selected = current != null,
             onClick = { open = true },
         )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        OgMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text("모두 보기") },
                 leadingIcon = { com.oasisreader.app.ui.CheckMark(libs.isEmpty() && formats.isEmpty()) },

@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -208,7 +207,7 @@ fun ReviewEditorScreen(bookId: String, onBack: () -> Unit) {
             }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "독후감 메뉴") }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                OgMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { EmojiText("🖍️ 하이라이트 넣기") }, onClick = { menu = false; pickHighlights = true })
                     DropdownMenuItem(text = { EmojiText("📄 글 파일에서 가져오기") }, onClick = { menu = false; runCatching { openFile.launch(arrayOf("text/*")) } })
                     DropdownMenuItem(text = { EmojiText("📝 마크다운으로 저장") }, onClick = {

@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -198,7 +197,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
                         }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "이 책 하이라이트 메뉴") }
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            OgMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(text = { EmojiText("📝 이 책 하이라이트 내보내기") }, onClick = { menu = false; exportFor = bookId })
                                 DropdownMenuItem(text = { EmojiText("📋 모두 복사") }, onClick = {
                                     menu = false

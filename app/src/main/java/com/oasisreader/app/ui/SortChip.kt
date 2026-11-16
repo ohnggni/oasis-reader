@@ -2,7 +2,6 @@ package com.oasisreader.app.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +43,7 @@ fun <T> SortChip(
     var open by remember { mutableStateOf(false) }
     Box {
         MiniChip("${if (desc) "🔽" else "🔼"} ${short(selected)}", onClick = { open = true }, description = "정렬: ${label(selected)}")
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        OgMenu(expanded = open, onDismissRequest = { open = false }) {
             Text("정렬 기준", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             options.forEach { o ->
                 DropdownMenuItem(

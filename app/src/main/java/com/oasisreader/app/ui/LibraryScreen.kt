@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -411,7 +410,7 @@ fun LibraryScreen(
                 IconButton(onClick = { menu = true }) {
                     Icon(androidx.compose.material.icons.Icons.Default.Menu, contentDescription = "메뉴")
                 }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                OgMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     Text(
                         "가져오기", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
@@ -493,7 +492,7 @@ fun LibraryScreen(
                     onClick = { viewOpen = true },
                     description = "보기 방식",
                 )
-                DropdownMenu(expanded = viewOpen, onDismissRequest = { viewOpen = false }) {
+                OgMenu(expanded = viewOpen, onDismissRequest = { viewOpen = false }) {
                     fun setLayout(grid: Boolean) { gridChoice = grid; shelfPrefs.edit().putString(pk("layout"), if (grid) "grid" else "list").apply() }
                     DropdownMenuItem(text = { EmojiText("🔲 타일") }, leadingIcon = { CheckMark(tiles) }, onClick = { viewOpen = false; setLayout(true) })
                     DropdownMenuItem(text = { EmojiText("📃 목록") }, leadingIcon = { CheckMark(!tiles) }, onClick = { viewOpen = false; setLayout(false) })
@@ -527,7 +526,7 @@ fun LibraryScreen(
                 var sizeOpen by remember { mutableStateOf(false) }
                 Box {
                     MiniChip("📐 크기", onClick = { sizeOpen = true }, description = "타일 크기", plain = true)
-                    DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
+                    OgMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
                         Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text("타일 크기", style = MaterialTheme.typography.labelLarge)
                             androidx.compose.material3.Slider(
@@ -572,7 +571,7 @@ fun LibraryScreen(
                     onClick = { filterOpen = true },
                     selected = filter != ShelfFilter.ALL,
                 )
-                DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
+                OgMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
                     ShelfFilter.entries.forEach { f ->
                         DropdownMenuItem(
                             text = { Text("${f.label} ${kindBase.count { f.matches(it) }}") },
@@ -979,7 +978,7 @@ private fun CollectionMenuButton(onRename: () -> Unit, onDelete: () -> Unit, onS
         IconButton(onClick = { open = true }, modifier = Modifier.size(size)) {
             Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, contentDescription = "컬렉션 메뉴", tint = androidx.compose.material3.LocalContentColor.current, modifier = Modifier.size(if (size < 36.dp) 18.dp else 24.dp))
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        OgMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { EmojiText("☑️ 모두 고르기") }, onClick = { open = false; onSelectAll() })
             if (onMakeCollection != null) {
                 // an automatic series group: nothing to rename or delete; it can become a 컬렉션

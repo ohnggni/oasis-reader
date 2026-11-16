@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -204,7 +203,7 @@ fun HighlightJsonExportMenu(enabled: Boolean) {
 
     Box {
         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "더보기") }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        OgMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
                 text = { Text("전체 내보내기 (마크다운)") },
                 enabled = enabled,

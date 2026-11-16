@@ -1,5 +1,7 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.OgMenu
+
 import com.oasisreader.app.ui.EmojiText
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -22,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -179,7 +180,7 @@ fun AudioMarkHeader(title: String, onShelf: Boolean, count: Int, onCopyAll: () -
         }
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "이 오디오북 책갈피 메뉴") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            OgMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { EmojiText("📋 모두 복사") }, onClick = { menu = false; onCopyAll() })
                 DropdownMenuItem(text = { EmojiText("🗑️ 이 오디오북 책갈피 모두 지우기", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onDeleteAll() })
             }

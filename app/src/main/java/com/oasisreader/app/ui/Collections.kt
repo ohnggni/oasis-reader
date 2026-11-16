@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -81,7 +80,7 @@ fun CollectionChip(
     val current = collections.firstOrNull { it.id == selected }
     Box {
         MiniChip("📚 " + (current?.name ?: "컬렉션"), selected = current != null, onClick = { open = true }, description = "컬렉션")
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        OgMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("서재 전체 $total") }, leadingIcon = { CheckMark(current == null) }, onClick = { open = false; onSelect(null) })
             collections.forEach { c ->
                 DropdownMenuItem(

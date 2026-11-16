@@ -180,7 +180,7 @@ fun PanelDropdown(
                 androidx.compose.material3.Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp).size(16.dp))
             }
         }
-        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        com.oasisreader.app.ui.OgMenu(expanded = open, onDismissRequest = { open = false }) {
             items.forEachIndexed { i, label ->
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text(label) },

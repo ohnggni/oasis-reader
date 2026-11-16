@@ -1,5 +1,7 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.ui.OgMenu
+
 import com.oasisreader.app.ui.EmojiText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -350,7 +352,7 @@ fun MetaCatalogScreen(
                     onClick = { libOpen = true },
                     description = "카테고리",
                 )
-                androidx.compose.material3.DropdownMenu(expanded = libOpen, onDismissRequest = { libOpen = false }) {
+                com.oasisreader.app.ui.OgMenu(expanded = libOpen, onDismissRequest = { libOpen = false }) {
                     androidx.compose.material3.DropdownMenuItem(
                         text = { Text("전체") },
                         leadingIcon = { androidx.compose.material3.Checkbox(checked = libIds.isEmpty(), onCheckedChange = null) },
@@ -410,7 +412,7 @@ fun MetaCatalogScreen(
                     var sizeOpen by remember { mutableStateOf(false) }
                     Box {
                         com.oasisreader.app.ui.MiniChip("📐", onClick = { sizeOpen = true }, description = "타일 크기", plain = true)
-                        androidx.compose.material3.DropdownMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
+                        com.oasisreader.app.ui.OgMenu(expanded = sizeOpen, onDismissRequest = { sizeOpen = false }) {
                             Column(Modifier.width(260.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
                                 Text("타일 크기", style = MaterialTheme.typography.labelLarge)
                                 androidx.compose.material3.Slider(

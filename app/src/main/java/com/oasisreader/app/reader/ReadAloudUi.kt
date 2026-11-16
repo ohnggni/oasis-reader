@@ -1,5 +1,7 @@
 package com.oasisreader.app.reader
 
+import com.oasisreader.app.ui.OgMenu
+
 import com.oasisreader.app.ui.EmojiText
 import android.speech.tts.Voice
 import androidx.compose.foundation.BorderStroke
@@ -22,7 +24,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -86,7 +87,7 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
             var speedOpen by remember { mutableStateOf(false) }
             Box {
                 TextButton(onClick = { speedOpen = true }) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelLarge) }
-                DropdownMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
+                OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
                     ReadAloud.RATES.forEach { r ->
                         DropdownMenuItem(
                             text = { Text(ReadAloud.rateLabel(r)) },
@@ -118,7 +119,7 @@ private fun SleepButton(ra: ReadAloud) {
                 color = if (left > 0 || ra.sleepAtChapterEnd) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        OgMenu(expanded = open, onDismissRequest = { open = false }) {
             Text("수면 타이머", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             ReadAloud.SLEEP.forEach { m ->
                 DropdownMenuItem(text = { Text("${m}분 뒤 멈춤") }, onClick = { open = false; ra.sleepIn(m) })

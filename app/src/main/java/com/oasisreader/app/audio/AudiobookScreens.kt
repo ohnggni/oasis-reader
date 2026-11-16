@@ -1,5 +1,7 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.OgMenu
+
 import com.oasisreader.app.ui.EmojiText
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -37,7 +39,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -642,7 +643,7 @@ private fun PlayerChips() {
         var sOpen by remember { mutableStateOf(false) }
         Box {
             AssistChip(onClick = { sOpen = true }, label = { Text("속도 ${AudioPlayback.speed}배") })
-            DropdownMenu(sOpen, { sOpen = false }) {
+            OgMenu(sOpen, { sOpen = false }) {
                 listOf(0.75f, 1f, 1.1f, 1.25f, 1.5f, 1.75f, 2f).forEach { s ->
                     DropdownMenuItem(text = { Text("${s}배") }, leadingIcon = { com.oasisreader.app.ui.CheckMark(s == AudioPlayback.speed) }, onClick = { sOpen = false; AudioPlayback.changeSpeed(context, s) })
                 }
@@ -654,7 +655,7 @@ private fun PlayerChips() {
         val left = if (AudioPlayback.sleepAt > 0 && tickMs >= 0) ((AudioPlayback.sleepAt - System.currentTimeMillis()) / 60_000 + 1).coerceAtLeast(1) else 0
         Box {
             AssistChip(onClick = { tOpen = true }, label = { Text(when { left > 0 -> "🌙 ${left}분"; AudioPlayback.sleepAtTrackEnd -> "🌙 트랙 끝"; else -> "🌙 타이머" }) })
-            DropdownMenu(tOpen, { tOpen = false }) {
+            OgMenu(tOpen, { tOpen = false }) {
                 listOf(15, 30, 45, 60, 90).forEach { m -> DropdownMenuItem(text = { Text("${m}분 뒤 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepIn(m) }) }
                 DropdownMenuItem(text = { Text("이 트랙 끝에서 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepAtEndOfTrack() })
                 DropdownMenuItem(text = { Text("타이머 끄기") }, onClick = { tOpen = false; AudioPlayback.sleepIn(0) })
@@ -674,7 +675,7 @@ private fun PlayerChips() {
             }
             Box {
                 AssistChip(onClick = { mOpen = true }, label = { EmojiText("🔖 책갈피") })
-                DropdownMenu(mOpen, { mOpen = false }) {
+                OgMenu(mOpen, { mOpen = false }) {
                     DropdownMenuItem(text = { EmojiText("🔖 지금 자리에 남기기") }, onClick = { mOpen = false; mark(0.0) })
                     DropdownMenuItem(text = { Text("⏪ 방금 들은 30초 남기기") }, onClick = { mOpen = false; mark(30.0) })
                     DropdownMenuItem(text = { EmojiText("📋 이 책의 책갈피 보기") }, onClick = { mOpen = false; listOpen = true })
@@ -842,7 +843,7 @@ private fun CategoryChip(libraries: List<AudioLibrary>, selected: Set<Int>, onCh
             selected = selected.isNotEmpty(), onClick = { open = true },
             description = "카테고리",
         )
-        DropdownMenu(open, { open = false }) {
+        OgMenu(open, { open = false }) {
             DropdownMenuItem(
                 text = { Text("전체") },
                 leadingIcon = { androidx.compose.material3.Checkbox(checked = selected.isEmpty(), onCheckedChange = null) },
@@ -872,7 +873,7 @@ private fun ReadStateChip(value: String, onChange: (String) -> Unit) {
             "🔖 " + (options.firstOrNull { it.first == value }?.second ?: "전체"),
             selected = value.isNotEmpty(), onClick = { open = true },
         )
-        DropdownMenu(open, { open = false }) {
+        OgMenu(open, { open = false }) {
             options.forEach { (v, label) ->
                 DropdownMenuItem(text = { Text(label) }, leadingIcon = { com.oasisreader.app.ui.CheckMark(v == value) }, onClick = { open = false; onChange(v) })
             }
@@ -938,7 +939,7 @@ private fun SearchFieldChip(field: String, onPick: (String) -> Unit) {
             "🔍 " + (SEARCH_FIELDS.firstOrNull { it.first == field }?.second ?: "제목"),
             onClick = { open = true }, selected = field != "title", description = "검색 대상",
         )
-        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        com.oasisreader.app.ui.OgMenu(expanded = open, onDismissRequest = { open = false }) {
             SEARCH_FIELDS.forEach { (k, label) ->
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text(label + "에서 찾기") },
