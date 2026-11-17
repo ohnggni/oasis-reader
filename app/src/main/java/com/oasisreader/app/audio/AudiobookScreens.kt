@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -707,17 +708,30 @@ private fun VolumeRow() {
         )
         onDispose { runCatching { app.unregisterReceiver(r) } }
     }
-    Row(Modifier.fillMaxWidth().semantics { contentDescription = "음량" }, verticalAlignment = Alignment.CenterVertically) {
-        Text("🔈", fontSize = 14.sp)
-        ThinSlider(
-            value = vol.toFloat(), range = 0f..max.toFloat(),
-            onChange = { v ->
-                val n = Math.round(v).coerceIn(0, max)
-                if (n != vol) { vol = n; runCatching { am.setStreamVolume(stream, n, 0) } }
-            },
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+    // in a car (Android Auto) the car's volume decides: this slider would move nothing audible (TODO 67)
+    val inCar = rememberCarConnected()
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().alpha(if (inCar) 0.4f else 1f).semantics { contentDescription = "음량" },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("🔈", fontSize = 14.sp)
+            ThinSlider(
+                value = vol.toFloat(), range = 0f..max.toFloat(),
+                onChange = { v ->
+                    val n = Math.round(v).coerceIn(0, max)
+                    if (n != vol) { vol = n; runCatching { am.setStreamVolume(stream, n, 0) } }
+                },
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                enabled = !inCar,
+            )
+            Text("🔊", fontSize = 14.sp)
+        }
+        if (inCar) Text(
+            "차량에 연결되어 있어요. 음량은 차량에서 조절하세요.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp),
         )
-        Text("🔊", fontSize = 14.sp)
     }
 }
 

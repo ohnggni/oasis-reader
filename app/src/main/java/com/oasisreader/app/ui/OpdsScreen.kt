@@ -301,10 +301,10 @@ fun OpdsScreen(
                 gatherRest()
                 val books = (ready.feed.entries + extra).filter { it.isBook && it.readable != null }.distinctBy { it.id }
                 val target = ContinueReading.pick(books, { it.title }) { byOpds[it.id] }
-                val owned = target?.let { byOpds[it.id] }
+                val onShelf = target?.let { byOpds[it.id] }
                 when {
                     target == null -> android.widget.Toast.makeText(context, "이 폴더에서 읽은 책이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
-                    owned != null -> onOpenBook(owned.id)
+                    onShelf != null -> onOpenBook(onShelf.id)
                     else -> detail = target   // the next volume is not on the 서재 yet: 바로 읽기 / 담기
                 }
             } catch (e: Exception) {
