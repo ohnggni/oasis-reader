@@ -189,3 +189,30 @@ fun NoticeHost() {
       }
     }
 }
+
+/** 배터리 제한 없음 (TODO 70): asked once, the first time something is queued for receiving. */
+@androidx.compose.runtime.Composable
+fun BatteryAskDialog() {
+    if (!com.oasisreader.app.data.BatteryExempt.asking) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { com.oasisreader.app.data.BatteryExempt.dismiss() },
+        title = { Text("🔋 배터리 제한 없음") },
+        text = {
+            Text(
+                "책은 폰에 받아서 보는 앱이라, 받기는 화면이 꺼지거나 앱을 닫아도 이어져야 합니다. " +
+                    "배터리 제한이 걸려 있으면 폰이 받기를 멈춰 '받기 대기'에서 움직이지 않을 수 있어요. " +
+                    "'제한 없음'으로 두면 끝까지 받습니다. (나중에 ⬇️ 받기 관리에서도 바꿀 수 있습니다)",
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                com.oasisreader.app.data.BatteryExempt.dismiss()
+                com.oasisreader.app.data.BatteryExempt.request(context)
+            }) { Text("제한 없음으로") }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = { com.oasisreader.app.data.BatteryExempt.dismiss() }) { Text("나중에") }
+        },
+    )
+}

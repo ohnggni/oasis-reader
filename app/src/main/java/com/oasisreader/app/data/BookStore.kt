@@ -295,6 +295,18 @@ class BookStore(private val context: Context) {
     }
 
     /**
+     * 다 읽은 임시 책 정리 (TODO 72): the files of cached ("바로 읽기") books that are read to the end go;
+     * row, place, highlights and cover stay, and opening one fetches the file again.
+     */
+    suspend fun dropFinishedCache(keep: String? = null): Int = withContext(Dispatchers.IO) {
+        val done = db.books().all().filter {
+            !it.pinned && it.id != keep && hasFiles(it.id) && (it.finishedAt != null || it.progress >= 0.98f)
+        }
+        done.forEach { dropFiles(it.id) }
+        done.size
+    }
+
+    /**
      * 폰에서 지우기 (보관함 관리): the book's file goes, the 서재 entry, place and highlights stay
      * (☁ — it is received again when opened). Only for books that came from a server.
      */

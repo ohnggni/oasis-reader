@@ -152,6 +152,7 @@ object AudioDownloads {
      */
     fun enqueue(context: Context, row: BookEntity, trackIds: Collection<Int>? = null, book: AudioBook? = null) {
         val app = context.applicationContext
+        com.oasisreader.app.data.BatteryExempt.noteQueued(app)   // asked once (TODO 70)
         scope.launch {
             dir(app, row.id).mkdirs()
             // the track list right away (the worker refreshes it), so 받기 관리 can show the tracks

@@ -151,12 +151,17 @@ object Remote {
         return out
     }
 
-    /** Copies [input] to the end of [part] (it already holds [start] bytes). */
-    internal fun copyResume(input: InputStream, part: File, start: Long, total: Long, onProgress: (Long, Long) -> Unit, stop: () -> Boolean): Boolean {
+    /** Throws when the book is too big or the phone has no room for it (and a copy of it). */
+    internal fun checkRoom(part: File, total: Long, start: Long) {
         if (total > OpdsClient.MAX_BOOK_BYTES) throw IOException("파일이 너무 큽니다 (${total / 1048576} MB)")
         val free = part.absoluteFile.parentFile?.usableSpace ?: Long.MAX_VALUE
         if (total > 0 && free < (total - start) * 2 + 200L * 1024 * 1024)
             throw IOException("폰 저장공간이 부족합니다 (약 ${(total * 2) / 1048576} MB 필요, ${free / 1048576} MB 남음)")
+    }
+
+    /** Copies [input] to the end of [part] (it already holds [start] bytes). */
+    internal fun copyResume(input: InputStream, part: File, start: Long, total: Long, onProgress: (Long, Long) -> Unit, stop: () -> Boolean): Boolean {
+        checkRoom(part, total, start)
         var done = start
         var sinceCheck = 0L
         java.io.FileOutputStream(part, start > 0).use { out ->

@@ -8,12 +8,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.oasisreader.app.R
@@ -46,9 +48,12 @@ object BookQueue {
         val error: String? = null,
         val addedAt: Long = System.currentTimeMillis(),
         val origin: String? = null,      // BookOrigin JSON (DB v8)
+        val fails: Int = 0,              // tries in a row that got nowhere (TODO 70)
     )
 
     private const val WORK = "book-download"
+    /** Tries in a row without a single new byte before a book is given up as ⚠️ (▶️ tries again). */
+    const val MAX_FAILS = 8
     private const val CHANNEL = "book_downloads"
     private const val NOTE_ID = 7601
     private val lock = Any()
@@ -77,6 +82,7 @@ object BookQueue {
     fun enqueue(c: Context, job: Job) {
         change(c) { list -> list.filterNot { it.key == job.key } + job }
         Downloads.setProgress(job.key, -1f)
+        BatteryExempt.noteQueued(c)
         kick(c)
     }
 
@@ -86,7 +92,7 @@ object BookQueue {
     }
 
     fun resume(c: Context, key: String) {
-        change(c) { list -> list.map { if (it.key == key) it.copy(state = State.WAITING, error = null) else it } }
+        change(c) { list -> list.map { if (it.key == key) it.copy(state = State.WAITING, error = null, fails = 0) else it } }
         Downloads.setProgress(key, -1f)
         kick(c)
     }
@@ -97,20 +103,38 @@ object BookQueue {
         Downloads.setProgress(key, null)
     }
 
+    /** 선택·일괄 삭제 (TODO 71): the queue entries and what was received of them. */
+    fun cancelMany(c: Context, keys: Collection<String>) {
+        val set = keys.toHashSet()
+        if (set.isEmpty()) return
+        change(c) { list -> list.filterNot { it.key in set } }
+        set.forEach { partFile(c, it).delete(); Downloads.setProgress(it, null) }
+    }
+
     fun pauseAll(c: Context) {
         change(c) { list -> list.map { if (it.state == State.WAITING) it.copy(state = State.PAUSED) else it } }
         Downloads.clearProgress()
     }
 
-    fun kick(c: Context, policy: ExistingWorkPolicy = ExistingWorkPolicy.APPEND_OR_REPLACE) {
+    /**
+     * Starts the receiving. A worker that is only waiting (for the network, or in its retry back-off)
+     * is replaced at once, so a new ▶️ never sits behind a back-off of minutes; one that is running
+     * is left alone and picks the new book up in its loop.
+     */
+    fun kick(c: Context, policy: ExistingWorkPolicy? = null) {
         // the same "와이파이에서만 받기" switch as the audiobooks (받기 관리)
         val net = if (com.oasisreader.app.audio.AudioDownloadWorker.wifiOnly(c)) NetworkType.UNMETERED else NetworkType.CONNECTED
-        WorkManager.getInstance(c.applicationContext).enqueueUniqueWork(
-            WORK, policy,
-            OneTimeWorkRequestBuilder<Worker>()
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(net).build())
-                .build(),
-        )
+        val wm = WorkManager.getInstance(c.applicationContext)
+        val request = OneTimeWorkRequestBuilder<Worker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(net).build())
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 30, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        if (policy != null) { wm.enqueueUniqueWork(WORK, policy, request); return }
+        val infos = wm.getWorkInfosForUniqueWork(WORK)
+        infos.addListener({
+            val running = runCatching { infos.get().any { it.state == WorkInfo.State.RUNNING } }.getOrDefault(false)
+            wm.enqueueUniqueWork(WORK, if (running) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE, request)
+        }, Runnable::run)
     }
 
     /** The Wi-Fi rule changed: start the waiting work again under it. */
@@ -129,9 +153,12 @@ object BookQueue {
             channel(app)
             runCatching { setForeground(getForegroundInfo()) }
             var retry = false
+            val tried = HashSet<String>()   // a book that failed this round waits for the next one; the others go on
             while (!isStopped) {
-                val job = all(app).firstOrNull { it.state == State.WAITING } ?: break
+                val job = all(app).firstOrNull { it.state == State.WAITING && it.key !in tried } ?: break
                 val left = all(app).count { it.state == State.WAITING }
+                val part = partFile(app, job.key)
+                val before = if (part.isFile) part.length() else 0L
                 try {
                     one(app, job, left)
                 } catch (e: CancellationException) {
@@ -142,15 +169,30 @@ object BookQueue {
                     Downloads.setProgress(job.key, null)
                     Downloads.message("받기 실패: ${job.title} — ${e.message}")
                 } catch (e: Exception) {
-                    // network trouble: try again later, from where it stopped
-                    change(app) { l -> l.map { if (it.key == job.key) it.copy(error = e.message) else it } }
-                    retry = true
-                    break
+                    // network trouble: from where it stopped, later. New bytes = still getting somewhere.
+                    val grew = (if (part.isFile) part.length() else 0L) > before
+                    val fails = if (grew) 1 else job.fails + 1
+                    val dead = fails >= MAX_FAILS
+                    val why = e.message ?: e.javaClass.simpleName
+                    change(app) { l -> l.map { if (it.key == job.key) it.copy(error = why, fails = fails, state = if (dead) State.FAILED else State.WAITING) else it } }
+                    tried += job.key
+                    if (dead) {
+                        Downloads.setProgress(job.key, null)
+                        Downloads.message("받기 실패: ${job.title} — $why")
+                    } else {
+                        Downloads.setProgress(job.key, null)
+                        retry = true
+                    }
                 } finally {
                     Downloads.received()
                 }
             }
-            return if (retry && runAttemptCount < 20) Result.retry() else Result.success()
+            if (retry && !isStopped) {
+                if (runAttemptCount < 20) return Result.retry()
+                // not for ever: what is still waiting becomes ⚠️ where the person can see it
+                change(app) { l -> l.map { if (it.state == State.WAITING && it.error != null) it.copy(state = State.FAILED) else it } }
+            }
+            return Result.success()
         }
 
         private suspend fun one(app: Context, job: Job, left: Int) {

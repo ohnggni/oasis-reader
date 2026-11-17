@@ -178,6 +178,12 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 cachePrefs.limitMb = limit
                 scope.launch { com.oasisreader.app.data.BookStore.get(app).trimCache(cachePrefs.limitBytes); usageKey++ }
             }
+            var dropRead by remember { mutableStateOf(cachePrefs.dropFinished) }
+            Item(
+                "🧽", "다 읽은 임시 책은 파일 지우기: ${if (dropRead) "켬" else "끔"}",
+                "폰 공간이 적을 때 좋습니다. 임시 보관(바로 읽기) 책을 끝까지 읽고 서재로 나오면 파일만 지웁니다 (읽은 위치·하이라이트는 남고, 다시 열면 다시 받습니다). 눌러서 바꾸기",
+                enabled = busy == null,
+            ) { dropRead = !dropRead; cachePrefs.dropFinished = dropRead }
             Item("🧹", "임시 보관 파일 지금 비우기", "서재에 보관(📌)한 책은 그대로입니다", enabled = busy == null && (usage?.first ?: 0) > 0) {
                 scope.launch {
                     val n = com.oasisreader.app.data.BookStore.get(app).trimCache(0)

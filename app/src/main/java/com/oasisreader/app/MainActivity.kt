@@ -97,6 +97,8 @@ class MainActivity : ComponentActivity() {
                     App()
                     // 오디오북: the phone's place or the server's, when that cannot be told
                     com.oasisreader.app.audio.PlaceChoiceDialog()
+                    // 받기를 처음 시작할 때, 한 번: 배터리 제한 없음 (TODO 70)
+                    com.oasisreader.app.ui.BatteryAskDialog()
                     // long messages (Toasts cut them to two lines)
                     com.oasisreader.app.ui.NoticeHost()
                 }
@@ -157,6 +159,13 @@ private fun App() {
 
     LaunchedEffect(Unit) {
         Downloads.messages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
+    // 다 읽은 임시 책 파일 정리 (TODO 72): back in the 서재 (the reader has saved its place by then)
+    LaunchedEffect(route) {
+        if (route == Route.LIBRARY && com.oasisreader.app.data.CachePrefs(app).dropFinished) {
+            kotlinx.coroutines.delay(1500)
+            runCatching { store.dropFinishedCache() }
+        }
     }
     LaunchedEffect(Unit) {
         // "[만화] 1"-style titles from earlier downloads: rename them from oasis-meta (once per start)

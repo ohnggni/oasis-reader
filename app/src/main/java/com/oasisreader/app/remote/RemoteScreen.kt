@@ -111,6 +111,12 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
     var items by remember { mutableStateOf<List<RemoteFile>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
+    // 뒤로가기 (TODO 69): always the folder above, FTP/SFTP even above the address folder (up to "/").
+    // [ceiling] = a folder whose parent cannot be listed; [climbedFrom] = where the last step up started.
+    var ceiling by remember { mutableStateOf<String?>(null) }
+    var climbedFrom by remember { mutableStateOf<String?>(null) }
+    var exitAt by remember { mutableStateOf(0L) }
+    val climbable = server.proto == Remote.FTP || server.proto == Remote.FTPS || server.proto == Remote.SFTP
     val selected = remember { mutableStateListOf<RemoteFile>() }
     var ask by remember { mutableStateOf<List<RemoteFile>?>(null) }
     var gathering by remember { mutableStateOf(false) }
@@ -142,17 +148,35 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                 .filter { it.isDir || it.isBook }
                 .filterNot { it.name.startsWith(".") }
                 .sortedWith(compareBy<RemoteFile> { !it.isDir }.thenComparator { a, b -> ShelfSearch.naturalCompare(a.name, b.name) })
+            climbedFrom = null
         } catch (e: Exception) {
-            error = e.message ?: e.javaClass.simpleName
+            val from = climbedFrom
+            if (from != null && d == Remote.parent(from) && d != from) {
+                // the folder above is closed to this user: stay where we were and call it the top
+                climbedFrom = null; ceiling = from; dir = from
+                Notice.show(context, "더 위로는 갈 수 없습니다")
+            } else {
+                error = e.message ?: e.javaClass.simpleName
+            }
         }
     }
 
     val atRoot = dir == null || dir == root
+    fun isTop(d: String): Boolean = d == "/" || d == ceiling || (!climbable && d == root)
+    fun up() {
+        val d = dir ?: return
+        climbedFrom = d
+        dir = Remote.parent(d)
+    }
     fun back() {
+        val d = dir
         when {
             selected.isNotEmpty() -> selected.clear()
-            atRoot -> onBack()
-            else -> dir = Remote.parent(dir!!)
+            d == null -> onBack()
+            !isTop(d) -> up()
+            // at the very top: a second press within 2 seconds leaves (so a habit press doesn't throw us out)
+            System.currentTimeMillis() - exitAt < 2000 -> onBack()
+            else -> { exitAt = System.currentTimeMillis(); Notice.show(context, "한 번 더 누르면 서버 목록으로 나갑니다") }
         }
     }
     BackHandler(onBack = ::back)
@@ -217,7 +241,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
         val title = when {
             selected.isNotEmpty() -> "${selected.size}개 선택됨"
             atRoot -> server.name
-            else -> "📂 " + Remote.nameOf(dir!!)
+            else -> "📂 " + Remote.nameOf(dir!!).ifBlank { server.name }
         }
         TopBar(title, onBack = ::back) {
             com.oasisreader.app.ui.HomeButton()
@@ -232,8 +256,10 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
             }
         }
         // where am I: server › folder › folder (tap a part to go back there)
-        val r = root
+        val r0 = root
         val d = dir
+        // above the address folder (FTP/SFTP climbed up) the trail starts at "/"
+        val r = if (r0 != null && d != null && d != r0 && !(r0 == "/" || d.startsWith(r0.trimEnd('/') + "/"))) "/" else r0
         if (r != null && d != null && d != r) {
             val parts = d.removePrefix(r).split('/').filter { it.isNotEmpty() }
             Row(

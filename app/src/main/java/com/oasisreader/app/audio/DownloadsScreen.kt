@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -166,12 +167,24 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
     val bv = com.oasisreader.app.data.BookQueue.version
     val jobs = remember(bv) { com.oasisreader.app.data.BookQueue.all(app) }
     val dlProgress by com.oasisreader.app.data.Downloads.progress.collectAsState()
+    // 선택·일괄 삭제 (TODO 71): long press a 📖 row to pick; the top bar then shows 전체 선택 · 지우기
+    val picked = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    var confirmClear by remember { mutableStateOf<List<com.oasisreader.app.data.BookQueue.Job>?>(null) }
+    val liveKeys = jobs.map { it.key }.toHashSet()
+    androidx.compose.runtime.LaunchedEffect(liveKeys) { picked.removeAll { it !in liveKeys } }
+    val selecting = picked.isNotEmpty()
+    BackHandler(enabled = selecting) { picked.clear() }
     val busy = books.any { it.second.pending && !it.second.paused } || jobs.any { it.state == com.oasisreader.app.data.BookQueue.State.WAITING }
     var notifOk by remember { mutableStateOf(notificationsAllowed(context)) }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifOk = it }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("⬇️ 받기 관리", onBack = onBack) {
+        if (selecting) TopBar("${picked.size}개 선택됨", onBack = { picked.clear() }) {
+            com.oasisreader.app.ui.EmojiButton("☑️", "전체 선택") {
+                if (picked.size == jobs.size) picked.clear() else { picked.clear(); picked.addAll(jobs.map { it.key }) }
+            }
+            com.oasisreader.app.ui.EmojiButton("🗑️", "선택한 것 지우기") { confirmClear = jobs.filter { it.key in picked } }
+        } else TopBar("⬇️ 받기 관리", onBack = onBack) {
             if (busy) com.oasisreader.app.ui.EmojiButton("⏸️", "모두 멈춤") {
                 AudioDownloads.pauseAll(context); com.oasisreader.app.data.BookQueue.pauseAll(context)
             }
@@ -212,6 +225,18 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                     Text("🔔 알림을 켜면 받는 동안 진행 상황이 보입니다", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     TextButton(onClick = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("켜기") }
                 }
+                // 🔋 배터리 제한 없음 (TODO 70): under the limit the system pauses background receiving
+                val battOk by androidx.compose.runtime.produceState(com.oasisreader.app.data.BatteryExempt.granted(context)) {
+                    while (true) { value = com.oasisreader.app.data.BatteryExempt.granted(context); kotlinx.coroutines.delay(2000) }
+                }
+                if (!battOk) Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("🔋 배터리 제한이 있으면 화면을 끄거나 앱을 닫을 때 받기가 멈출 수 있습니다", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { com.oasisreader.app.data.BatteryExempt.request(context) }) { Text("제한 없음") }
+                }
                 TextButton(onClick = onStorage, modifier = Modifier.padding(horizontal = 4.dp)) { EmojiText("📦 다 받은 책·오디오북은 보관함 관리에서 →") }
                 HorizontalDivider(thickness = 0.5.dp)
             }
@@ -237,7 +262,20 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
             if (jobs.isNotEmpty()) item {
                 EmojiText("📖 책 · 만화 · PDF", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             }
-            items(jobs, key = { "job_" + it.key }) { job -> BookJobRow(job, dlProgress[job.key]) }
+            if (jobs.isNotEmpty() && !selecting) item {
+                val failed = jobs.filter { it.state == com.oasisreader.app.data.BookQueue.State.FAILED }
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
+                    MiniChip("☑️ 고르기", onClick = { picked.add(jobs.first().key) }, description = "받기 목록에서 골라 지우기")
+                    if (failed.isNotEmpty()) MiniChip("⚠️ 실패 ${failed.size}개 지우기", onClick = { confirmClear = failed })
+                    MiniChip("🗑️ 모두 지우기", onClick = { confirmClear = jobs })
+                }
+            }
+            items(jobs, key = { "job_" + it.key }) { job ->
+                BookJobRow(
+                    job, dlProgress[job.key], selecting = selecting, picked = job.key in picked,
+                    onToggle = { if (job.key in picked) picked.remove(job.key) else picked.add(job.key) },
+                )
+            }
             if (books.isNotEmpty()) item {
                 EmojiText("🎧 오디오북", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             }
@@ -281,6 +319,17 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                 }
             }
         }
+    }
+    confirmClear?.let { list ->
+        ClearJobsDialog(
+            list,
+            onDismiss = { confirmClear = null },
+            onClear = {
+                com.oasisreader.app.data.BookQueue.cancelMany(context, list.map { it.key })
+                picked.clear()
+                confirmClear = null
+            },
+        )
     }
 }
 
@@ -387,31 +436,60 @@ private fun Cover(bookId: String) {
     }
 }
 
+/** Tap = pick while picking; long press starts picking. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun Modifier.pickable(selecting: Boolean, onToggle: () -> Unit): Modifier =
+    this.combinedClickable(onClick = { if (selecting) onToggle() }, onLongClick = onToggle)
+
+/** The confirmation for 선택·일괄 삭제: what kind and how many go. */
+@Composable
+private fun ClearJobsDialog(jobs: List<com.oasisreader.app.data.BookQueue.Job>, onDismiss: () -> Unit, onClear: () -> Unit) {
+    val kinds = listOfNotNull(
+        jobs.count { it.state == com.oasisreader.app.data.BookQueue.State.WAITING }.takeIf { it > 0 }?.let { "대기 ${it}개" },
+        jobs.count { it.state == com.oasisreader.app.data.BookQueue.State.PAUSED }.takeIf { it > 0 }?.let { "일시정지 ${it}개" },
+        jobs.count { it.state == com.oasisreader.app.data.BookQueue.State.FAILED }.takeIf { it > 0 }?.let { "실패 ${it}개" },
+    ).joinToString(" · ")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("받기 목록에서 지우기") },
+        text = { Text("${jobs.size}개를 지웁니다 ($kinds). 받다 만 파일도 함께 지워지고, 서재에 이미 담은 책은 그대로입니다.") },
+        confirmButton = { TextButton(onClick = onClear) { Text("지우기", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
+}
+
 private fun mb(bytes: Long) = "%.0f MB".format(bytes / 1048576.0)
 private fun gb(bytes: Long) = if (bytes >= 1L shl 30) "%.1f GB".format(bytes / 1073741824.0) else "%.0f MB".format(bytes / 1048576.0)
 
 
 /** A book · comic · PDF in the queue: title, how far, ⏸️/▶️ and ✖️. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun BookJobRow(job: com.oasisreader.app.data.BookQueue.Job, progress: Float?) {
+private fun BookJobRow(job: com.oasisreader.app.data.BookQueue.Job, progress: Float?, selecting: Boolean, picked: Boolean, onToggle: () -> Unit) {
     val context = LocalContext.current
-    val part = remember(job.key, progress) { com.oasisreader.app.data.BookQueue.partFile(context, job.key).let { if (it.isFile) it.length() else 0L } }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    val part = remember(job.key, progress, job.fails) { com.oasisreader.app.data.BookQueue.partFile(context, job.key).let { if (it.isFile) it.length() else 0L } }
+    Column(
+        Modifier.fillMaxWidth()
+            .pickable(selecting, onToggle)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selecting) androidx.compose.material3.Checkbox(checked = picked, onCheckedChange = { onToggle() })
             Column(Modifier.weight(1f)) {
                 Text(job.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val status = when {
                     job.state == com.oasisreader.app.data.BookQueue.State.PAUSED -> "⏸️ 일시정지" + (if (part > 0) " · ${mb(part)} 받음" else "")
-                    job.state == com.oasisreader.app.data.BookQueue.State.FAILED -> "⚠️ ${job.error ?: "받지 못했습니다"}"
+                    job.state == com.oasisreader.app.data.BookQueue.State.FAILED -> "⚠️ ${job.error ?: "받지 못했습니다"}" + (if (part > 0) " · ${mb(part)} 받음 (▶️로 이어 받기)" else "")
                     progress != null && progress >= 0f -> "⬇️ 받는 중 ${(progress * 100).toInt()}%"
                     progress != null -> "⬇️ 받는 중" + (if (part > 0) " · ${mb(part)}" else "")
-                    else -> "⏳ 받기 대기" + (job.error?.let { " · $it" } ?: "")
+                    else -> "⏳ 받기 대기" + (if (part > 0) " · ${mb(part)} 받음" else "") +
+                        (job.error?.let { " · $it" + (if (job.fails > 0) " (${job.fails}/${com.oasisreader.app.data.BookQueue.MAX_FAILS}번째 시도)" else "") } ?: "")
                 }
                 Text(status, style = MaterialTheme.typography.labelMedium,
                     color = if (job.state == com.oasisreader.app.data.BookQueue.State.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
+            if (!selecting) Row(horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
                 if (job.state == com.oasisreader.app.data.BookQueue.State.WAITING) MiniChip("⏸️", onClick = { com.oasisreader.app.data.BookQueue.pause(context, job.key) }, description = "일시정지")
                 else MiniChip(if (job.state == com.oasisreader.app.data.BookQueue.State.FAILED) "🔁" else "▶️", onClick = { com.oasisreader.app.data.BookQueue.resume(context, job.key) }, description = "이어 받기")
                 MiniChip("✖️", onClick = { com.oasisreader.app.data.BookQueue.cancel(context, job.key) }, description = "받기 취소")
