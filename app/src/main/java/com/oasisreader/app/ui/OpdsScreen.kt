@@ -5,7 +5,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.alpha
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.Arrangement
@@ -53,7 +55,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.oasisreader.app.data.ContinueReading
 import com.oasisreader.app.data.Downloads
+import com.oasisreader.app.data.VolumeRange
 import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.opds.OpdsClient
@@ -213,7 +217,11 @@ fun OpdsScreen(
     val isFav = favorites.any { it.urls.lastOrNull() == current }
 
     // ⬇️ 이 폴더 모두 담기 → 컬렉션으로 묶을지 묻기
-    var askFolder by remember { mutableStateOf<Pair<String, List<OpdsEntry>>?>(null) }
+    // (folder name, books, what part of it: null = the whole folder, else "처음부터 「…」까지")
+    var askFolder by remember { mutableStateOf<Triple<String, List<OpdsEntry>, String?>?>(null) }
+    var rangeMenu by remember { mutableStateOf<OpdsEntry?>(null) }   // long-pressed book: 여기까지 / 여기부터 받기
+    val libBooks by remember { db.books().observeAll() }.collectAsState(initial = emptyList())
+    val byOpds = remember(libBooks) { libBooks.filter { it.opdsId != null }.associateBy { it.opdsId!! } }
     var gatheringAll by remember { mutableStateOf(false) }
     fun keepFolder(name: String, list: List<OpdsEntry>, collection: Boolean) {
         scope.launch {
@@ -250,20 +258,68 @@ fun OpdsScreen(
                 }
                 nextUrl = next
                 val books = (ready.feed.entries + extra).filter { it.isBook && it.readable != null }.distinctBy { it.id }
-                askFolder = labels.last() to books
+                askFolder = Triple(labels.last(), books, null)
             } catch (e: Exception) {
                 com.oasisreader.app.ui.Notice.show(context, "목록 전체를 받지 못했습니다: ${e.message}")
             } finally { gatheringAll = false }
         }
     }
-    askFolder?.let { (name, list) ->
+    /** The rest of this folder's pages (bounded), into [extra]. */
+    suspend fun gatherRest() {
+        var next = nextUrl
+        var pages = 0
+        while (next != null && pages < MAX_SORT_PAGES) {
+            val f = client.fetch(next)
+            extra.addAll(f.entries); pages++
+            next = f.next
+        }
+        nextUrl = next
+    }
+    /** 여기까지 / 여기부터 받기 (TODO 66): [order] is the list as shown, so "1권부터 3권까지" is what the eye sees. */
+    fun downloadRange(ready: FeedState.Ready, from: OpdsEntry, toEnd: Boolean, order: (List<OpdsEntry>) -> List<OpdsEntry>) {
+        if (gatheringAll) return
+        gatheringAll = true
+        scope.launch {
+            try {
+                if (toEnd) gatherRest()
+                val ordered = order((ready.feed.entries + extra).distinctBy { it.id })
+                val i = ordered.indexOfFirst { it.id == from.id }
+                val part = VolumeRange.slice(ordered, i, toEnd).filter { it.isBook && it.readable != null }
+                if (part.isEmpty()) return@launch
+                askFolder = Triple(labels.last(), part, if (toEnd) "「${from.title}」부터 끝까지" else "처음부터 「${from.title}」까지")
+            } catch (e: Exception) {
+                com.oasisreader.app.ui.Notice.show(context, "목록 전체를 받지 못했습니다: ${e.message}")
+            } finally { gatheringAll = false }
+        }
+    }
+    /** 이어 읽기 (TODO 65): the volume read last (or the next, when it is finished) — the whole folder is looked at. */
+    fun continueReading(ready: FeedState.Ready) {
+        if (gatheringAll) return
+        gatheringAll = true
+        scope.launch {
+            try {
+                gatherRest()
+                val books = (ready.feed.entries + extra).filter { it.isBook && it.readable != null }.distinctBy { it.id }
+                val target = ContinueReading.pick(books, { it.title }) { byOpds[it.id] }
+                val owned = target?.let { byOpds[it.id] }
+                when {
+                    target == null -> android.widget.Toast.makeText(context, "이 폴더에서 읽은 책이 없습니다", android.widget.Toast.LENGTH_SHORT).show()
+                    owned != null -> onOpenBook(owned.id)
+                    else -> detail = target   // the next volume is not on the 서재 yet: 바로 읽기 / 담기
+                }
+            } catch (e: Exception) {
+                com.oasisreader.app.ui.Notice.show(context, "목록 전체를 받지 못했습니다: ${e.message}")
+            } finally { gatheringAll = false }
+        }
+    }
+    askFolder?.let { (name, list, range) ->
         val missing = list.count { it.id !in ownedSet }
         AlertDialog(
             onDismissRequest = { askFolder = null },
-            title = { EmojiText("⬇️ 「$name」 모두 담기") },
+            title = { EmojiText(if (range == null) "⬇️ 「$name」 모두 담기" else "⬇️ $range 담기") },
             text = {
                 Text(
-                    "이 폴더의 책 ${list.size}권 중 서재에 없는 ${missing}권을 받습니다.\n" +
+                    (if (range == null) "이 폴더의 책 ${list.size}권" else "$range ${list.size}권") + " 중 서재에 없는 ${missing}권을 받습니다.\n" +
                         "같은 이름의 📚 컬렉션으로 묶을까요? (이미 서재에 있는 이 폴더 책도 함께 묶습니다)",
                 )
             },
@@ -379,8 +435,25 @@ fun OpdsScreen(
                         ).joinToString(" · ").ifEmpty { null },
                 )
                 val folderMissing = all.count { it.isBook && it.readable != null && it.id !in ownedSet }
-                if (nBooks > 1 && (folderMissing > 0 || more)) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    MiniChip(
+                // ▶ 이어 읽기: shown when something of this folder was read — in the loaded part, or (more pages
+                // still to come) when any book of the 서재 came from this very folder
+                val volumes = all.filter { it.isBook && it.readable != null }
+                val fromHere = remember(libBooks, current) {
+                    libBooks.any { b ->
+                        com.oasisreader.app.data.BookOrigin.decode(b.origin)
+                            ?.let { o -> o.type == com.oasisreader.app.data.BookOrigin.OPDS && o.server == serverId && o.urls.lastOrNull() == current } == true
+                    }
+                }
+                val canResume = nBooks > 1 && ((more && fromHere) || ContinueReading.pick(volumes, { it.title }) { byOpds[it.id] } != null)
+                if (nBooks > 1 && (folderMissing > 0 || more || canResume)) Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
+                ) {
+                    if (canResume) MiniChip(
+                        if (gatheringAll) "⏳ 찾는 중…" else "▶️ 이어 읽기",
+                        onClick = { continueReading(s) }, enabled = !gatheringAll, description = "읽던 회차로 바로 가기",
+                    )
+                    if (folderMissing > 0 || more) MiniChip(
                         if (gatheringAll) "⏳ 목록을 모으는 중…" else "⬇️ 이 폴더 " + loadedCount(folderMissing, more, "권") + " 모두 담기",
                         onClick = { downloadFolder(s) }, enabled = !gatheringAll,
                     )
@@ -406,6 +479,7 @@ fun OpdsScreen(
                                 progress = progress[e.id],
                                 onClick = { if (e.navHref != null && !e.isBook) open(e.navHref, e.title) else detail = e },
                                 onDownload = { Downloads.start(app, server, e, origin = here()) },
+                                onLongClick = if (e.isBook && e.readable != null && nBooks > 1) ({ rangeMenu = e }) else null,
                             )
                         }
                         nextUrl?.let { more ->
@@ -426,6 +500,7 @@ fun OpdsScreen(
                                 if (e.navHref != null && !e.isBook) open(e.navHref, e.title) else detail = e
                             },
                             onDownload = { Downloads.start(app, server, e, origin = here()) },
+                            onLongClick = if (e.isBook && e.readable != null && nBooks > 1) ({ rangeMenu = e }) else null,
                         )
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }
@@ -437,6 +512,33 @@ fun OpdsScreen(
                 }
             }
         }
+    }
+
+    rangeMenu?.let { e ->
+        val ready = state as? FeedState.Ready
+        AlertDialog(
+            onDismissRequest = { rangeMenu = null },
+            title = { Text(e.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        rangeMenu = null
+                        if (ready != null) downloadRange(ready, e, false) { l -> sortEntries(l, if (!datesMeaningful(l) && sort == CatalogSort.DATE) CatalogSort.SERVER else sort, sortDesc) }
+                    }) { EmojiText("⬇️ 처음부터 여기까지 받기") }
+                    TextButton(onClick = {
+                        rangeMenu = null
+                        if (ready != null) downloadRange(ready, e, true) { l -> sortEntries(l, if (!datesMeaningful(l) && sort == CatalogSort.DATE) CatalogSort.SERVER else sort, sortDesc) }
+                    }) { EmojiText("⬇️ 여기부터 끝까지 받기") }
+                    Text(
+                        "지금 화면에 보이는 순서 기준입니다. 이미 서재에 있는 책은 건너뜁니다.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { rangeMenu = null }) { Text("닫기") } },
+        )
     }
 
     detail?.let { e ->
@@ -492,6 +594,7 @@ fun OpdsScreen(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun EntryRow(
     entry: OpdsEntry,
     client: OpdsClient,
@@ -500,9 +603,10 @@ private fun EntryRow(
     progress: Float?,
     onClick: () -> Unit,
     onDownload: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (entry.isBook) {
@@ -632,6 +736,7 @@ private fun SortBar(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun EntryTile(
     entry: OpdsEntry,
     client: OpdsClient,
@@ -639,8 +744,9 @@ private fun EntryTile(
     progress: Float?,
     onClick: () -> Unit,
     onDownload: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
-    Column(Modifier.clickable(onClick = onClick)) {
+    Column(Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
         Box {
             if (entry.isBook) {
                 RemoteCover(entry.thumb, entry.title, load = { client.bytes(it) },

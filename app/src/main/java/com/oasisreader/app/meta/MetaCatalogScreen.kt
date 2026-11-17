@@ -5,7 +5,9 @@ import com.oasisreader.app.ui.OgMenu
 import com.oasisreader.app.ui.EmojiText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import com.oasisreader.app.ui.grouped
 import androidx.compose.foundation.layout.Arrangement
@@ -59,7 +61,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.oasisreader.app.comic.ComicParser
+import com.oasisreader.app.data.ContinueReading
 import com.oasisreader.app.data.Downloads
+import com.oasisreader.app.data.VolumeRange
 import com.oasisreader.app.data.Server
 import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.AppDatabase
@@ -251,12 +255,18 @@ fun MetaCatalogScreen(
             ).show()
         }
     }
-    var askSeries by remember { mutableStateOf<Pair<String, List<MetaBook>>?>(null) }
-    askSeries?.let { (name, list) ->
+    // (series name, books, what part: null = the whole series, else "처음부터 「…」까지")
+    var askSeries by remember { mutableStateOf<Triple<String, List<MetaBook>, String?>?>(null) }
+    askSeries?.let { (name, list, range) ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { askSeries = null },
             title = { EmojiText("📚 컬렉션으로 묶을까요?") },
-            text = { Text("「$name」 시리즈의 책을 서재에 담으면서 같은 이름의 컬렉션으로 묶습니다. 이미 서재에 있는 이 시리즈의 책도 함께 묶습니다.") },
+            text = {
+                Text(
+                    if (range == null) "「$name」 시리즈의 책을 서재에 담으면서 같은 이름의 컬렉션으로 묶습니다. 이미 서재에 있는 이 시리즈의 책도 함께 묶습니다."
+                    else "「$name」 시리즈의 $range ${list.size}권을 서재에 담으면서 같은 이름의 컬렉션으로 묶습니다. 이미 서재에 있는 같은 범위의 책도 함께 묶습니다.",
+                )
+            },
             confirmButton = { TextButton(onClick = { askSeries = null; keepSeries(list, name) }) { Text("묶어서 받기") } },
             dismissButton = { TextButton(onClick = { askSeries = null; keepSeries(list, null) }) { Text("그냥 받기") } },
         )
@@ -292,7 +302,8 @@ fun MetaCatalogScreen(
             onBack = { openSeries = null },
             onBook = { openBook = it },
             onAction = ::openOrDownload,
-            onDownloadAll = { list -> askSeries = s.seriesName to list },
+            onDownloadAll = { list -> askSeries = Triple(s.seriesName, list, null) },
+            onDownloadRange = { list, range -> askSeries = Triple(s.seriesName, list, range) },
         )
         BookDetailOverlay()
     }
@@ -540,6 +551,7 @@ private fun MoreFooter(loading: Boolean, hasMore: Boolean, empty: Boolean, autoK
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun SeriesDetail(
     series: MetaSeries,
     format: String?,
@@ -552,8 +564,14 @@ private fun SeriesDetail(
     onBook: (MetaBook) -> Unit,
     onAction: (MetaBook) -> Unit,
     onDownloadAll: (List<MetaBook>) -> Unit,
+    onDownloadRange: (List<MetaBook>, String) -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    // 이어 읽기 (TODO 65): the 서재 entry of each volume, by its file address
+    val ctx = LocalContext.current
+    val shelf by remember { AppDatabase.get(ctx.applicationContext).books().observeAll() }.collectAsState(initial = emptyList())
+    val byUrl = remember(shelf) { shelf.filter { it.sourceUrl != null }.associateBy { it.sourceUrl!! } }
+    var rangeMenu by remember { mutableStateOf<MetaBook?>(null) }   // long-pressed volume: 여기까지 / 여기부터 받기
     var books by remember { mutableStateOf<List<MetaBook>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
@@ -592,20 +610,60 @@ private fun SeriesDetail(
                     )
                     if (missing > 1) OutlinedButton(onClick = { onDownloadAll(list) }) { EmojiText("⬇️ 서재에 없는 ${missing}권 모두 담기") }
                 }
+                val resume = ContinueReading.pick(list, { it.name }) { b -> api.downloadUrl(b)?.let { byUrl[it] } }
+                if (resume != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)) {
+                    com.oasisreader.app.ui.MiniChip(
+                        "▶️ 이어 읽기",
+                        onClick = { if (api.downloadUrl(resume) in ownedSet) onAction(resume) else onBook(resume) },
+                        description = "읽던 회차로 바로 가기",
+                    )
+                }
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
                     items(list, key = { it.id }) { b ->
                         BookRow(b, api, opds, owned = api.downloadUrl(b) in ownedSet, progress = progress[api.key(b)],
-                            showSeries = false, onClick = { onBook(b) }, onAction = { onAction(b) })
+                            showSeries = false, onClick = { onBook(b) }, onAction = { onAction(b) },
+                            onLongClick = if (b.readable && list.size > 1) ({ rangeMenu = b }) else null)
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
             }
         }
     }
+    rangeMenu?.let { m -> books?.let { l -> RangeMenu(l, m, onDownloadRange) { rangeMenu = null } } }
 }
 
 @Composable
+private fun RangeMenu(
+    list: List<MetaBook>, at: MetaBook,
+    onPick: (List<MetaBook>, String) -> Unit, onDismiss: () -> Unit,
+) {
+    val i = list.indexOfFirst { it.id == at.id }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(at.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column {
+                TextButton(onClick = {
+                    onDismiss(); onPick(VolumeRange.slice(list, i, false).filter { it.readable }, "처음부터 「${at.name}」까지")
+                }) { EmojiText("⬇️ 처음부터 여기까지 받기") }
+                TextButton(onClick = {
+                    onDismiss(); onPick(VolumeRange.slice(list, i, true).filter { it.readable }, "「${at.name}」부터 끝까지")
+                }) { EmojiText("⬇️ 여기부터 끝까지 받기") }
+                Text(
+                    "지금 화면에 보이는 순서 기준입니다. 이미 서재에 있는 책은 건너뜁니다.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+    )
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun BookRow(
     b: MetaBook,
     api: MetaApi,
@@ -616,9 +674,10 @@ private fun BookRow(
     library: String? = null, // shown with the series: "📁 만화 › 괴력난신" (so same-named books can be told apart)
     onClick: () -> Unit,     // details
     onAction: () -> Unit,    // download / open
+    onLongClick: (() -> Unit)? = null,   // series detail: 여기까지 / 여기부터 받기
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MetaCover(api, opds, b.coverUrl, b.id, b.name, modifier = Modifier.width(48.dp).height(70.dp))

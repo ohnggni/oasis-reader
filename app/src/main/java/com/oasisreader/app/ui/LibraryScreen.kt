@@ -614,6 +614,16 @@ fun LibraryScreen(
                 onUngroup = if (auto) ({ openFolder = null; setUngrouped(ungrouped + folder.id.removePrefix("s:")) }) else null,
             )
         }
+        // ▶ 이어 읽기 (TODO 65): the volume read last, or the next when that one is finished
+        if (folder != null && !selecting) {
+            val resume = remember(entries) {
+                val inFolder = entries.filterIsInstance<ShelfEntry.Book>().map { it.b }
+                com.oasisreader.app.data.ContinueReading.pick(inFolder, { it.title }) { it }
+            }
+            if (resume != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)) {
+                MiniChip("▶️ 이어 읽기", onClick = { onOpen(resume) }, description = "읽던 회차로 바로 가기")
+            }
+        }
 
         if (loaded && books.isEmpty()) {
             EmptyShelf(onCatalog, onImportFile)
