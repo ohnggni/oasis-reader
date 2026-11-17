@@ -54,11 +54,12 @@ fun TopBar(
     onBack: (() -> Unit)? = null,
     brand: Boolean = false,          // app header: logo + bold name
     brandSub: String? = null,        // app header: one small line under the logo
+    height: androidx.compose.ui.unit.Dp? = null,   // a thinner (or thicker) bar than the usual 56 / 60 dp
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Surface(color = barColor(), contentColor = MaterialTheme.colorScheme.onSurfaceVariant, border = com.oasisreader.app.ui.theme.einkBorder()) {
         Row(
-            Modifier.fillMaxWidth().shelfTopInset().height(if (brand) 60.dp else 56.dp).padding(end = 4.dp),
+            Modifier.fillMaxWidth().shelfTopInset().height(height ?: if (brand) 60.dp else 56.dp).padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {

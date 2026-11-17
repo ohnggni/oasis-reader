@@ -494,6 +494,15 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
         animationSpec = if (com.oasisreader.app.ui.theme.ThemeMode.eink) androidx.compose.animation.core.snap<Float>() else androidx.compose.animation.core.spring<Float>(),
         label = "bar",
     )
+    // While the bar is hidden the screen sits 16 dp higher (its empty place made it hang low). A touch
+    // that starts while it is hidden keeps the screen up until the finger lifts, so the button under
+    // the finger is not moved away from it (heldLift).
+    var heldLift by remember { mutableStateOf(false) }
+    val lift by androidx.compose.animation.core.animateFloatAsState(
+        if (!barShown || heldLift) 1f else 0f,
+        animationSpec = if (com.oasisreader.app.ui.theme.ThemeMode.eink) androidx.compose.animation.core.snap<Float>() else androidx.compose.animation.core.spring<Float>(),
+        label = "lift",
+    )
     var picking by remember { mutableStateOf(false) }
     // The place in the track changes twice a second: only the small pieces below that show it
     // (BookPlaceLine, PlayerHeadline, PlayerSeek) read it, so the rest of the screen stays put.
@@ -501,18 +510,21 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).pointerInput(Unit) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false)
+                heldLift = !barShown
                 barShown = true; touchedAt = System.currentTimeMillis()
+                do { val e = awaitPointerEvent() } while (e.changes.any { it.pressed })
+                heldLift = false
             }
         },
     ) {
         Box {
             Box(Modifier.graphicsLayer { alpha = barAlpha }) {
-                TopBar("재생 중", onBack = onBack) {
+                TopBar("재생 중", onBack = onBack, height = 48.dp) {
                     if (b != null) com.oasisreader.app.ui.EmojiButton("⏹️", "듣기 끝내기") { AudioPlayback.close(context); onBack() }
                 }
                 // the whole book's place (TODO 34), part of the bar: it fades out with it
                 if (b != null) Box(
-                    Modifier.align(Alignment.BottomEnd).height(56.dp).padding(end = 54.dp),
+                    Modifier.align(Alignment.BottomEnd).height(48.dp).padding(end = 54.dp),
                     contentAlignment = Alignment.CenterEnd,
                 ) { BookPlaceLine(b) }
             }
@@ -523,7 +535,8 @@ fun AudioPlayerScreen(onBack: () -> Unit) {
         }
         if (b == null) Text("재생 중인 오디오북이 없습니다.", modifier = Modifier.padding(24.dp))
         else Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 24.dp),
+            Modifier.fillMaxSize().graphicsLayer { translationY = -lift * 16.dp.toPx() }
+                .verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(16.dp))
