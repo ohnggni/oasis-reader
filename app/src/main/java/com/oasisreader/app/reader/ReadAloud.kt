@@ -50,6 +50,9 @@ class ReadAloud(context: Context) {
         private set
     var pitch by mutableFloatStateOf(prefs.getFloat("pitch", 1f))
         private set
+    /** Numbers and signs written out in Hangul before speaking ([ReadAloudNormalize]). */
+    var normalize by mutableStateOf(prefs.getBoolean("normalize", true))
+        private set
     /** Sleep timer: stop at this time (ms), or at the end of the chapter. */
     var sleepAt by mutableLongStateOf(0L)
         private set
@@ -59,7 +62,8 @@ class ReadAloud(context: Context) {
     /** The book's language (EPUB dc:language), used when no voice was picked. */
     var language: String? = null
 
-    private var items: List<String> = emptyList()
+    private var raw: List<String> = emptyList()     // as in the book
+    private var items: List<String> = emptyList()   // as spoken
     private var session = 0          // utterances of an older queue are ignored
     private var marked = -1
     private var pending: (() -> Unit)? = null
@@ -127,7 +131,9 @@ class ReadAloud(context: Context) {
 
     /** Read [sentences] from [from]. An empty chapter (a cover picture) finishes at once. */
     fun play(sentences: List<String>, from: Int) {
-        items = sentences.map { if (it.length > MAX_LEN) it.take(MAX_LEN) else it }
+        // one sentence in, one out: the page marks sentences by their place in this list
+        raw = sentences
+        items = sentences.map { spoken(it) }
         count = items.size
         index = from.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         marked = -1
@@ -178,6 +184,21 @@ class ReadAloud(context: Context) {
         rate = r
         prefs.edit().putFloat("rate", r).apply()
         if (playing) speakFrom(index)
+    }
+
+    private fun spoken(s: String): String {
+        val t = if (normalize) runCatching { ReadAloudNormalize.apply(s) }.getOrDefault(s) else s
+        return if (t.length > MAX_LEN) t.take(MAX_LEN) else t
+    }
+
+    /** Turn number reading on / off; the rest of the chapter is read the new way. */
+    fun changeNormalize(on: Boolean) {
+        normalize = on
+        prefs.edit().putBoolean("normalize", on).apply()
+        if (items.isNotEmpty() && raw.isNotEmpty()) {
+            items = raw.map { spoken(it) }
+            if (playing) speakFrom(index)
+        }
     }
 
     fun changePitch(p: Float) {
@@ -268,7 +289,7 @@ class ReadAloud(context: Context) {
         audio == null || audio.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_FAILED
 
     fun stop() {
-        session++; pending = null; tts.stop(); playing = false; items = emptyList(); count = 0
+        session++; pending = null; tts.stop(); playing = false; items = emptyList(); raw = emptyList(); count = 0
         main.removeCallbacks(sleepTask); sleepAt = 0L; sleepAtChapterEnd = false
         audio?.abandonAudioFocusRequest(focusRequest)
         onStateChanged()

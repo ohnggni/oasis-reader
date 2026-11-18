@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -209,6 +210,16 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                     ReadAloud.PITCHES.forEach { (p, label) ->
                         FilterChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
                     }
+                }
+                Row(
+                    Modifier.fillMaxWidth().clickable { ra.changeNormalize(!ra.normalize) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("숫자·기호를 한글로 읽기", style = MaterialTheme.typography.labelLarge)
+                        Text("1/2 → 이분의 일, 3개 → 세 개, 15:27 → 열다섯 시 이십칠 분", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
                 }
             }
         },
