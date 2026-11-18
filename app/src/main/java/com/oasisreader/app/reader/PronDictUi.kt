@@ -1,6 +1,8 @@
 package com.oasisreader.app.reader
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,7 +73,7 @@ fun PronDictDialog(ra: ReadAloud, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text("발음 사전") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("책에 나오는 말을 이렇게 읽습니다. 모든 책에 쓰입니다.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = word, onValueChange = { word = it.take(PronDict.MAX_WORD) },
@@ -95,7 +97,7 @@ fun PronDictDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                 HorizontalDivider(thickness = 0.5.dp)
                 if (PronDict.entries.isEmpty()) {
                     Text("아직 없습니다.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
-                } else LazyColumn(Modifier.heightIn(max = 280.dp)) {
+                } else LazyColumn(Modifier.heightIn(max = 240.dp)) {
                     items(PronDict.entries, key = { it.first }) { (w, r) ->
                         Row(
                             Modifier.fillMaxWidth().clickable { word = w; reading = r; editing = w },

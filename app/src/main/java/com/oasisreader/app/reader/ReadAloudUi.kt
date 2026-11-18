@@ -6,6 +6,8 @@ import com.oasisreader.app.ui.EmojiText
 import android.speech.tts.Voice
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -169,7 +171,9 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text("목소리") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // the whole dialog scrolls: with the AI voice card, engines and voices the rows below
+            // (pitch, number reading, dictionary) went off a phone screen
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
                 if (engines.size > 1) {
                     Text("음성 엔진", style = MaterialTheme.typography.labelLarge)
@@ -194,7 +198,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                         "이 엔진에 맞는 목소리가 없습니다. 휴대폰 설정 › 텍스트 음성 변환에서 음성 데이터를 받거나 다른 엔진을 고르세요.",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    else -> LazyColumn(Modifier.heightIn(max = 300.dp)) {
+                    else -> LazyColumn(Modifier.heightIn(max = 240.dp)) {
                         item {
                             VoiceRow("엔진 기본 목소리", null, picked == null, onPick = { picked = null; ra.setVoice(null) }, onPlay = { ra.preview(null, sample) })
                         }
