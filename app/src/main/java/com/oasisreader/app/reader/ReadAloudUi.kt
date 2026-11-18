@@ -167,51 +167,73 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
 
+    // where the voice comes from: the phone's engine, or Azure (only one shows at a time)
+    var azureMode by remember { mutableStateOf(AzureVoice.on(ctx)) }
+    var setup by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("목소리") },
         text = {
-            // the whole dialog scrolls: with the AI voice card, engines and voices the rows below
-            // (pitch, number reading, dictionary) went off a phone screen
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                AzureVoiceCard(ra)
-                AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
-                if (engines.size > 1) {
-                    Text("음성 엔진", style = MaterialTheme.typography.labelLarge)
-                    engines.forEach { (pkg, label) ->
-                        Row(
-                            Modifier.fillMaxWidth().clickable { ra.setEngine(pkg); picked = null; rev++ },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = pkg == engine, onClick = { ra.setEngine(pkg); picked = null; rev++ })
-                            Text(label, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                    HorizontalDivider(thickness = 0.5.dp)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("목소리", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                    FilterChip(selected = all, onClick = { all = !all }, label = { Text("다른 언어도") })
-                }
-                when {
-                    ra.available == null -> Text("엔진을 여는 중…", style = MaterialTheme.typography.bodySmall)
-                    voices.isEmpty() -> Text(
-                        "이 엔진에 맞는 목소리가 없습니다. 휴대폰 설정 › 텍스트 음성 변환에서 음성 데이터를 받거나 다른 엔진을 고르세요.",
-                        style = MaterialTheme.typography.bodySmall,
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !azureMode, modifier = Modifier.weight(1f),
+                        onClick = { if (azureMode) { AzureVoice.setOn(ctx, false); ra.azureChanged(); azureMode = false } },
+                        label = { Text("휴대폰 목소리", maxLines = 1) },
                     )
-                    else -> LazyColumn(Modifier.heightIn(max = 240.dp)) {
-                        item {
-                            VoiceRow("엔진 기본 목소리", null, picked == null, onPick = { picked = null; ra.setVoice(null) }, onPlay = { ra.preview(null, sample) })
+                    FilterChip(
+                        selected = azureMode, modifier = Modifier.weight(1f),
+                        onClick = {
+                            if (!AzureVoice.hasKey(ctx)) setup = true
+                            else if (!azureMode) { AzureVoice.setOn(ctx, true); ra.azureChanged(); azureMode = true }
+                        },
+                        label = { Text("Azure 음성", maxLines = 1) },
+                    )
+                }
+
+                if (azureMode) AzureVoicePanel(ra, onSetup = { setup = true })
+                else {
+                    // the AI voice card only while there is something to do (install / use / get voices)
+                    val aiReady = engine == AiVoice.PKG && ra.available == true && voices.isNotEmpty()
+                    if (!aiReady) AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
+                    if (engines.size > 1) {
+                        Text("엔진", style = MaterialTheme.typography.labelLarge)
+                        ChipFlow {
+                            engines.forEach { (pkg, label) ->
+                                FilterChip(
+                                    selected = pkg == engine,
+                                    onClick = { if (pkg != engine) { ra.setEngine(pkg); picked = null; rev++ } },
+                                    label = { Text(if (pkg == AiVoice.PKG) "$label (AI)" else label, maxLines = 1) },
+                                )
+                            }
                         }
-                        items(voices, key = { it.name }) { v ->
-                            VoiceRow(voiceLabel(v, voices), voiceNote(v), picked == v.name,
-                                onPick = { picked = v.name; ra.setVoice(v); if (!ra.playing) ra.preview(v, sample) }, onPlay = { ra.preview(v, sample) })
+                    }
+                    Text("목소리 · 누르면 골라서 들려줍니다", style = MaterialTheme.typography.labelLarge)
+                    when {
+                        ra.available == null -> Text("엔진을 여는 중…", style = MaterialTheme.typography.bodySmall)
+                        voices.isEmpty() -> Text(
+                            "이 엔진에 맞는 목소리가 없습니다. 휴대폰 설정 › 텍스트 음성 변환에서 음성 데이터를 받거나 다른 엔진을 고르세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        else -> ChipFlow {
+                            FilterChip(selected = picked == null, onClick = { picked = null; ra.setVoice(null); if (!ra.playing) ra.preview(null, sample) }, label = { Text("기본") })
+                            voices.forEach { v ->
+                                FilterChip(
+                                    selected = picked == v.name,
+                                    onClick = { picked = v.name; ra.setVoice(v); if (!ra.playing) ra.preview(v, sample) },
+                                    label = { Text(voiceLabel(v, voices) + if (v.isNetworkConnectionRequired) " ☁" else "", maxLines = 1) },
+                                )
+                            }
+                            FilterChip(selected = all, onClick = { all = !all }, label = { Text(if (all) "한국어만" else "다른 언어도") })
                         }
                     }
                 }
+
                 HorizontalDivider(thickness = 0.5.dp)
+                Text("읽는 방법", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("음높이", style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(56.dp))
+                    Text("음높이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
                     ReadAloud.PITCHES.forEach { (p, label) ->
                         FilterChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
                     }
@@ -221,8 +243,8 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("숫자·기호를 한글로 읽기", style = MaterialTheme.typography.labelLarge)
-                        Text("1/2 → 이분의 일, 3개 → 세 개, 15:27 → 열다섯 시 이십칠 분", style = MaterialTheme.typography.bodySmall)
+                        Text("숫자·기호를 한글로 읽기", style = MaterialTheme.typography.bodyMedium)
+                        Text("1/2 → 이분의 일, 3개 → 세 개", style = MaterialTheme.typography.bodySmall)
                     }
                     Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
                 }
@@ -231,19 +253,17 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
     )
+    if (setup) AzureSetupDialog(ra, onDismiss = { setup = false; azureMode = AzureVoice.on(ctx) })
 }
 
+/** Chips that wrap to the next line. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun VoiceRow(label: String, note: String?, selected: Boolean, onPick: () -> Unit, onPlay: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onPick).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selected, onClick = onPick)
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (note != null) Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(4.dp))
-        TextButton(onClick = onPlay) { EmojiText("▶ 듣기") }
-    }
+internal fun ChipFlow(content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) { content() }
 }
 
 /** "한국어 3" style names (engines' own names are codes like ko-KR-SMTl03 / ko-kr-x-ism-local). */
@@ -254,16 +274,6 @@ private fun voiceLabel(v: Voice, list: List<Voice>): String {
     val country = v.locale.getDisplayCountry(java.util.Locale.KOREAN)
     return "$lang ${n}" + (if (country.isNotBlank() && v.locale.language != "ko") " ($country)" else "")
 }
-
-private fun voiceNote(v: Voice): String = listOfNotNull(
-    when {
-        v.quality >= Voice.QUALITY_VERY_HIGH -> "아주 좋은 음질"
-        v.quality >= Voice.QUALITY_HIGH -> "좋은 음질"
-        else -> null
-    },
-    if (v.isNetworkConnectionRequired) "인터넷 필요" else null,
-    v.name,
-).joinToString(" · ")
 
 /**
  * The bar's drag handle: six dots (the common "move me" mark). It used to be "≡", which reads as a

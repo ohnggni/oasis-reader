@@ -46,65 +46,56 @@ private fun open(c: Context, url: String) {
     runCatching { c.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
-private fun voiceLabel(v: AzureVoice.VoiceInfo): String {
-    val name = v.LocalName.ifBlank { v.ShortName.substringAfterLast('-').removeSuffix("Neural") }
-    val g = when (v.Gender.lowercase()) { "female" -> "여성"; "male" -> "남성"; else -> "" }
-    return if (g.isEmpty()) name else "$name · $g"
-}
-
 /** Shown until the voice list is read from Azure (or when it cannot be). */
 private val FALLBACK = listOf(
     AzureVoice.VoiceInfo("ko-KR-SunHiNeural", "선히", "Female", "ko-KR", "Neural"),
     AzureVoice.VoiceInfo("ko-KR-InJoonNeural", "인준", "Male", "ko-KR", "Neural"),
 )
 
-/** The Azure 음성 card at the top of the voice dialog. */
+/** Azure voices, women and men apart, as chips: a tap picks the voice and plays a sample. */
 @Composable
-fun AzureVoiceCard(ra: ReadAloud) {
+fun AzureVoicePanel(ra: ReadAloud, onSetup: () -> Unit) {
     val ctx = LocalContext.current
-    var rev by remember { mutableIntStateOf(0) }
-    var setup by remember { mutableStateOf(false) }
-    val hasKey = remember(rev) { AzureVoice.hasKey(ctx) }
-    val on = remember(rev) { AzureVoice.on(ctx) }
-    var voice by remember(rev) { mutableStateOf(AzureVoice.voice(ctx)) }
+    var voice by remember { mutableStateOf(AzureVoice.voice(ctx)) }
     var voices by remember { mutableStateOf(FALLBACK) }
-    LaunchedEffect(hasKey, rev) {
-        if (!hasKey) return@LaunchedEffect
+    LaunchedEffect(Unit) {
         val key = AzureVoice.key(ctx) ?: return@LaunchedEffect
         runCatching { AzureVoice.voices(key, AzureVoice.region(ctx)) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { voices = it }
     }
-
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Azure 음성" + if (on) " · 사용 중" else "", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        if (!hasKey) "Microsoft의 자연스러운 목소리(선히·인준 등). 숫자도 잘 읽습니다. 무료 계정과 키가 필요합니다."
-                        else "인터넷으로 읽습니다. 이번 달 이 폰에서 약 ${"%,d".format(AzureVoice.usedThisMonth(ctx))}자 / 무료 ${"%,d".format(AzureVoice.FREE_CHARS)}자",
-                        style = MaterialTheme.typography.bodySmall,
+    Text("목소리 · 누르면 골라서 들려줍니다", style = MaterialTheme.typography.labelLarge)
+    listOf("Female" to "여성", "Male" to "남성").forEach { (g, label) ->
+        val group = voices.filter { it.Gender.equals(g, true) }
+        if (group.isEmpty()) return@forEach
+        Row(verticalAlignment = Alignment.Top) {
+            Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 14.dp, end = 8.dp))
+            ChipFlow {
+                group.forEach { v ->
+                    FilterChip(
+                        selected = voice == v.ShortName,
+                        onClick = {
+                            voice = v.ShortName; AzureVoice.setVoice(ctx, v.ShortName); ra.azureChanged()
+                            if (!ra.playing) ra.previewAzure(v.ShortName, SAMPLE)
+                        },
+                        label = { Text(voiceName(v), maxLines = 1) },
                     )
                 }
-                if (hasKey) Switch(checked = on, onCheckedChange = { AzureVoice.setOn(ctx, it); ra.azureChanged(); rev++ })
-            }
-            if (hasKey && on) {
-                voices.forEach { v ->
-                    Row(Modifier.fillMaxWidth().clickable {
-                        voice = v.ShortName; AzureVoice.setVoice(ctx, v.ShortName); ra.azureChanged()
-                        if (!ra.playing) ra.previewAzure(v.ShortName, SAMPLE)
-                    }, verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = voice == v.ShortName, onClick = null)
-                        Text(voiceLabel(v), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                        TextButton(onClick = { ra.previewAzure(v.ShortName, SAMPLE) }) { Text("▶ 듣기") }
-                    }
-                }
-            }
-            Row {
-                TextButton(onClick = { setup = true }) { Text(if (hasKey) "설정 · 사용법" else "설정하기 (사용법)") }
             }
         }
     }
-    if (setup) AzureSetupDialog(ra, onDismiss = { setup = false; rev++ })
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "이번 달 이 폰에서 약 ${"%,d".format(AzureVoice.usedThisMonth(ctx))}자 / 무료 ${"%,d".format(AzureVoice.FREE_CHARS)}자",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onSetup) { Text("설정·사용법") }
+    }
+}
+
+private fun voiceName(v: AzureVoice.VoiceInfo): String {
+    val multi = v.ShortName.contains("Multilingual")
+    val base = v.LocalName.replace("Multilingual", "").trim()
+        .ifBlank { v.ShortName.substringAfterLast('-').removeSuffix("Neural").removeSuffix("Multilingual") }
+    return if (multi) "$base 다국어" else base
 }
 
 /**
