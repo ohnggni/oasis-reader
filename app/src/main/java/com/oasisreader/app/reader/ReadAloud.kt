@@ -122,7 +122,7 @@ class ReadAloud(context: Context) {
 
     /**
      * What turns the sentences into sound. [system] is the phone's TextToSpeech (the default and the
-     * fallback); other speakers (network voices) follow the same contract: say items[from..] in
+     * fallback); other speakers (network voices) follow the same contract: say the items from index `from` on in
      * order, report each sentence to [started] / [done] with the queue number, and stop on [stop].
      */
     interface Speaker {
