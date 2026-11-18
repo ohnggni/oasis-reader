@@ -102,6 +102,25 @@ class ReadAloudNormalizeTest {
         assertEquals("번호는 일이삼사오육칠공", apply("번호는 12345670"))
     }
 
+    @Test fun dictionary() {
+        val d = listOf("GPT" to "지피티", "홍길동" to "홍 길동", "OG Reader" to "오지 리더", "1/2" to "반", "OG" to "오지")
+        fun say(x: String, n: Boolean = true) = ReadAloudNormalize.speak(x, d, n)
+        // particles may follow; Latin in any case; longest first
+        assertEquals("지피티는 3개가 아니라", say("GPT는 3개가 아니라", false))
+        assertEquals("지피티는 세 개가 아니라", say("gpt는 3개가 아니라"))
+        assertEquals("오지 리더로 읽고 오지로 줄인다", say("OG Reader로 읽고 OG로 줄인다"))
+        // not out of a longer word of the same script
+        assertEquals("GPTs와 김홍길동", say("GPTs와 김홍길동"))
+        assertEquals("홍 길동이 왔다", say("홍길동이 왔다"))
+        // what the dictionary puts in is not read again; the rest is
+        assertEquals("반 컵과 사분의 삼컵", say("1/2 컵과 3/4컵"))
+        // a sentence without Hangul still gets the dictionary, and its Korean reading lets numbers be read
+        assertEquals("지피티 사", say("GPT 4"))
+        // empty dictionary = numbers only
+        assertEquals("세 개", ReadAloudNormalize.speak("3개", emptyList(), true))
+        assertEquals("3개", ReadAloudNormalize.speak("3개", emptyList(), false))
+    }
+
     @Test fun oneSentenceInOneOut() {
         val s = listOf("1. 첫째", "2026년 3월", "그냥 문장", "3~5개")
         assertEquals(s.size, s.map { apply(it) }.size)

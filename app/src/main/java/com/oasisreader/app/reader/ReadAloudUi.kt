@@ -221,6 +221,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                     }
                     Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
                 }
+                PronDictRow(ra)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },

@@ -246,6 +246,26 @@ interface ReviewDao {
     suspend fun delete(bookId: String)
 }
 
+/** 소리 내 읽기 발음 사전: [word] in a sentence is read as [reading] (v10). */
+@Entity(tableName = "pron_dict")
+data class PronEntity(
+    @PrimaryKey val word: String,
+    val reading: String,
+    val updatedAt: Long,
+)
+
+@Dao
+interface PronDao {
+    @Query("SELECT * FROM pron_dict ORDER BY word")
+    suspend fun all(): List<PronEntity>
+
+    @Upsert
+    suspend fun upsert(e: PronEntity)
+
+    @Query("DELETE FROM pron_dict WHERE word = :word")
+    suspend fun delete(word: String)
+}
+
 /**
  * 오디오북 책갈피: a place in an audiobook (track + seconds, with [lengthSec] > 0 for a stretch),
  * with the reader's note. [text] is for words heard there (captions, later). [trackTitle] is kept
@@ -372,9 +392,9 @@ interface ReadingTimeDao {
 @Database(
     entities = [
         BookEntity::class, HighlightEntity::class, ReadingTimeEntity::class, BookmarkEntity::class, CollectionEntity::class,
-        BookCollectionEntity::class, RemovedBookEntity::class, ReviewEntity::class, AudioMarkEntity::class,
+        BookCollectionEntity::class, RemovedBookEntity::class, ReviewEntity::class, AudioMarkEntity::class, PronEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -386,6 +406,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun removedBooks(): RemovedBookDao
     abstract fun reviews(): ReviewDao
     abstract fun audioMarks(): AudioMarkDao
+    abstract fun pron(): PronDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -393,7 +414,7 @@ abstract class AppDatabase : RoomDatabase() {
         // NOTE: once real data exists, schema changes need real Migrations — never a destructive fallback.
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "oasis.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .build().also { instance = it }
         }
 
@@ -463,5 +484,12 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `reviews` (`bookId` TEXT NOT NULL, `text` TEXT NOT NULL, `rating` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`bookId`))")
         db.execSQL("CREATE TABLE IF NOT EXISTS `audio_marks` (`id` TEXT NOT NULL, `bookId` TEXT NOT NULL, `track` INTEGER NOT NULL, `startSec` REAL NOT NULL, `lengthSec` REAL NOT NULL, `trackTitle` TEXT NOT NULL, `note` TEXT, `text` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_audio_marks_bookId` ON `audio_marks` (`bookId`)")
+    }
+}
+
+/** v10: 소리 내 읽기 발음 사전. */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `pron_dict` (`word` TEXT NOT NULL, `reading` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`word`))")
     }
 }

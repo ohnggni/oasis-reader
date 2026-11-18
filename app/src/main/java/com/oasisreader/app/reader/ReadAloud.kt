@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /**
  * 소리 내 읽기: a text-to-speech engine (the phone's default or one the reader picked) reads a
@@ -68,6 +69,11 @@ class ReadAloud(context: Context) {
     private var marked = -1
     private var pending: (() -> Unit)? = null
     private var tts: TextToSpeech = create()
+
+    init {
+        // the dictionary is read once per app run; until then sentences go without it
+        com.oasisreader.app.ui.ShelfActions.scope.launch { runCatching { PronDict.load(app) } }
+    }
 
     private fun create(): TextToSpeech {
         available = null
@@ -186,8 +192,9 @@ class ReadAloud(context: Context) {
         if (playing) speakFrom(index)
     }
 
-    private fun spoken(s: String): String {
-        val t = if (normalize) runCatching { ReadAloudNormalize.apply(s) }.getOrDefault(s) else s
+    /** A sentence as spoken: 발음 사전, then numbers and signs in Hangul (when on). */
+    fun spoken(s: String): String {
+        val t = runCatching { ReadAloudNormalize.speak(s, PronDict.entries, normalize) }.getOrDefault(s)
         return if (t.length > MAX_LEN) t.take(MAX_LEN) else t
     }
 
@@ -195,10 +202,14 @@ class ReadAloud(context: Context) {
     fun changeNormalize(on: Boolean) {
         normalize = on
         prefs.edit().putBoolean("normalize", on).apply()
-        if (items.isNotEmpty() && raw.isNotEmpty()) {
-            items = raw.map { spoken(it) }
-            if (playing) speakFrom(index)
-        }
+        respeak()
+    }
+
+    /** The dictionary or the number setting changed: read the chapter again from here. */
+    fun respeak() {
+        if (items.isEmpty() || raw.isEmpty()) return
+        items = raw.map { spoken(it) }
+        if (playing) speakFrom(index)
     }
 
     fun changePitch(p: Float) {

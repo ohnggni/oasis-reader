@@ -200,9 +200,62 @@ object ReadAloudNormalize {
 
     /** The sentence as it should be spoken. Sentences without Hangul (other languages) are kept as they are. */
     fun apply(sentence: String): String {
-        if (!HAS_DIGIT.containsMatchIn(sentence) || !HANGUL.containsMatchIn(sentence)) return sentence
+        if (!HANGUL.containsMatchIn(sentence)) return sentence
+        return rules(sentence)
+    }
+
+    private fun rules(sentence: String): String {
+        if (!HAS_DIGIT.containsMatchIn(sentence)) return sentence
         var s = sentence
         for (r in RULES) s = r.re.replace(s) { m -> runCatching { r.to(m) }.getOrDefault(m.value) }
         return s
+    }
+
+    // ── 발음 사전 ──
+
+    private fun kind(c: Char): Int = when {
+        c in 'A'..'Z' || c in 'a'..'z' -> 1
+        c.isDigit() -> 2
+        c in '가'..'힣' || c in '\u3131'..'\u318E' -> 3
+        else -> 0
+    }
+
+    /**
+     * Pronunciation dictionary first ("표현 → 읽는 법"), then the number rules ([normalize]) on the
+     * rest: what the dictionary put in is not read again. Plain text, longest first; a match is not
+     * taken out of a longer word of the same script (GPT in GPTs, 홍길동 in 김홍길동), but Korean
+     * particles may follow (홍길동은). Latin letters match in any case.
+     */
+    fun speak(sentence: String, dict: List<Pair<String, String>>, normalize: Boolean): String {
+        if (dict.isEmpty()) return if (normalize) apply(sentence) else sentence
+        val words = dict.filter { it.first.isNotBlank() }.sortedByDescending { it.first.length }
+        val out = StringBuilder()
+        val readings = ArrayList<String>()
+        var i = 0
+        while (i < sentence.length) {
+            var hit: Pair<String, String>? = null
+            for (e in words) {
+                val w = e.first
+                if (!sentence.regionMatches(i, w, 0, w.length, ignoreCase = true)) continue
+                val first = kind(w.first())
+                if (first != 0 && i > 0 && kind(sentence[i - 1]) == first) continue
+                val last = kind(w.last())
+                val j = i + w.length
+                if ((last == 1 || last == 2) && j < sentence.length && kind(sentence[j]) == last) continue
+                hit = e; break
+            }
+            if (hit == null) { out.append(sentence[i]); i++; continue }
+            if (readings.size >= 6000) { out.append(hit.second); i += hit.first.length; continue }
+            out.append((0xE000 + readings.size).toChar())   // kept away from the number rules
+            readings += hit.second
+            i += hit.first.length
+        }
+        if (readings.isEmpty()) return if (normalize) apply(sentence) else sentence
+        var s = out.toString()
+        val hangul = HANGUL.containsMatchIn(s) || readings.any { HANGUL.containsMatchIn(it) }
+        if (normalize && hangul) s = rules(s)
+        val back = StringBuilder()
+        for (c in s) back.append(if (c.code in 0xE000 until 0xE000 + readings.size) readings[c.code - 0xE000] else c)
+        return back.toString()
     }
 }
