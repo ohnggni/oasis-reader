@@ -93,17 +93,11 @@ class ReadAloud(context: Context) {
         }
         t = if (engine != null) TextToSpeech(app, init, engine) else TextToSpeech(app, init)
         t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String) = post(id) { s, i -> if (s == session) mark(i) }
+            override fun onStart(id: String) = post(id) { s, i -> started(s, i) }
             // some engines report onStart late or not at all: the next sentence starts when this one is done
-            override fun onDone(id: String) = post(id) { s, i ->
-                if (s != session) return@post
-                if (i >= items.lastIndex) finish() else mark(i + 1)
-            }
+            override fun onDone(id: String) = post(id) { s, i -> done(s, i) }
             @Deprecated("Deprecated in Java")
-            override fun onError(id: String) = post(id) { s, i ->
-                if (s != session) return@post
-                if (i >= items.lastIndex) finish() else mark(i + 1)
-            }
+            override fun onError(id: String) = post(id) { s, i -> done(s, i) }
             override fun onError(id: String, errorCode: Int) = onError(id)
         })
         return t
@@ -116,6 +110,40 @@ class ReadAloud(context: Context) {
         val loc = language?.takeIf { it.isNotBlank() }?.let { Locale.forLanguageTag(it) } ?: Locale.KOREAN
         if (t.isLanguageAvailable(loc) >= TextToSpeech.LANG_AVAILABLE) t.language = loc
     }
+
+    /** A speaker began sentence [i] of queue [s] (main thread). */
+    private fun started(s: Int, i: Int) { if (s == session) mark(i) }
+
+    /** A speaker finished (or could not say) sentence [i] of queue [s] (main thread). */
+    private fun done(s: Int, i: Int) {
+        if (s != session) return
+        if (i >= items.lastIndex) finish() else mark(i + 1)
+    }
+
+    /**
+     * What turns the sentences into sound. [system] is the phone's TextToSpeech (the default and the
+     * fallback); other speakers (network voices) follow the same contract: say items[from..] in
+     * order, report each sentence to [started] / [done] with the queue number, and stop on [stop].
+     */
+    interface Speaker {
+        fun speak(items: List<String>, from: Int, session: Int, rate: Float, pitch: Float)
+        fun stop()
+        fun shutdown()
+    }
+
+    private val system = object : Speaker {
+        override fun speak(items: List<String>, from: Int, session: Int, rate: Float, pitch: Float) {
+            tts.stop()
+            tts.setSpeechRate(rate)
+            tts.setPitch(pitch)
+            for (k in from until items.size) {
+                tts.speak(items[k], if (k == from) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "$session:$k")
+            }
+        }
+        override fun stop() { tts.stop() }
+        override fun shutdown() { tts.shutdown() }
+    }
+    private var speaker: Speaker = system
 
     private fun mark(i: Int) {
         if (i == marked) return
@@ -157,17 +185,12 @@ class ReadAloud(context: Context) {
         if (!focus()) { playing = false; onStateChanged(); return }
         session++
         marked = -1
-        tts.stop()
-        tts.setSpeechRate(rate)
-        tts.setPitch(pitch)
-        for (k in i until items.size) {
-            tts.speak(items[k], if (k == i) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "$session:$k")
-        }
+        speaker.speak(items, i, session, rate, pitch)
         mark(i)
     }
 
     fun pause() {
-        session++; tts.stop(); playing = false
+        session++; speaker.stop(); playing = false
         onStateChanged()
     }
 
@@ -300,13 +323,17 @@ class ReadAloud(context: Context) {
         audio == null || audio.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_FAILED
 
     fun stop() {
-        session++; pending = null; tts.stop(); playing = false; items = emptyList(); raw = emptyList(); count = 0
+        session++; pending = null; speaker.stop(); playing = false; items = emptyList(); raw = emptyList(); count = 0
         main.removeCallbacks(sleepTask); sleepAt = 0L; sleepAtChapterEnd = false
         audio?.abandonAudioFocusRequest(focusRequest)
         onStateChanged()
     }
 
-    fun shutdown() { stop(); runCatching { tts.shutdown() } }
+    fun shutdown() {
+        stop()
+        if (speaker !== system) runCatching { speaker.shutdown() }
+        runCatching { system.shutdown() }
+    }
 
     companion object {
         const val PREFS = "read_aloud"
