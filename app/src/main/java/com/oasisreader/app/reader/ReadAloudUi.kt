@@ -174,6 +174,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
             // the whole dialog scrolls: with the AI voice card, engines and voices the rows below
             // (pitch, number reading, dictionary) went off a phone screen
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AzureVoiceCard(ra)
                 AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
                 if (engines.size > 1) {
                     Text("음성 엔진", style = MaterialTheme.typography.labelLarge)

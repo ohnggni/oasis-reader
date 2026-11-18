@@ -145,6 +145,42 @@ class ReadAloud(context: Context) {
     }
     private var speaker: Speaker = system
 
+    /** Azure 음성 ([AzureVoice]), made when first used. */
+    private var azure: AzureSpeaker? = null
+    /** Azure failed while reading: the phone's voice for the rest of this reading. */
+    private var azureDown = false
+
+    /** True when sentences go to Azure (set up, turned on, not failed in this reading). */
+    val usesAzure: Boolean get() = !azureDown && AzureVoice.on(app)
+
+    private fun azureSpeaker(): AzureSpeaker =
+        azure ?: AzureSpeaker(app, ::started, ::done, ::azureFailed).also { azure = it }
+
+    private fun azureFailed(s: Int, i: Int, reason: String) {
+        if (s != session) return
+        azureDown = true
+        com.oasisreader.app.ui.Notice.show(app, "Azure 음성: $reason. 휴대폰 목소리로 이어 읽습니다.")
+        when (available) {
+            true -> speakFrom(i)
+            null -> pending = { speakFrom(i) }
+            false -> { playing = false; onStateChanged(); onUnavailable() }
+        }
+    }
+
+    /** Azure was turned on / off or set up again: try it afresh, from this sentence if reading. */
+    fun azureChanged() {
+        azureDown = false
+        if (playing) speakFrom(index)
+    }
+
+    /** A sample in an Azure voice (stops reading first). */
+    fun previewAzure(voice: String, text: String) {
+        if (playing) pause()
+        session++
+        system.stop()
+        azureSpeaker().preview(text, voice, rate, pitch) { reason -> com.oasisreader.app.ui.Notice.show(app, "Azure 음성: $reason") }
+    }
+
     private fun mark(i: Int) {
         if (i == marked) return
         marked = i; index = i
@@ -173,6 +209,7 @@ class ReadAloud(context: Context) {
         marked = -1
         playing = true
         if (items.isEmpty() || from >= items.size) { session++; main.post { finish() }; return }
+        if (usesAzure) { speakFrom(index); onStateChanged(); return }
         when (available) {
             true -> speakFrom(index)
             null -> pending = { speakFrom(index) }
@@ -185,6 +222,9 @@ class ReadAloud(context: Context) {
         if (!focus()) { playing = false; onStateChanged(); return }
         session++
         marked = -1
+        val next = if (usesAzure) azureSpeaker() else system
+        if (next !== speaker) speaker.stop()
+        speaker = next
         speaker.speak(items, i, session, rate, pitch)
         mark(i)
     }
@@ -283,6 +323,7 @@ class ReadAloud(context: Context) {
     fun preview(v: Voice?, text: String) {
         if (playing) pause()
         session++
+        azure?.stop()
         if (v != null) tts.voice = v else applyVoice(tts)
         tts.setSpeechRate(rate); tts.setPitch(pitch)
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "preview")
@@ -331,7 +372,8 @@ class ReadAloud(context: Context) {
 
     fun shutdown() {
         stop()
-        if (speaker !== system) runCatching { speaker.shutdown() }
+        azure?.let { runCatching { it.shutdown() } }
+        azure = null
         runCatching { system.shutdown() }
     }
 
