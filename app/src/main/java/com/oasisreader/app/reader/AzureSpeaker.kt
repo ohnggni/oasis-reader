@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
@@ -77,6 +78,7 @@ class AzureSpeaker(
                 started(session, k)
                 play(file)
                 done(session, k)
+                if (k < items.lastIndex) delay(ReadAloud.gapAfter(items[k], rate))
             }
         }
     }

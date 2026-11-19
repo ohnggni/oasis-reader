@@ -478,6 +478,7 @@ private fun ReaderBody(
             override fun toggle() = readAloud.toggle()
             override fun skip(d: Int) = readAloud.skip(d)
             override fun close() { aloudClose?.invoke() }
+            override fun dropResume() = readAloud.dropResume()
         }
     }
     DisposableEffect(Unit) {

@@ -170,6 +170,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
     // where the voice comes from: the phone's engine, or Azure (only one shows at a time)
     var azureMode by remember { mutableStateOf(AzureVoice.on(ctx)) }
     var setup by remember { mutableStateOf(false) }
+    var howOpen by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -194,9 +195,11 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
 
                 if (azureMode) AzureVoicePanel(ra, onSetup = { setup = true })
                 else {
-                    // the AI voice card only while there is something to do (install / use / get voices)
-                    val aiReady = engine == AiVoice.PKG && ra.available == true && voices.isNotEmpty()
-                    if (!aiReady) AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
+                    // the AI voice card only when there is something to do: not installed yet, or
+                    // in use but not ready (no voices / did not open). Installed = just an engine chip.
+                    val aiInstalled = engines.any { it.first == AiVoice.PKG }
+                    val aiStuck = engine == AiVoice.PKG && (ra.available == false || (ra.available == true && voices.isEmpty()))
+                    if (!aiInstalled || aiStuck) AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
                     if (engines.size > 1) {
                         Text("엔진", style = MaterialTheme.typography.labelLarge)
                         ChipFlow {
@@ -231,24 +234,40 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                 }
 
                 HorizontalDivider(thickness = 0.5.dp)
-                Text("읽는 방법", style = MaterialTheme.typography.labelLarge)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("음높이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
-                    ReadAloud.PITCHES.forEach { (p, label) ->
-                        FilterChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
-                    }
-                }
+                // 읽는 방법: one line until opened
+                val pitchLabel = ReadAloud.PITCHES.firstOrNull { it.first == ra.pitch }?.second ?: "보통"
                 Row(
-                    Modifier.fillMaxWidth().clickable { ra.changeNormalize(!ra.normalize) },
+                    Modifier.fillMaxWidth().clickable { howOpen = !howOpen }.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("숫자·기호를 한글로 읽기", style = MaterialTheme.typography.bodyMedium)
-                        Text("1/2 → 이분의 일, 3개 → 세 개", style = MaterialTheme.typography.bodySmall)
+                        Text("읽는 방법", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "음높이 $pitchLabel · 숫자 읽기 ${if (ra.normalize) "켬" else "끔"} · 발음 사전 ${PronDict.entries.size}개",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
-                    Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
+                    Text(if (howOpen) "⌃" else "⌄", style = MaterialTheme.typography.titleMedium)
                 }
-                PronDictRow(ra)
+                if (howOpen) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("음높이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
+                        ReadAloud.PITCHES.forEach { (p, label) ->
+                            FilterChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clickable { ra.changeNormalize(!ra.normalize) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("숫자·기호를 한글로 읽기", style = MaterialTheme.typography.bodyMedium)
+                            Text("1/2 → 이분의 일, 3개 → 세 개", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
+                    }
+                    PronDictRow(ra)
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },

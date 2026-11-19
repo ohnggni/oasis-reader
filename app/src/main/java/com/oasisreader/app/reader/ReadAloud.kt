@@ -138,6 +138,8 @@ class ReadAloud(context: Context) {
             tts.setPitch(pitch)
             for (k in from until items.size) {
                 tts.speak(items[k], if (k == from) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "$session:$k")
+                // the pause between sentences (its id is not "session:index", so the callbacks skip it)
+                if (k < items.lastIndex) tts.playSilentUtterance(gapAfter(items[k], rate), TextToSpeech.QUEUE_ADD, "gap-$session-$k")
             }
         }
         override fun stop() { tts.stop() }
@@ -356,6 +358,9 @@ class ReadAloud(context: Context) {
         }
     }
     private var resumeOnGain = false
+
+    /** Forget "resume when focus comes back" (the car or headset went away while paused by a call). */
+    fun dropResume() { resumeOnGain = false }
     private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(ATTRS)
         .setOnAudioFocusChangeListener(focusListener, main)
@@ -378,6 +383,17 @@ class ReadAloud(context: Context) {
     }
 
     companion object {
+        /**
+         * Silence after a sentence, in ms (2.4). Engines (Azure most) end a sentence with almost no
+         * silence, so a full stop sounded shorter than a comma inside a sentence. A sentence that
+         * ends at a comma or a space (a long sentence cut in two, ReadAloudText) gets a short one.
+         */
+        fun gapAfter(s: String, rate: Float): Long {
+            val end = s.trimEnd().lastOrNull()
+            val ms = if (end != null && end in ".?!…。？！\"'”’」』)]") 350 else 150
+            return (ms / rate.coerceIn(0.5f, 3f)).toLong()
+        }
+
         const val PREFS = "read_aloud"
         const val MAX_LEN = 3000      // under the engines' input limit (4000)
         val RATES = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)

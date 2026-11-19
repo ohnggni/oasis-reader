@@ -32,6 +32,8 @@ class ReadAloudService : Service() {
         fun toggle()
         fun skip(d: Int)
         fun close()
+        /** Forget "resume when audio focus comes back". */
+        fun dropResume() {}
     }
 
     private var session: MediaSession? = null
@@ -42,9 +44,18 @@ class ReadAloudService : Service() {
      * the headset or the phone in the next 10 s is ignored; ▶ in the app or the notification works.
      */
     private var noisyAt = 0L
+    /**
+     * The car / headset went away (2.4: a car switched off while Android Auto was reading). Until
+     * ▶ in the app or the notification, a "play" from outside (the car reconnecting, a headset) is
+     * ignored, and a pause from a call or navigation does not come back on its own: without this
+     * the reading started again from the phone's speaker after the engine was off.
+     */
+    private var heldByNoisy = false
     private val noisy = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
             if (i?.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
+            heldByNoisy = true
+            player?.dropResume()
             if (player?.playing == true) { noisyAt = android.os.SystemClock.elapsedRealtime(); player?.toggle() }
         }
     }
@@ -65,7 +76,7 @@ class ReadAloudService : Service() {
         }
         session = MediaSession(this, "OGReaderReadAloud").apply {
             setCallback(object : MediaSession.Callback() {
-                override fun onPlay() { if (player?.playing == false && !playBlocked()) player?.toggle() }
+                override fun onPlay() { if (player?.playing == false && !playBlocked() && !heldByNoisy) player?.toggle() }
                 override fun onPause() { if (player?.playing == true) player?.toggle() }
                 override fun onSkipToNext() { player?.skip(1) }
                 override fun onSkipToPrevious() { player?.skip(-1) }
@@ -94,6 +105,7 @@ class ReadAloudService : Service() {
     fun refresh() {
         val p = player ?: return
         val s = session ?: return
+        if (p.playing) heldByNoisy = false   // playing again (▶ in the app or the notification)
         s.setMetadata(
             MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title)
