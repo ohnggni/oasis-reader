@@ -266,11 +266,16 @@ internal fun ChipFlow(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** "한국어 3" style names (engines' own names are codes like ko-KR-SMTl03 / ko-kr-x-ism-local). */
+/**
+ * The engine's own voice name when it is one a person can read (RD_민재); "한국어 3" only for
+ * engines whose names are codes (ko-KR-SMTl03, ko-kr-x-ism-local, supertonic-M2-ko). The number
+ * is the voice's place in [list], which ReadAloud.voices sorts the same way every time.
+ */
 private fun voiceLabel(v: Voice, list: List<Voice>): String {
+    VoiceNames.display(v.name)?.let { return it }
     val lang = v.locale.getDisplayLanguage(java.util.Locale.KOREAN).ifBlank { v.locale.toString() }
     val same = list.filter { it.locale.language == v.locale.language }
-    val n = same.indexOf(v) + 1
+    val n = same.indexOfFirst { it.name == v.name } + 1
     val country = v.locale.getDisplayCountry(java.util.Locale.KOREAN)
     return "$lang ${n}" + (if (country.isNotBlank() && v.locale.language != "ko") " ($country)" else "")
 }
