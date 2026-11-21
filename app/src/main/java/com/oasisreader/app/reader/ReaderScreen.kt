@@ -1211,28 +1211,29 @@ private fun ReaderBody(
                                             com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
                                         }
                                         Panel.NAV -> {
-                                            if (p != null) com.oasisreader.app.ui.PanelAction("📑", "목차") { panel = Panel.NONE; tocOpen = true }
-                                            if (p != null) com.oasisreader.app.ui.PanelAction("🔍", "본문 검색") { findOpen = true }
-                                            if (p != null) com.oasisreader.app.ui.PanelAction("🔊", if (aloud) "소리 내 읽기 끝내기" else "소리 내 읽기") {
-                                                if (aloud) stopAloud() else requestAloud()
-                                            }
-                                            com.oasisreader.app.ui.PanelAction("🔖", "책갈피 (${bookmarks.size})") { marksOpen = true }
-                                            com.oasisreader.app.ui.PanelAction("🖍️", "이 책의 하이라이트") { panel = Panel.NONE; hlListOpen = true }
-                                            com.oasisreader.app.ui.PanelAction("📝", "하이라이트 내보내기") { panel = Panel.NONE; exportOpen = true }
                                             val finished = book?.finishedAt != null
-                                            com.oasisreader.app.ui.PanelAction(if (finished) "↩️" else "✅", if (finished) "다 읽음 취소" else "다 읽음으로 표시") {
-                                                val at = if (finished) null else System.currentTimeMillis()
-                                                book = book?.copy(finishedAt = at)
-                                                scope.launch { db.books().setFinished(bookId, at) }
-                                            }
-                                            com.oasisreader.app.ui.PanelAction("⏭️", "다음 권") {
-                                                panel = Panel.NONE
-                                                scope.launch { findAndOpenNext(context, book, nextVol, onOpenBook) }
-                                            }
-                                            if (canOpenOrigin(book)) com.oasisreader.app.ui.PanelAction("📂", "이 책이 있던 폴더 열기") {
-                                                panel = Panel.NONE
-                                                book?.let(onOpenFolder)
-                                            }
+                                            fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
+                                            com.oasisreader.app.ui.PanelGrid(buildList {
+                                                if (p != null) add(T("📑", "목차") { panel = Panel.NONE; tocOpen = true })
+                                                if (p != null) add(T("🔍", "검색") { findOpen = true })
+                                                if (p != null) add(T("🔊", if (aloud) "읽기 끝" else "소리 읽기") { if (aloud) stopAloud() else requestAloud() })
+                                                add(T("🔖", if (bookmarks.isEmpty()) "책갈피" else "책갈피 ${bookmarks.size}") { marksOpen = true })
+                                                add(T("🖍️", "하이라이트") { panel = Panel.NONE; hlListOpen = true })
+                                                add(T("📝", "내보내기") { panel = Panel.NONE; exportOpen = true })
+                                                add(T(if (finished) "↩️" else "✅", if (finished) "읽음 취소" else "다 읽음") {
+                                                    val at = if (finished) null else System.currentTimeMillis()
+                                                    book = book?.copy(finishedAt = at)
+                                                    scope.launch { db.books().setFinished(bookId, at) }
+                                                })
+                                                add(T("⏭️", "다음 권") {
+                                                    panel = Panel.NONE
+                                                    scope.launch { findAndOpenNext(context, book, nextVol, onOpenBook) }
+                                                })
+                                                if (canOpenOrigin(book)) add(T("📂", "있던 폴더") {
+                                                    panel = Panel.NONE
+                                                    book?.let(onOpenFolder)
+                                                })
+                                            })
                                         }
                                         else -> {}
                                     }

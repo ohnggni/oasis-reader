@@ -61,6 +61,7 @@ object UiScale {
 
     val factor: Float get() = FACTORS[step.coerceIn(0, FACTORS.lastIndex)]
     val label: String get() = LABELS[step.coerceIn(0, LABELS.lastIndex)]
+    fun labelOf(s: Int): String = LABELS[s.coerceIn(0, LABELS.lastIndex)]
 
     fun load(c: Context) { step = c.getSharedPreferences("app", Context.MODE_PRIVATE).getInt("ui_scale", 2).coerceIn(0, FACTORS.lastIndex) }
 

@@ -996,21 +996,24 @@ private fun ComicViewer(
                                     )
                                 }
                                 com.oasisreader.app.ui.ReadPanel.NAV -> {
-                                    com.oasisreader.app.ui.PanelAction("🔖", "책갈피 (${bookmarks.size})") { marksOpen = true }
-                                    com.oasisreader.app.ui.PanelAction("⏮️", "처음부터") { panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = 0; curFrac = 0f; viewKey++ }
-                                    com.oasisreader.app.ui.PanelAction(if (finished) "↩️" else "✅", if (finished) "다 읽음 취소" else "다 읽음으로 표시") {
-                                        finished = !finished
-                                        val at = if (finished) System.currentTimeMillis() else null
-                                        scope.launch { db.books().setFinished(book.id, at) }
-                                    }
-                                    com.oasisreader.app.ui.PanelAction("⏭️", "다음 권") {
-                                        panel = com.oasisreader.app.ui.ReadPanel.NONE
-                                        scope.launch { com.oasisreader.app.reader.findAndOpenNext(context, book, nextVol, onOpenBook) }
-                                    }
-                                    if (com.oasisreader.app.reader.canOpenOrigin(book)) com.oasisreader.app.ui.PanelAction("📂", "이 책이 있던 폴더 열기") {
-                                        panel = com.oasisreader.app.ui.ReadPanel.NONE
-                                        onOpenFolder(book)
-                                    }
+                                    fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
+                                    com.oasisreader.app.ui.PanelGrid(buildList {
+                                        add(T("🔖", if (bookmarks.isEmpty()) "책갈피" else "책갈피 ${bookmarks.size}") { marksOpen = true })
+                                        add(T("⏮️", "처음부터") { panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = 0; curFrac = 0f; viewKey++ })
+                                        add(T(if (finished) "↩️" else "✅", if (finished) "읽음 취소" else "다 읽음") {
+                                            finished = !finished
+                                            val at = if (finished) System.currentTimeMillis() else null
+                                            scope.launch { db.books().setFinished(book.id, at) }
+                                        })
+                                        add(T("⏭️", "다음 권") {
+                                            panel = com.oasisreader.app.ui.ReadPanel.NONE
+                                            scope.launch { com.oasisreader.app.reader.findAndOpenNext(context, book, nextVol, onOpenBook) }
+                                        })
+                                        if (com.oasisreader.app.reader.canOpenOrigin(book)) add(T("📂", "있던 폴더") {
+                                            panel = com.oasisreader.app.ui.ReadPanel.NONE
+                                            onOpenFolder(book)
+                                        })
+                                    })
                                 }
                                 else -> {}
                             }

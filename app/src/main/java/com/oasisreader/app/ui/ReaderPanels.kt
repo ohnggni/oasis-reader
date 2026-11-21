@@ -214,6 +214,37 @@ fun PanelAction(emoji: String, label: String, onClick: () -> Unit) {
     }
 }
 
+/** One tile of the ☰ grid. */
+class PanelTile(val emoji: String, val label: String, val onClick: () -> Unit)
+
+/**
+ * ☰ 이동 (79, 2.7): the actions as a grid of icon tiles, five to a row — all in view at once,
+ * nothing hidden below a fold you would have to know to scroll.
+ */
+@Composable
+fun PanelGrid(tiles: List<PanelTile>, columns: Int = 5) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        tiles.chunked(columns).forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { t ->
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable(onClick = t.onClick).padding(vertical = 8.dp),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    ) {
+                        EmojiText(t.emoji, fontSize = 20.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
 /** Page-turn effect and (for curl / cover) its speed, on one line. */
 @Composable
 fun TurnStylePicker(current: TurnStyle, speed: TurnSpeed, onPick: (TurnStyle) -> Unit, onSpeed: (TurnSpeed) -> Unit) {
