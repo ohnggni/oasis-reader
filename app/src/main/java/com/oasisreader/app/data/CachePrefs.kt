@@ -21,6 +21,11 @@ class CachePrefs(context: Context) {
 
     val dropFinished: Boolean get() = dropMode != DROP_OFF
 
+    /** 다음 회차 미리 받기 (TODO 78): reading a 서재 book, its next one without a file is received ahead. On by default. */
+    var prefetchNext: Boolean
+        get() = prefs.getBoolean("prefetch_next", true)
+        set(v) = prefs.edit().putBoolean("prefetch_next", v).apply()
+
     val limitBytes: Long get() = limitMb.toLong() * 1024 * 1024
 
     companion object {

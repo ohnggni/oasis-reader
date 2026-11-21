@@ -185,6 +185,7 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
             if (!store.hasFiles(bookId)) { missing = true; return@LaunchedEffect }
             missing = false
             pkg = withContext(Dispatchers.IO) { store.readComic(bookId) }
+            com.oasisreader.app.data.Downloads.prefetchNext(app, b)   // 다음 회차 미리 받기 (TODO 78)
         } catch (e: Exception) {
             error = e.message ?: "열 수 없습니다"
         }
@@ -205,7 +206,9 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
                 EmojiText("📦", fontSize = 40.sp)
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    if (b?.sourceUrl != null) "이 웹툰 파일이 이 폰에 없습니다.\n서버에서 다시 받을 수 있습니다."
+                    // 바로 읽기 · 등록만 (TODO 78): received without asking — say so
+                    if (b?.sourceUrl != null && b.pinned == false && refetching) "서버에서 받는 중입니다…"
+                    else if (b?.sourceUrl != null) "이 웹툰 파일이 이 폰에 없습니다.\n서버에서 다시 받을 수 있습니다."
                     else "이 웹툰 파일이 이 폰에 없습니다.\n파일에서 다시 가져와 주세요.",
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -216,15 +219,13 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
                     fun fetch() {
                         refetching = true
                         scope.launch {
-                            val tmp = File(app.cacheDir, "refetch_${System.nanoTime()}.bin")
                             try {
-                                com.oasisreader.app.data.Downloads.fetch(app, url, tmp)
-                                store.rebuild(bookId, tmp)
+                                com.oasisreader.app.data.Downloads.receiveMissing(app, bookId, url)
                                 attempt++
                             } catch (e: Exception) {
                                 com.oasisreader.app.ui.Notice.show(context, "다시 받기 실패: ${e.message}")
                             } finally {
-                                tmp.delete(); refetching = false
+                                refetching = false
                             }
                         }
                     }

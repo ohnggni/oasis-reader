@@ -207,6 +207,22 @@ class BookStore(private val context: Context) {
     }
 
     /** Book files missing (e.g. restored from a backup without books)? */
+    /**
+     * 등록만 (TODO 78): a 서재 entry for a server book that is not received yet — no file (☁,
+     * pinned = false), so opening it fetches the file without asking. The format is guessed from
+     * the name until then (rebuild sets the real one). Already on the 서재: that entry.
+     */
+    suspend fun registerRemote(url: String, title: String, origin: String?): BookEntity = withContext(Dispatchers.IO) {
+        db.books().findBySource(url, url)?.let { return@withContext it }
+        val book = BookEntity(
+            id = newId(), title = title, addedAt = System.currentTimeMillis(),
+            sourceUrl = url, opdsId = url, format = formatOfName(url), pinned = false, origin = origin,
+        )
+        db.books().insert(book)
+        reattachHighlights(book)
+        book
+    }
+
     fun hasFiles(id: String) =
         (File(dir(id), "book.json").isFile || File(dir(id), "comic.json").isFile) && contentDir(id).isDirectory
 
@@ -428,6 +444,14 @@ class BookStore(private val context: Context) {
         const val FORMAT_TXT = "txt"      // read with the EPUB reader (converted at import)
         const val FORMAT_PDF = "pdf"      // read with the comic viewer (pages drawn from book.pdf)
         val ORIGINALS = listOf("book.epub", "book.cbz", "book.txt", "book.pdf")
+
+        /** The format a file name suggests, before the file is here (등록만, TODO 78). */
+        fun formatOfName(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+            "epub" -> FORMAT_EPUB
+            "txt" -> FORMAT_TXT
+            "pdf" -> FORMAT_PDF
+            else -> FORMAT_COMIC   // cbz, zip
+        }
         const val ASSET_HOST = "appassets.androidplatform.net"
         private const val MAX_ENTRIES = 20_000
         private const val MAX_TOTAL_BYTES = 4L * 1024 * 1024 * 1024

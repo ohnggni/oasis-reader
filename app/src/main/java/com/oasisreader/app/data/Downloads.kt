@@ -206,6 +206,49 @@ object Downloads {
         }
     }
 
+    private val missingLocks = HashMap<String, kotlinx.coroutines.sync.Mutex>()
+
+    /**
+     * The file of a 서재 book that is not on the phone (☁ — dropped, or 등록만 and never received),
+     * from its source. One at a time per book: opening it while 다음 회차 미리 받기 is fetching it
+     * waits for that instead of receiving it twice. Already here: nothing to do.
+     */
+    suspend fun receiveMissing(app: Context, bookId: String, url: String) {
+        val lock = synchronized(missingLocks) { missingLocks.getOrPut(bookId) { kotlinx.coroutines.sync.Mutex() } }
+        lock.lock()
+        try {
+            val store = BookStore.get(app)
+            if (store.hasFiles(bookId)) return
+            val tmp = File(app.cacheDir, "refetch_${System.nanoTime()}.bin")
+            try {
+                fetch(app, url, tmp)
+                store.rebuild(bookId, tmp)
+            } finally {
+                tmp.delete()
+            }
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    /**
+     * 다음 회차 미리 받기 (TODO 78): while [book] is read, the next one — when it is on the 서재
+     * without its file and is a 바로 읽기 (임시 보관) entry, as 등록만 makes them — is received
+     * quietly, so turning to it needs no wait. Failures stay quiet (opening it tries again).
+     */
+    fun prefetchNext(context: Context, book: com.oasisreader.app.data.db.BookEntity) {
+        val app = context.applicationContext
+        if (!CachePrefs(app).prefetchNext) return
+        scope.launch {
+            runCatching {
+                val next = (NextVolumes.find(app, book) as? NextVolume.InLibrary)?.book ?: return@launch
+                val url = next.sourceUrl ?: return@launch
+                if (next.pinned || BookStore.get(app).hasFiles(next.id)) return@launch
+                gate.withPermit { receiveMissing(app, next.id, url) }
+            }
+        }
+    }
+
     /** Where the book came from (다음 권 / 있던 폴더 열기). */
     suspend fun recordOrigin(app: Context, bookId: String, origin: String?) {
         if (origin != null) runCatching { com.oasisreader.app.data.db.AppDatabase.get(app).books().setOrigin(bookId, origin) }

@@ -24,6 +24,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
@@ -194,8 +195,12 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
             origin = BookOrigin.remote(serverId, Remote.parent(f.path)))
     }
 
-    /** Puts the books on the 서재 (folders: their books, [deep] = sub folders too). */
-    fun keep(picked: List<RemoteFile>, deep: Boolean, byFolder: Boolean) {
+    /**
+     * Puts the books on the 서재 (folders: their books, [deep] = sub folders too). [registerOnly]
+     * (등록만, TODO 78): entries only, each received when opened — but the first book of each folder
+     * is received now (바로 읽기 임시 보관) so the folder's 📚 컬렉션 has a cover.
+     */
+    fun keep(picked: List<RemoteFile>, deep: Boolean, byFolder: Boolean, registerOnly: Boolean = false) {
         gathering = true
         scope.launch {
             try {
@@ -205,7 +210,12 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                 val cols = HashMap<String, String>()
                 var n = 0
                 var have = 0
-                books.distinctBy { it.path }.forEach { f ->
+                val unique = books.distinctBy { it.path }
+                // 등록만: the first book of each folder (natural order) is the one received for the cover
+                val coverOf = if (!registerOnly) emptySet() else unique.groupBy { Remote.parent(it.path) }.values
+                    .mapNotNull { fs -> fs.minWithOrNull { a, b -> ShelfSearch.naturalCompare(a.name, b.name) }?.path }.toSet()
+                val store = com.oasisreader.app.data.BookStore.get(app)
+                unique.forEach { f ->
                     val folder = Remote.parent(f.path)
                     val col = if (byFolder) {
                         val name = Remote.nameOf(folder).ifBlank { server.name }
@@ -213,18 +223,31 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                     } else null
                     val url = Remote.url(serverId, f.path)
                     val already = db.books().findBySource(url, url)
-                    if (already != null) {
+                    if (already != null && !registerOnly && !store.hasFiles(already.id)) {
+                        // registered earlier (등록만) or dropped: 전부 받기 now receives it (import puts the file back)
+                        n++
+                        Downloads.startRemote(app, server, f.path, collectionId = col, origin = already.origin ?: BookOrigin.remote(serverId, folder))
+                    } else if (already != null) {
                         have++
-                        if (!already.pinned) db.books().setPinned(already.id, true)
+                        if (!registerOnly && !already.pinned) db.books().setPinned(already.id, true)
                         col?.let { ShelfCollections.set(db, it, already.id, true) }
                     } else {
                         n++
-                        Downloads.startRemote(app, server, f.path, collectionId = col, origin = BookOrigin.remote(serverId, folder))
+                        val origin = BookOrigin.remote(serverId, folder)
+                        when {
+                            !registerOnly -> Downloads.startRemote(app, server, f.path, collectionId = col, origin = origin)
+                            f.path in coverOf -> Downloads.startRemote(app, server, f.path, pinned = false, collectionId = col, origin = origin)
+                            else -> {
+                                val b = store.registerRemote(url, Remote.nameOf(f.path).substringBeforeLast('.'), origin)
+                                col?.let { ShelfCollections.set(db, it, b.id, true) }
+                            }
+                        }
                     }
                 }
                 Notice.show(
                     context,
-                    (if (n > 0) "${n}권을 받습니다" else "받을 책이 없습니다") +
+                    (if (n == 0) (if (registerOnly) "등록할 책이 없습니다" else "받을 책이 없습니다")
+                        else if (registerOnly) "${n}권을 서재에 등록했습니다 (열 때 받음)" else "${n}권을 받습니다") +
                         (if (have > 0) " · 이미 있는 ${have}권은 건너뜀" else "") +
                         (if (cols.isNotEmpty()) " · 📚 " + cols.keys.take(3).joinToString(", ") + (if (cols.size > 3) " 외 ${cols.size - 3}개" else "") + "에 묶습니다" else ""),
                 )
@@ -406,16 +429,34 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
         val hasDir = picked.any { it.isDir }
         var deep by remember(picked) { mutableStateOf(false) }
         var byFolder by remember(picked) { mutableStateOf(hasDir) }
+        var registerOnly by remember(picked) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { ask = null },
             title = { EmojiText("⬇️ 서재에 담기") },
             text = {
                 Column {
                     Text(
-                        if (hasDir) "고른 폴더 안의 책을 받습니다. 서재에 이미 있는 책은 건너뜁니다."
-                        else "고른 책 ${picked.size}권을 받습니다.",
+                        if (hasDir) "고른 폴더 안의 책을 서재에 담습니다. 서재에 이미 있는 책은 건너뜁니다."
+                        else "고른 책 ${picked.size}권을 서재에 담습니다.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    // 받는 방식 (TODO 78): everything now, or entries only and each book when opened
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = { registerOnly = false })) {
+                        RadioButton(selected = !registerOnly, onClick = { registerOnly = false })
+                        Text("전부 받기", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = { registerOnly = true })) {
+                        RadioButton(selected = registerOnly, onClick = { registerOnly = true })
+                        Column {
+                            Text("등록만 (열 때 받기)", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "목록만 서재에 넣고, 책은 열 때 서버에서 받습니다. 회차가 많은 웹툰·만화에 좋습니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
                     if (hasDir) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = { deep = !deep })) {
                         Checkbox(checked = deep, onCheckedChange = { deep = it })
                         Text("하위 폴더까지", style = MaterialTheme.typography.bodyMedium)
@@ -426,7 +467,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { ask = null; keep(picked, deep, byFolder) }) { Text("받기") } },
+            confirmButton = { TextButton(onClick = { ask = null; keep(picked, deep, byFolder, registerOnly) }) { Text(if (registerOnly) "등록" else "받기") } },
             dismissButton = { TextButton(onClick = { ask = null }) { Text("취소") } },
         )
     }

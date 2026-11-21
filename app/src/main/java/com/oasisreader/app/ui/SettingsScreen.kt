@@ -191,6 +191,15 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 dropMode = (dropMode + 1) % 3
                 cachePrefs.dropMode = dropMode
             }
+            var prefetch by remember { mutableStateOf(cachePrefs.prefetchNext) }
+            Item(
+                "⬇️", "다음 회차 미리 받기: " + if (prefetch) "켬" else "끔",
+                "\"등록만 (열 때 받기)\"로 서재에 넣은 웹툰·만화를 읽는 동안 다음 회차를 미리 받아 둡니다. 넘길 때 기다리지 않습니다. 눌러서 바꾸기",
+                enabled = busy == null,
+            ) {
+                prefetch = !prefetch
+                cachePrefs.prefetchNext = prefetch
+            }
             Item("🧹", "임시 보관 파일 지금 비우기", "서재에 보관(📌)한 책은 그대로입니다", enabled = busy == null && (usage?.first ?: 0) > 0) {
                 scope.launch {
                     val n = com.oasisreader.app.data.BookStore.get(app).trimCache(0)

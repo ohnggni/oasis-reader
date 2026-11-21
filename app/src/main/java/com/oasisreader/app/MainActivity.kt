@@ -49,6 +49,8 @@ import com.oasisreader.app.ui.LibraryScreen
 import com.oasisreader.app.ui.SettingsScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import com.oasisreader.app.ui.OpdsScreen
 import com.oasisreader.app.ui.PageStatusBarIcons
@@ -416,7 +418,15 @@ private fun App() {
             val parts = route.removePrefix(Route.READER).split(':')
             val focus = if (parts.size >= 3) parts[1].toIntOrNull()?.let { it to parts[2] } else null
             key(parts[0]) {
-                val format by produceState<String?>(null, parts[0]) { value = db.books().get(parts[0])?.format ?: BookStore.FORMAT_EPUB }
+                // followed, not read once: a book put on the 서재 with 등록만 (TODO 78) has a format guessed
+                // from its file name until the file arrives — then the right viewer takes over.
+                // A row that goes away keeps the last format (no switch on the way out).
+                val format by remember(parts[0]) {
+                    var last: String? = null
+                    db.books().observe(parts[0])
+                        .map { b -> (b?.format ?: last ?: BookStore.FORMAT_EPUB).also { last = it } }
+                        .distinctUntilChanged()
+                }.collectAsState(initial = null)
                 val openBook: (String) -> Unit = { id -> route = Route.READER + id }
                 when (format) {
                     null -> Box(Modifier.fillMaxSize())

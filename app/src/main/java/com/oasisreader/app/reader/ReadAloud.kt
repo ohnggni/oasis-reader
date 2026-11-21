@@ -396,7 +396,8 @@ class ReadAloud(context: Context) {
 
         const val PREFS = "read_aloud"
         const val MAX_LEN = 3000      // under the engines' input limit (4000)
-        val RATES = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+        // 0.9~1.15 촘촘하게 (2.6): the range most listening happens in
+        val RATES = listOf(0.5f, 0.75f, 0.9f, 0.95f, 1f, 1.05f, 1.1f, 1.15f, 1.25f, 1.5f, 1.75f, 2f)
         val PITCHES = listOf(0.8f to "낮게", 1f to "보통", 1.2f to "높게")
         val SLEEP = listOf(15, 30, 45, 60)
         private val ATTRS = AudioAttributes.Builder()
