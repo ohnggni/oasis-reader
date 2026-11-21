@@ -178,12 +178,19 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 cachePrefs.limitMb = limit
                 scope.launch { com.oasisreader.app.data.BookStore.get(app).trimCache(cachePrefs.limitBytes); usageKey++ }
             }
-            var dropRead by remember { mutableStateOf(cachePrefs.dropFinished) }
+            var dropMode by remember { mutableStateOf(cachePrefs.dropMode) }
+            val C = com.oasisreader.app.data.CachePrefs
             Item(
-                "🧽", "다 읽은 임시 책은 파일 지우기: ${if (dropRead) "켬" else "끔"}",
-                "폰 공간이 적을 때 좋습니다. 임시 보관(바로 읽기) 책을 끝까지 읽고 서재로 나오면 파일만 지웁니다 (읽은 위치·하이라이트는 남고, 다시 열면 다시 받습니다). 눌러서 바꾸기",
+                "🧽",
+                "다 읽은 책 파일 지우기: " + when (dropMode) { C.DROP_CACHE -> "임시 책만"; C.DROP_SHELF -> "서재 책까지"; else -> "끔" },
+                "폰 공간이 적을 때 좋습니다. 다 읽고 서재로 나오면 그 책의 파일만 지웁니다 (서재 목록·읽은 위치·하이라이트는 남고, 다시 열면 서버에서 다시 받습니다). " +
+                    "\"임시 책만\"은 바로 읽기로 연 책, \"서재 책까지\"는 서재에 담은 책 중 끝까지 읽은(다 읽음) 책도 지웁니다. " +
+                    "폰에서 직접 가져온 책과 오디오북은 지우지 않습니다. 눌러서 바꾸기",
                 enabled = busy == null,
-            ) { dropRead = !dropRead; cachePrefs.dropFinished = dropRead }
+            ) {
+                dropMode = (dropMode + 1) % 3
+                cachePrefs.dropMode = dropMode
+            }
             Item("🧹", "임시 보관 파일 지금 비우기", "서재에 보관(📌)한 책은 그대로입니다", enabled = busy == null && (usage?.first ?: 0) > 0) {
                 scope.launch {
                     val n = com.oasisreader.app.data.BookStore.get(app).trimCache(0)

@@ -162,9 +162,10 @@ private fun App() {
     }
     // 다 읽은 임시 책 파일 정리 (TODO 72): back in the 서재 (the reader has saved its place by then)
     LaunchedEffect(route) {
-        if (route == Route.LIBRARY && com.oasisreader.app.data.CachePrefs(app).dropFinished) {
+        val mode = com.oasisreader.app.data.CachePrefs(app).dropMode
+        if (route == Route.LIBRARY && mode != com.oasisreader.app.data.CachePrefs.DROP_OFF) {
             kotlinx.coroutines.delay(1500)
-            runCatching { store.dropFinishedCache() }
+            runCatching { store.dropFinishedCache(shelfToo = mode == com.oasisreader.app.data.CachePrefs.DROP_SHELF) }
         }
     }
     LaunchedEffect(Unit) {

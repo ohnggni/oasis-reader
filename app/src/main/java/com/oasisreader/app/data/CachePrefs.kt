@@ -10,14 +10,23 @@ class CachePrefs(context: Context) {
         get() = prefs.getInt("limit_mb", DEFAULT_MB)
         set(v) = prefs.edit().putInt("limit_mb", v).apply()
 
-    /** 다 읽은 임시 책 (바로 읽기) 파일 자동 정리 — for phones with little room (TODO 72). Off by default. */
-    var dropFinished: Boolean
-        get() = prefs.getBoolean("drop_finished", false)
-        set(v) = prefs.edit().putBoolean("drop_finished", v).apply()
+    /**
+     * 다 읽은 책 파일 지우기, for phones with little room: [DROP_OFF], [DROP_CACHE] (바로 읽기 임시 책,
+     * TODO 72) or [DROP_SHELF] (서재에 담은 책도, TODO 77). Off by default; the 2.1 on/off carries over.
+     */
+    var dropMode: Int
+        get() = if (prefs.contains("drop_mode")) prefs.getInt("drop_mode", DROP_OFF)
+            else if (prefs.getBoolean("drop_finished", false)) DROP_CACHE else DROP_OFF
+        set(v) = prefs.edit().putInt("drop_mode", v).apply()
+
+    val dropFinished: Boolean get() = dropMode != DROP_OFF
 
     val limitBytes: Long get() = limitMb.toLong() * 1024 * 1024
 
     companion object {
+        const val DROP_OFF = 0
+        const val DROP_CACHE = 1
+        const val DROP_SHELF = 2
         const val DEFAULT_MB = 2048
         val CHOICES = listOf(256, 512, 1024, 2048, 5120, 10240, 20480, 51200)
         fun label(mb: Int) = if (mb >= 1024) "${mb / 1024}GB" else "${mb}MB"
