@@ -411,35 +411,22 @@ fun LibraryScreen(
                     Icon(androidx.compose.material.icons.Icons.Default.Menu, contentDescription = "메뉴")
                 }
                 OgMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    Text(
-                        "가져오기", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
-                    )
-                    listOf(
-                        Triple("☁️", "서버", onCatalog),
-                        Triple("📄", "파일", onImportFile),
-                        Triple("📁", "폴더", onImportFolder),
-                        Triple("🎧", "오디오북 폴더", onImportAudio),
-                    ).forEach { (emoji, label, action) ->
-                        DropdownMenuItem(
-                            leadingIcon = { EmojiText(emoji, style = MaterialTheme.typography.titleMedium) },
-                            text = { Text(label) },
-                            onClick = { menu = false; action() },
+                    // 간결성 (81): icon tiles like the reading screen's ☰ — 가져오기 한 줄, 도구 한 줄
+                    fun T(e: String, l: String, f: () -> Unit) = PanelTile(e, l) { menu = false; f() }
+                    Column(Modifier.width(320.dp).padding(horizontal = 4.dp)) {
+                        Text(
+                            "가져오기", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 12.dp, top = 2.dp),
                         )
-                    }
-                    HorizontalDivider(Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                    listOf(
-                        Triple("🖍️", "하이라이트", onHighlights),
-                        Triple("📝", "독후감", onReviews),
-                        Triple("📊", "독서 통계", onStats),
-                        Triple("📦", "보관함 관리", onStorage),
-                        Triple("⬇️", "받기 관리", onDownloads),
-                    ).forEach { (emoji, label, action) ->
-                        DropdownMenuItem(
-                            leadingIcon = { EmojiText(emoji, style = MaterialTheme.typography.titleMedium) },
-                            text = { Text(label) },
-                            onClick = { menu = false; action() },
-                        )
+                        PanelGrid(listOf(
+                            T("☁️", "서버", onCatalog), T("📄", "파일", onImportFile),
+                            T("📁", "폴더", onImportFolder), T("🎧", "오디오북", onImportAudio),
+                        ), columns = 5)
+                        HorizontalDivider(Modifier.padding(vertical = 2.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                        PanelGrid(listOf(
+                            T("🖍️", "하이라이트", onHighlights), T("📝", "독후감", onReviews), T("📊", "통계", onStats),
+                            T("📦", "보관함", onStorage), T("⬇️", "받기", onDownloads),
+                        ), columns = 5)
                     }
                 }
             }

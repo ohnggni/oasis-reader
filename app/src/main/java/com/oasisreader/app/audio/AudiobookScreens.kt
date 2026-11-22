@@ -670,8 +670,8 @@ private fun PlayerChips() {
         Box {
             AssistChip(onClick = { tOpen = true }, label = { Text(when { left > 0 -> "🌙 ${left}분"; AudioPlayback.sleepAtTrackEnd -> "🌙 트랙 끝"; else -> "🌙 타이머" }) })
             OgMenu(tOpen, { tOpen = false }) {
-                listOf(15, 30, 45, 60, 90).forEach { m -> DropdownMenuItem(text = { Text("${m}분 뒤 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepIn(m) }) }
-                DropdownMenuItem(text = { Text("이 트랙 끝에서 멈춤") }, onClick = { tOpen = false; AudioPlayback.sleepAtEndOfTrack() })
+                listOf(15, 30, 45, 60, 90).forEach { m -> DropdownMenuItem(text = { Text("${m}분") }, onClick = { tOpen = false; AudioPlayback.sleepIn(m) }) }
+                DropdownMenuItem(text = { Text("이 트랙 끝에서") }, onClick = { tOpen = false; AudioPlayback.sleepAtEndOfTrack() })
                 DropdownMenuItem(text = { Text("타이머 끄기") }, onClick = { tOpen = false; AudioPlayback.sleepIn(0) })
             }
         }
@@ -690,9 +690,9 @@ private fun PlayerChips() {
             Box {
                 AssistChip(onClick = { mOpen = true }, label = { EmojiText("🔖 책갈피") })
                 OgMenu(mOpen, { mOpen = false }) {
-                    DropdownMenuItem(text = { EmojiText("🔖 지금 자리에 남기기") }, onClick = { mOpen = false; mark(0.0) })
-                    DropdownMenuItem(text = { Text("⏪ 방금 들은 30초 남기기") }, onClick = { mOpen = false; mark(30.0) })
-                    DropdownMenuItem(text = { EmojiText("📋 이 책의 책갈피 보기") }, onClick = { mOpen = false; listOpen = true })
+                    DropdownMenuItem(text = { EmojiText("🔖 지금 자리") }, onClick = { mOpen = false; mark(0.0) })
+                    DropdownMenuItem(text = { Text("⏪ 30초 전") }, onClick = { mOpen = false; mark(30.0) })
+                    DropdownMenuItem(text = { EmojiText("📋 책갈피 목록") }, onClick = { mOpen = false; listOpen = true })
                 }
             }
             // just added: a note can be typed right away (closing keeps the mark)
@@ -741,7 +741,7 @@ private fun VolumeRow() {
             Text("🔊", fontSize = 14.sp)
         }
         if (inCar) Text(
-            "차량에 연결되어 있어요. 음량은 차량에서 조절하세요.",
+            "음량은 차량에서 조절하세요",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 8.dp),
         )

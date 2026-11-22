@@ -42,7 +42,7 @@ fun PronDictRow(ra: ReadAloud) {
         Column(Modifier.weight(1f)) {
             Text("발음 사전", style = MaterialTheme.typography.labelLarge)
             Text(
-                if (PronDict.entries.isEmpty()) "이름·외래어처럼 잘못 읽는 말을 바로잡습니다" else "${PronDict.entries.size}개",
+                if (PronDict.entries.isEmpty()) "없음" else "${PronDict.entries.size}개",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

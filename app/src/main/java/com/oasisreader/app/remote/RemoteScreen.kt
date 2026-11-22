@@ -341,8 +341,8 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                 }
                 list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 list.isEmpty() -> Text(
-                    if (audioHere > 0) "이 폴더는 오디오북(트랙 ${audioHere}개)입니다. 위 🎧 오디오북으로 서재에 담습니다."
-                    else "이 폴더에는 하위 폴더나 책(epub · cbz · zip · pdf · txt)이 없습니다.",
+                    if (audioHere > 0) "오디오북 폴더(트랙 ${audioHere}개) — 위 🎧로 담기"
+                    else "책이 없는 폴더입니다 (epub · cbz · zip · pdf · txt)",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(24.dp),
                 )
@@ -432,14 +432,10 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
         var registerOnly by remember(picked) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { ask = null },
-            title = { EmojiText("⬇️ 서재에 담기") },
+            // 간결성 (81): the title says what and how many; 이미 있는 책은 말없이 건너뜀
+            title = { EmojiText("⬇️ 서재에 담기 · ${picked.size}개") },
             text = {
                 Column {
-                    Text(
-                        if (hasDir) "고른 폴더 안의 책을 서재에 담습니다. 서재에 이미 있는 책은 건너뜁니다."
-                        else "고른 책 ${picked.size}권을 서재에 담습니다.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
                     // 받는 방식 (TODO 78): everything now, or entries only and each book when opened
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = { registerOnly = false })) {
                         RadioButton(selected = !registerOnly, onClick = { registerOnly = false })
@@ -450,7 +446,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                         Column {
                             Text("등록만 (열 때 받기)", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "목록만 서재에 넣고, 책은 열 때 서버에서 받습니다. 회차가 많은 웹툰·만화에 좋습니다.",
+                                "웹툰 · 만화처럼 회차가 많을 때",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -463,7 +459,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = { byFolder = !byFolder })) {
                         Checkbox(checked = byFolder, onCheckedChange = { byFolder = it })
-                        Text("폴더 이름으로 📚 컬렉션에 묶기", style = MaterialTheme.typography.bodyMedium)
+                        EmojiText("📚 폴더별 컬렉션으로", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             },

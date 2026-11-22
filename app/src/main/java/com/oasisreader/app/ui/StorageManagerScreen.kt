@@ -144,8 +144,8 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
         TopBar("📦 보관함 관리", onBack = onBack)
         usage?.let { u ->
             Text(
-                "앱 전체 ${Storage.label(u.totalBytes)} · 폰 남은 공간 ${Storage.label(u.freeBytes)}\n" +
-                    "📌 보관 ${Storage.label(u.keptBytes)} · 🎧 오디오북 ${Storage.label(u.audioBytes)} · ☁️ 임시 ${Storage.label(u.cacheBytes)} · 🗃️ 기타 ${Storage.label(u.otherBytes)}",
+                // 간결성 (81): one line — 분류별은 설정 › 저장 공간 창과 아래 탭에
+                "앱 전체 ${Storage.label(u.totalBytes)} · 남은 공간 ${Storage.label(u.freeBytes)}",
                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
@@ -176,7 +176,7 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
         Box(Modifier.weight(1f)) {
             if (items == null) Text("세는 중…", modifier = Modifier.padding(24.dp))
             else if (shown.isEmpty()) Text(
-                if (t == StTab.PHONE) "폰에 받아 둔 책이 없습니다." else "서버에만 있는 책이 없습니다. 서재의 책은 모두 폰에 있습니다.",
+                if (t == StTab.PHONE) "폰에 받아 둔 책이 없습니다." else "서버에만 있는 책이 없습니다.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp),
             )
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()

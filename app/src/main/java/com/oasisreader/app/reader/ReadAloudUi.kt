@@ -212,11 +212,11 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                             }
                         }
                     }
-                    Text("목소리 · 누르면 골라서 들려줍니다", style = MaterialTheme.typography.labelLarge)
+                    Text("목소리", style = MaterialTheme.typography.labelLarge)
                     when {
                         ra.available == null -> Text("엔진을 여는 중…", style = MaterialTheme.typography.bodySmall)
                         voices.isEmpty() -> Text(
-                            "이 엔진에 맞는 목소리가 없습니다. 휴대폰 설정 › 텍스트 음성 변환에서 음성 데이터를 받거나 다른 엔진을 고르세요.",
+                            "목소리 없음 — 휴대폰 설정 › 텍스트 음성 변환에서 받기",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         else -> ChipFlow {
@@ -260,10 +260,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                         Modifier.fillMaxWidth().clickable { ra.changeNormalize(!ra.normalize) },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("숫자·기호를 한글로 읽기", style = MaterialTheme.typography.bodyMedium)
-                            Text("1/2 → 이분의 일, 3개 → 세 개", style = MaterialTheme.typography.bodySmall)
-                        }
+                        Text("숫자 · 기호를 한글로", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
                     }
                     PronDictRow(ra)
