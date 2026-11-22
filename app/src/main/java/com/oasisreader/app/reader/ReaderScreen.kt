@@ -461,8 +461,10 @@ private fun ReaderBody(
     }
 
     // ── 소리 내 읽기: a TTS engine reads from the page on screen, chapter after chapter ──
-    val readAloud = remember { ReadAloud(app) }
+    val readAloud = remember { ReadAloud(app).also { it.useBook(bookId) } }
     var aloud by remember { mutableStateOf(false) }
+    // 82: opened with 🔊 from the 서재, or it was being read aloud when last closed → start when the page is ready
+    var autoAloud by remember { mutableStateOf(ReadAloudStart.take(bookId) || readAloud.shouldResume()) }
     var voiceOpen by remember { mutableStateOf(false) }
     if (voiceOpen) VoiceDialog(readAloud) { voiceOpen = false }
     /**
@@ -491,6 +493,7 @@ private fun ReaderBody(
     }
     fun stopAloud() {
         aloud = false
+        readAloud.markAloud(false)
         aloudBg.chapter = -1
         readAloud.stop()
         ReadAloudService.hide(app)
@@ -514,6 +517,7 @@ private fun ReaderBody(
     }
     fun startAloud() {
         panel = Panel.NONE; barsVisible = false; aloud = true
+        readAloud.markAloud(true)
         readAloud.language = pkg?.language
         ReadAloudService.show(app, aloudPlayer, book?.title.orEmpty(), pkg?.let { chapterTitleFor(it, curIndex) }.orEmpty())
         aloudFromHere()
@@ -581,6 +585,7 @@ private fun ReaderBody(
     }
     /** A chapter opened while reading aloud: go on there (at the voice's sentence after reading from a file). */
     fun aloudOnReady() {
+        if (!aloud && autoAloud) { autoAloud = false; requestAloud(); return }
         if (!aloud) return
         if (aloudBg.chapter >= 0) {
             val items = aloudBg.items
@@ -1308,7 +1313,8 @@ private fun ReaderBody(
                 fill = barColor,
                 onVoice = { voiceOpen = true },
                 onClose = { stopAloud() },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (showBars) 70.dp else 34.dp),
+                // 82: the bottom-left edge, clear of the page number in the middle
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = if (showBars) 70.dp else 10.dp),
             )
 
             // with the top bar: a bottom bar whose thin slider spans the whole book
@@ -1472,6 +1478,12 @@ private fun ReaderSeekBar(
 
 /** The notification's ✕ ends reading aloud in the reader that started it. */
 private var aloudClose: (() -> Unit)? = null
+
+/** 🔊 소리 내 읽기로 열기 (82): the 서재 asks for the book to start reading aloud once it opens. */
+object ReadAloudStart {
+    var pending: String? = null
+    fun take(id: String): Boolean = (pending == id).also { if (it) pending = null }
+}
 
 /** Title of the toc entry that covers spine item [index] (the last one at or before it). */
 private fun chapterTitleFor(p: EpubPackage, index: Int): String =

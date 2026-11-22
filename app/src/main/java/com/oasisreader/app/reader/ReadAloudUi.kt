@@ -52,64 +52,92 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-/** Where the floating player was dragged to (kept while the app runs). */
-private var barOffset = androidx.compose.ui.geometry.Offset.Zero
-
 /**
- * The small floating player shown while reading aloud: sentence ⏮ ⏯ ⏭, speed, sleep timer,
- * voice, stop. Slightly see-through; drag it (anywhere but a button) to move it out of the way.
+ * The small floating player shown while reading aloud (82, 2.8): see-through, folded to ⠿ ⏯ at
+ * first — a tap opens it to sentence ⏮ ⏯ ⏭, speed, sleep timer, voice, stop, and it folds again
+ * when left alone. It sits at the bottom-left edge (clear of the page number); drag it by the grip
+ * or its background and the place is kept for next time.
  */
 @Composable
 fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
-    var off by remember { mutableStateOf(barOffset) }
+    val ctx = LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences(ReadAloud.PREFS, android.content.Context.MODE_PRIVATE) }
+    var off by remember { mutableStateOf(androidx.compose.ui.geometry.Offset(prefs.getFloat("bar_x", 0f), prefs.getFloat("bar_y", 0f))) }
+    var open by remember { mutableStateOf(false) }
+    var touch by remember { mutableIntStateOf(0) }
+    var menuOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(open, touch, menuOpen) { if (open && !menuOpen) { delay(3500); open = false } }
+    // kept on screen: anchored bottom-left, so x goes right (≥ 0) and y goes up (≤ 0)
+    val conf = androidx.compose.ui.platform.LocalConfiguration.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val screenW = with(density) { conf.screenWidthDp.dp.toPx() }
+    val screenH = with(density) { conf.screenHeightDp.dp.toPx() }
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    fun clamp(o: androidx.compose.ui.geometry.Offset) = androidx.compose.ui.geometry.Offset(
+        o.x.coerceIn(0f, (screenW - size.width - with(density) { 20.dp.toPx() }).coerceAtLeast(0f)),
+        o.y.coerceIn(-(screenH * 0.8f), 0f),
+    )
+    val eink = com.oasisreader.app.ui.theme.ThemeMode.eink
+    fun tap(f: () -> Unit): () -> Unit = { touch++; f() }
     Surface(
         modifier = modifier
-            .offset { androidx.compose.ui.unit.IntOffset(off.x.toInt(), off.y.toInt()) }
+            .onSizeChanged { size = it }
+            .offset { val c = clamp(off); androidx.compose.ui.unit.IntOffset(c.x.toInt(), c.y.toInt()) }
             .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
+                detectDragGestures(
+                    onDragEnd = { off = clamp(off); prefs.edit().putFloat("bar_x", off.x).putFloat("bar_y", off.y).apply() },
+                ) { change, drag ->
                     change.consume()
-                    off += drag; barOffset = off
+                    off = clamp(off + drag); touch++
                 }
             },
         shape = RoundedCornerShape(24.dp),
-        color = fill.copy(alpha = 0.86f),
-        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-        shadowElevation = 6.dp,
+        color = fill.copy(alpha = if (eink) 1f else 0.6f),
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (eink) 1f else 0.5f)),
+        shadowElevation = if (eink) 0.dp else 2.dp,
     ) {
-        Row(Modifier.height(44.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-            BarButton("⏮", "이전 문장") { ra.skip(-1) }
-            BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기") { ra.toggle() }
-            BarButton("⏭", "다음 문장") { ra.skip(1) }
-            var speedOpen by remember { mutableStateOf(false) }
-            Box {
-                TextButton(onClick = { speedOpen = true }) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelLarge) }
-                OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
-                    ReadAloud.RATES.forEach { r ->
-                        DropdownMenuItem(
-                            text = { Text(ReadAloud.rateLabel(r)) },
-                            leadingIcon = { com.oasisreader.app.ui.CheckMark(r == ra.rate) },
-                            onClick = { speedOpen = false; ra.changeRate(r) },
-                        )
+        Row(
+            Modifier.height(44.dp).padding(horizontal = 4.dp).clickable(enabled = !open) { open = true },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) { open = !open; touch++ }
+            if (open) BarButton("⏮", "이전 문장", tap { ra.skip(-1) })
+            BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기", tap { ra.toggle() })
+            if (open) {
+                BarButton("⏭", "다음 문장", tap { ra.skip(1) })
+                var speedOpen by remember { mutableStateOf(false) }
+                LaunchedEffect(speedOpen) { menuOpen = speedOpen }
+                Box {
+                    TextButton(onClick = { speedOpen = true }) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelLarge) }
+                    OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
+                        ReadAloud.RATES.forEach { r ->
+                            DropdownMenuItem(
+                                text = { Text(ReadAloud.rateLabel(r)) },
+                                leadingIcon = { com.oasisreader.app.ui.CheckMark(r == ra.rate) },
+                                onClick = { speedOpen = false; ra.changeRate(r) },
+                            )
+                        }
                     }
                 }
+                SleepButton(ra) { menuOpen = it }
+                BarButton("🎙", "목소리", tap(onVoice))
+                BarButton("✕", "소리 내 읽기 끝내기", onClose)
             }
-            SleepButton(ra)
-            BarButton("🎙", "목소리", onVoice)
-            BarButton("✕", "소리 내 읽기 끝내기", onClose)
         }
     }
 }
 
 @Composable
-private fun SleepButton(ra: ReadAloud) {
+private fun SleepButton(ra: ReadAloud, onOpenChange: (Boolean) -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
+    LaunchedEffect(open) { onOpenChange(open) }
     // minutes left, refreshed every 20 s while a timer runs
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(ra.sleepAt) { while (ra.sleepAt > 0) { now = System.currentTimeMillis(); delay(20_000) } }
@@ -191,6 +219,15 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                         },
                         label = { Text("Azure 음성", maxLines = 1) },
                     )
+                }
+
+                // 82: this book keeps its own 빠르기 · 목소리 (only when opened from a book)
+                if (ra.bookId != null) Row(
+                    Modifier.fillMaxWidth().clickable { ra.setOwn(!ra.own); picked = ra.voiceName() },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("이 책만 따로 (빠르기 · 목소리)", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Switch(checked = ra.own, onCheckedChange = { ra.setOwn(it); picked = ra.voiceName() })
                 }
 
                 if (azureMode) AzureVoicePanel(ra, onSetup = { setup = true })
@@ -301,14 +338,14 @@ private fun voiceLabel(v: Voice, list: List<Voice>): String {
  * menu button, so readers tapped it and nothing happened; a tap now says what it is for.
  */
 @Composable
-private fun DragGrip(color: Color) {
+private fun DragGrip(color: Color, onTap: () -> Unit) {
     val ctx = LocalContext.current
     Box(
         Modifier
             .padding(start = 4.dp)
             .size(width = 22.dp, height = 36.dp)
-            .clickable { com.oasisreader.app.ui.Notice.show(ctx, "막대를 끌어서 원하는 곳으로 옮길 수 있습니다") }
-            .semantics { contentDescription = "끌어서 막대 옮기기" },
+            .clickable(onClick = onTap)
+            .semantics { contentDescription = "막대 펼치기 · 접기 (끌어서 옮기기)" },
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.foundation.Canvas(Modifier.size(width = 8.dp, height = 14.dp)) {

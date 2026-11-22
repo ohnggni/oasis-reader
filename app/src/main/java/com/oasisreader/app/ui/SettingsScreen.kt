@@ -137,6 +137,11 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
                 volumeKeys = it
                 PageKeys.setVolumeKeys(app, it)
             }
+            var resumeAloud by remember { mutableStateOf(com.oasisreader.app.reader.ReadAloud.resumeOn(app)) }
+            SwitchItem("🔊", "소리로 읽던 책은 이어 듣기", resumeAloud) {
+                resumeAloud = it
+                com.oasisreader.app.reader.ReadAloud.setResumeOn(app, it)
+            }
 
             Section("독서 습관 · 동기화")
             var habitOpen by remember { mutableStateOf(false) }

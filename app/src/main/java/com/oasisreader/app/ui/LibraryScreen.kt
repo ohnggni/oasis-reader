@@ -848,6 +848,9 @@ fun LibraryScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(8.dp))
+                    // 82: straight into reading aloud (books that are text: EPUB · TXT)
+                    if (b.format == com.oasisreader.app.data.BookStore.FORMAT_EPUB || b.format == com.oasisreader.app.data.BookStore.FORMAT_TXT)
+                        TextButton(onClick = { menuFor = null; com.oasisreader.app.reader.ReadAloudStart.pending = b.id; onOpen(b) }) { EmojiText("🔊 소리 내 읽기로 열기") }
                     TextButton(onClick = { menuFor = null; infoFor = b }) { Text("ℹ️ 책 정보") }
                     TextButton(onClick = { menuFor = null; onReview(b) }) { EmojiText("📝 독후감") }
                     TextButton(onClick = { menuFor = null; pickColFor = b }) {

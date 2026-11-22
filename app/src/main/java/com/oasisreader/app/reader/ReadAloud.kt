@@ -51,6 +51,42 @@ class ReadAloud(context: Context) {
         private set
     var pitch by mutableFloatStateOf(prefs.getFloat("pitch", 1f))
         private set
+
+    /** 이 책만 따로 (82): the book open now, and whether it keeps its own 빠르기 · 목소리. */
+    var bookId: String? = null
+        private set
+    var own by mutableStateOf(false)
+        private set
+    private fun rateKey() = if (own && bookId != null) "rate_$bookId" else "rate"
+    private fun voiceKey() = if (own && bookId != null) "voice_$bookId" else "voice"
+
+    /** The book being read: its own 빠르기 · 목소리 when it has them, else the shared ones. */
+    fun useBook(id: String) {
+        bookId = id
+        own = prefs.getBoolean("own_$id", false)
+        rate = prefs.getFloat(rateKey(), prefs.getFloat("rate", 1f))
+        runCatching { applyVoice(tts) }
+    }
+
+    /** Turn 이 책만 따로 on (starting from the shared settings) or off (back to them). */
+    fun setOwn(on: Boolean) {
+        val id = bookId ?: return
+        if (on == own) return
+        prefs.edit().apply {
+            if (on) {
+                putBoolean("own_$id", true).putFloat("rate_$id", rate)
+                prefs.getString("voice", null)?.let { putString("voice_$id", it) }
+            } else remove("own_$id").remove("rate_$id").remove("voice_$id")
+        }.apply()
+        own = on
+        rate = prefs.getFloat(rateKey(), 1f)
+        runCatching { applyVoice(tts) }
+        if (playing) speakFrom(index)
+    }
+
+    /** 소리로 읽던 책 (82): it was being read aloud when last closed. */
+    fun markAloud(on: Boolean) { bookId?.let { prefs.edit().putBoolean("aloud_$it", on).apply() } }
+    fun shouldResume(): Boolean = bookId?.let { resumeOn(app) && prefs.getBoolean("aloud_$it", false) } ?: false
     /** Numbers and signs written out in Hangul before speaking ([ReadAloudNormalize]). */
     var normalize by mutableStateOf(prefs.getBoolean("normalize", true))
         private set
@@ -104,7 +140,7 @@ class ReadAloud(context: Context) {
     }
 
     private fun applyVoice(t: TextToSpeech) {
-        val name = prefs.getString("voice", null)
+        val name = prefs.getString(voiceKey(), null)
         val v = name?.let { n -> runCatching { t.voices }.getOrNull()?.firstOrNull { it.name == n } }
         if (v != null) { t.voice = v; return }
         val loc = language?.takeIf { it.isNotBlank() }?.let { Locale.forLanguageTag(it) } ?: Locale.KOREAN
@@ -253,7 +289,7 @@ class ReadAloud(context: Context) {
 
     fun changeRate(r: Float) {
         rate = r
-        prefs.edit().putFloat("rate", r).apply()
+        prefs.edit().putFloat(rateKey(), r).apply()
         if (playing) speakFrom(index)
     }
 
@@ -292,7 +328,7 @@ class ReadAloud(context: Context) {
         val wasPlaying = playing
         session++
         runCatching { tts.stop(); tts.shutdown() }
-        prefs.edit().putString("engine", pkg).remove("voice").apply()
+        prefs.edit().putString("engine", pkg).remove("voice").apply { bookId?.let { remove("voice_$it") } }.apply()
         tts = create()
         if (wasPlaying) pending = { speakFrom(index) }
     }
@@ -313,10 +349,10 @@ class ReadAloud(context: Context) {
         val mine = if (all) vs else vs.filter { it.locale.language.lowercase() == lang }
         return mine.sortedWith(compareByDescending<Voice> { it.quality }.thenBy { it.isNetworkConnectionRequired }.thenBy { it.name })
     }
-    fun voiceName(): String? = prefs.getString("voice", null)
+    fun voiceName(): String? = prefs.getString(voiceKey(), null)
 
     fun setVoice(v: Voice?) {
-        prefs.edit().apply { if (v == null) remove("voice") else putString("voice", v.name) }.apply()
+        prefs.edit().apply { if (v == null) remove(voiceKey()) else putString(voiceKey(), v.name) }.apply()
         applyVoice(tts)
         if (playing) speakFrom(index)
     }
@@ -395,6 +431,10 @@ class ReadAloud(context: Context) {
         }
 
         const val PREFS = "read_aloud"
+
+        /** 소리로 읽던 책은 다시 열면 이어서 소리로 (82, 설정 › 읽기). On by default. */
+        fun resumeOn(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("resume_aloud", true)
+        fun setResumeOn(c: Context, on: Boolean) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("resume_aloud", on).apply()
         const val MAX_LEN = 3000      // under the engines' input limit (4000)
         // 0.9~1.15 촘촘하게 (2.6): the range most listening happens in
         val RATES = listOf(0.5f, 0.75f, 0.9f, 0.95f, 1f, 1.05f, 1.1f, 1.15f, 1.25f, 1.5f, 1.75f, 2f)
