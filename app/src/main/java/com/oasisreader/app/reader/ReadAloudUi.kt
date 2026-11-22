@@ -223,11 +223,11 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
 
                 // 82: this book keeps its own 빠르기 · 목소리 (only when opened from a book)
                 if (ra.bookId != null) Row(
-                    Modifier.fillMaxWidth().clickable { ra.setOwn(!ra.own); picked = ra.voiceName() },
+                    Modifier.fillMaxWidth().clickable { ra.changeOwn(!ra.own); picked = ra.voiceName() },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("이 책만 따로 (빠르기 · 목소리)", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    Switch(checked = ra.own, onCheckedChange = { ra.setOwn(it); picked = ra.voiceName() })
+                    Switch(checked = ra.own, onCheckedChange = { ra.changeOwn(it); picked = ra.voiceName() })
                 }
 
                 if (azureMode) AzureVoicePanel(ra, onSetup = { setup = true })

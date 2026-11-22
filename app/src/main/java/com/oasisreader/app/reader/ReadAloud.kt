@@ -69,7 +69,7 @@ class ReadAloud(context: Context) {
     }
 
     /** Turn 이 책만 따로 on (starting from the shared settings) or off (back to them). */
-    fun setOwn(on: Boolean) {
+    fun changeOwn(on: Boolean) {
         val id = bookId ?: return
         if (on == own) return
         prefs.edit().apply {
