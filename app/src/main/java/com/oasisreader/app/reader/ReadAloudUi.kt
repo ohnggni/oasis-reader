@@ -103,8 +103,12 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
         border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (eink) 1f else 0.5f)),
         shadowElevation = if (eink) 0.dp else 2.dp,
     ) {
+        // thin (#223): the buttons keep their size, the space above and below them goes
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalMinimumInteractiveComponentSize provides androidx.compose.ui.unit.Dp.Unspecified,
+        ) {
         Row(
-            Modifier.height(44.dp).padding(horizontal = 4.dp).clickable(enabled = !open) { open = true },
+            Modifier.height(34.dp).padding(horizontal = 4.dp).clickable(enabled = !open) { open = true },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) { open = !open; touch++ }
@@ -115,7 +119,11 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
                 var speedOpen by remember { mutableStateOf(false) }
                 LaunchedEffect(speedOpen) { menuOpen = speedOpen }
                 Box {
-                    TextButton(onClick = { speedOpen = true }) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelLarge) }
+                    TextButton(
+                        onClick = { speedOpen = true },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp),
+                    ) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelLarge) }
                     OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
                         ReadAloud.RATES.forEach { r ->
                             DropdownMenuItem(
@@ -131,6 +139,7 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
                 BarButton("✕", "소리 내 읽기 끝내기", onClose)
             }
         }
+        }
     }
 }
 
@@ -143,7 +152,11 @@ private fun SleepButton(ra: ReadAloud, onOpenChange: (Boolean) -> Unit = {}) {
     LaunchedEffect(ra.sleepAt) { while (ra.sleepAt > 0) { now = System.currentTimeMillis(); delay(20_000) } }
     val left = if (ra.sleepAt > 0) ((ra.sleepAt - now + 59_999) / 60_000).toInt().coerceAtLeast(1) else 0
     Box {
-        TextButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "수면 타이머" }) {
+        TextButton(
+            onClick = { open = true },
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            modifier = Modifier.height(32.dp).semantics { contentDescription = "수면 타이머" },
+        ) {
             Text(
                 when { left > 0 -> "🌙${left}분"; ra.sleepAtChapterEnd -> "🌙장"; else -> "🌙" },
                 style = MaterialTheme.typography.labelLarge,
@@ -163,7 +176,7 @@ private fun SleepButton(ra: ReadAloud, onOpenChange: (Boolean) -> Unit = {}) {
 
 @Composable
 private fun BarButton(glyph: String, label: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(38.dp).semantics { contentDescription = label }) {
+    IconButton(onClick = onClick, modifier = Modifier.size(width = 38.dp, height = 32.dp).semantics { contentDescription = label }) {
         com.oasisreader.app.ui.EmojiText(glyph, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
     }
 }
@@ -352,7 +365,7 @@ private fun DragGrip(color: Color, onTap: () -> Unit) {
     Box(
         Modifier
             .padding(start = 4.dp)
-            .size(width = 22.dp, height = 36.dp)
+            .size(width = 22.dp, height = 30.dp)
             .clickable(onClick = onTap)
             .semantics { contentDescription = "막대 펼치기 · 접기 (끌어서 옮기기)" },
         contentAlignment = Alignment.Center,

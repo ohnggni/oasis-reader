@@ -223,9 +223,11 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 #notepop .nbar button { background: none; border: 0; color: var(--accent); font: 600 14px/32px sans-serif; padding: 0 10px; }
 /* read aloud: the sentence being spoken (CSS Custom Highlight, no DOM change) */
 ::highlight(tts) { background-color: rgba(200, 144, 46, 0.30); }
-/* the sentence being read keeps the text weight (it is drawn again without the outline otherwise — 2.9) */
-html[data-w="1"] #content ::highlight(tts) { -webkit-text-stroke-width: 0.02em; -webkit-text-stroke-color: currentColor; }
-html[data-w="2"] #content ::highlight(tts) { -webkit-text-stroke-width: 0.034em; -webkit-text-stroke-color: currentColor; }
+/* the sentence being read: boxes behind the text (2.9) — ::highlight drew the text again
+   without the weight outline, so the sentence looked thinner than the page */
+#ttsbg { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: -1; pointer-events: none; }
+#ttsbg div { position: absolute; background: rgba(200, 144, 46, 0.30); border-radius: 2px; }
+html:not(.paged) #book { position: relative; isolation: isolate; }
 #hlbar button.look {
   width: auto; border-radius: 14px; padding: 0 10px; margin-left: 4px;
   background: var(--bg); color: var(--fg); font: 600 13px/24px sans-serif; border: 0;
@@ -953,6 +955,28 @@ html[data-w="2"] #content ::highlight(tts) { -webkit-text-stroke-width: 0.034em;
     flush();
     return out;
   }
+  /* boxes behind sentence i, inside #book so they turn with the page (it scrolls sideways) */
+  var ttsLayer = null;
+  function ttsPaint(i) {
+    if (!ttsLayer || ttsLayer.parentNode !== book) {
+      ttsLayer = document.createElement('div'); ttsLayer.id = 'ttsbg'; book.appendChild(ttsLayer);
+    }
+    ttsLayer.innerHTML = '';
+    var rs = tts[i].range.getClientRects(), bb = book.getBoundingClientRect(), prev = null;
+    for (var k = 0; k < rs.length; k++) {
+      var r = rs[k];
+      if (r.width < 1 || r.height < 1) continue;
+      /* a rect inside the one before (nested inline nodes) would darken the spot */
+      if (prev && r.left >= prev.left - 0.5 && r.right <= prev.right + 0.5 && r.top >= prev.top - 0.5 && r.bottom <= prev.bottom + 0.5) continue;
+      prev = r;
+      var d = document.createElement('div');
+      d.style.left = (r.left - bb.left + book.scrollLeft) + 'px';
+      d.style.top = (r.top - bb.top + book.scrollTop) + 'px';
+      d.style.width = r.width + 'px';
+      d.style.height = r.height + 'px';
+      ttsLayer.appendChild(d);
+    }
+  }
   function ttsRect(i, last) {
     var rs = tts && tts[i] ? tts[i].range.getClientRects() : [];
     if (!rs.length) return null;
@@ -1050,11 +1074,11 @@ html[data-w="2"] #content ::highlight(tts) { -webkit-text-stroke-width: 0.034em;
     },
     ttsMark: function (i) {
       if (!tts || !tts[i]) return;
-      try { if (window.CSS && CSS.highlights && window.Highlight) CSS.highlights.set('tts', new Highlight(tts[i].range)); } catch (e) {}
+      ttsPaint(i);
       ttsShow(i);
     },
     ttsClear: function () {
-      try { if (window.CSS && CSS.highlights) CSS.highlights.delete('tts'); } catch (e) {}
+      if (ttsLayer) ttsLayer.innerHTML = '';
       tts = null;
     },
     /* 지금 소제목 (2.9): of these anchor ids (in 목차 order; '' = the file's start), the last one

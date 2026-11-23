@@ -48,6 +48,7 @@ class ReadAloud(context: Context) {
 
     /** 장 넘김 (83): how many lines at the front are not the book's (the chapter title read first). */
     private var lead = 0
+    private var cueAt = 0L
     /** The sentence being read, counted in the book's own list (the title read first is not one). */
     val sentence: Int get() = (index - lead).coerceAtLeast(0)
 
@@ -254,8 +255,10 @@ class ReadAloud(context: Context) {
      * own first line is not already that title.
      */
     fun play(sentences: List<String>, from: Int, intro: String? = null, cue: Boolean = false) {
+        // a title page with no text (a picture) still gets its title read (#223)
         val head = intro?.trim()?.takeIf {
-            from == 0 && sentences.isNotEmpty() && it.isNotEmpty() && (chapterCue and CUE_TITLE) != 0 && !sameStart(it, sentences.first())
+            it.isNotEmpty() && (chapterCue and CUE_TITLE) != 0 &&
+                (sentences.isEmpty() || (from == 0 && !sameStart(it, sentences.first())))
         }
         lead = if (head != null) 1 else 0
         // one sentence in, one out: the page marks sentences by their place in the book's list
@@ -265,7 +268,7 @@ class ReadAloud(context: Context) {
         index = if (head != null) 0 else from.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         marked = -1
         playing = true
-        if (sentences.isEmpty() || from >= sentences.size) { session++; main.post { finish() }; return }
+        if (head == null && (sentences.isEmpty() || from >= sentences.size)) { session++; main.post { finish() }; return }
         val start = start@{
             if (usesAzure) { speakFrom(index); onStateChanged(); return@start }
             when (available) {
@@ -275,7 +278,10 @@ class ReadAloud(context: Context) {
             }
             onStateChanged()
         }
-        if (cue && (chapterCue and CUE_SOUND) != 0) {
+        // one sound per turn: a title page and the text after it are two files but one chapter
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (cue && (chapterCue and CUE_SOUND) != 0 && now - cueAt > CUE_GAP_MS) {
+            cueAt = now
             val s = ++session
             speaker.stop()
             ChapterCue.play()
@@ -463,6 +469,7 @@ class ReadAloud(context: Context) {
         const val CUE_SOUND = 1
         const val CUE_TITLE = 2
         const val CUE_BOTH = 3
+        private const val CUE_GAP_MS = 8_000L
 
         /** The chapter's first line already is its title ("3장" / "3장 멘토와의 만남"): don't read it twice. */
         fun sameStart(title: String, first: String): Boolean {
