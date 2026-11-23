@@ -44,6 +44,7 @@ class ReadAloud(context: Context) {
     var playing by mutableStateOf(false)
         private set
     var index by mutableIntStateOf(0)
+        private set
 
     /** 장 넘김 (83): how many lines at the front are not the book's (the chapter title read first). */
     private var lead = 0
@@ -54,7 +55,6 @@ class ReadAloud(context: Context) {
     var chapterCue by mutableIntStateOf(prefs.getInt("chapter_cue", CUE_BOTH))
         private set
     fun changeChapterCue(v: Int) { chapterCue = v; prefs.edit().putInt("chapter_cue", v).apply() }
-        private set
     var count by mutableIntStateOf(0)
         private set
     var rate by mutableFloatStateOf(prefs.getFloat("rate", 1f))
