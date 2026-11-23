@@ -202,6 +202,8 @@ private fun ReaderBody(
     var target by remember { mutableStateOf<Target?>(null) }
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
     var curIndex by remember { mutableIntStateOf(0) }
+    // 지금 소제목 (2.9): the 목차 entry the page on screen is in, when one file holds several
+    var section by remember { mutableStateOf<TocItem?>(null) }
     var curFraction by remember { mutableFloatStateOf(0f) }
 
     var barsVisible by remember { mutableStateOf(true) }
@@ -503,6 +505,17 @@ private fun ReaderBody(
         webView?.evaluateJavascript("window.Reader && Reader.ttsClear && Reader.ttsClear()", null)
     }
     aloudClose = { stopAloud() }
+    /** 지금 소제목 (2.9): which 목차 entry of this file the page on screen is in. */
+    fun refreshSection() {
+        val pp = pkg ?: return
+        val idx = curIndex
+        val here = pp.toc.filter { pp.spineIndexOf(it.path) == idx }
+        if (here.size <= 1) { section = here.firstOrNull(); return }
+        val ids = org.json.JSONArray(here.map { it.fragment.orEmpty() }).toString()
+        webView?.evaluateJavascript("window.Reader && Reader.sectionAt ? Reader.sectionAt(" + ids + ") : -1") { r ->
+            if (idx == curIndex) section = here.getOrNull(r?.trim()?.toIntOrNull() ?: -1) ?: here.first()
+        }
+    }
     /** (Re)start at the first sentence on the page on screen, or at [match] (text, place in the chapter). */
     fun aloudFromHere(match: Pair<String, Float>? = null) {
         val wv = webView ?: return
@@ -833,7 +846,8 @@ private fun ReaderBody(
 
     val p = pkg
     val title = book?.title.orEmpty()
-    val chapterTitle = remember(p, curIndex) { p?.let { chapterTitleFor(it, curIndex) } ?: "" }
+    val fileTitle = remember(p, curIndex) { p?.let { chapterTitleFor(it, curIndex) } ?: "" }
+    val chapterTitle = section?.takeIf { p?.spineIndexOf(it.path) == curIndex }?.title?.trim()?.takeIf { it.isNotEmpty() } ?: fileTitle
     val overall = p?.overall(curIndex, curFraction) ?: 0f
     val paper = Color(rTheme.bg)
     val chrome = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.75f)
@@ -924,6 +938,7 @@ private fun ReaderBody(
                         onProgress = { f, end ->
                             lastActive = System.currentTimeMillis()
                             savePosition(f, end)
+                            refreshSection()
                         },
                         onTapCenter = {
                             lastActive = System.currentTimeMillis()
@@ -1346,6 +1361,7 @@ private fun ReaderBody(
         TocDialog(
             pkg = p,
             currentIndex = curIndex,
+            current = section,
             onPick = { item ->
                 tocOpen = false
                 val idx = p.spineIndexOf(item.path)
@@ -1582,13 +1598,17 @@ private fun BookHighlightsDialog(bookId: String, db: AppDatabase, onPick: (Highl
 }
 
 @Composable
-private fun TocDialog(pkg: EpubPackage, currentIndex: Int, onPick: (TocItem) -> Unit, onDismiss: () -> Unit) {
+private fun TocDialog(pkg: EpubPackage, currentIndex: Int, onPick: (TocItem) -> Unit, onDismiss: () -> Unit, current: TocItem? = null) {
     // fall back to the spine when the book has no toc
     val items = remember(pkg) {
         pkg.toc.ifEmpty { pkg.spine.mapIndexed { i, s -> TocItem("${i + 1}. " + s.path.substringAfterLast('/'), s.path) } }
     }
     val currentTitle = remember(pkg, currentIndex) { chapterTitleFor(pkg, currentIndex) }
-    val startAt = remember(items) { items.indexOfFirst { it.title == currentTitle }.coerceAtLeast(0) }
+    // the section on screen (2.9), else the file's first entry
+    val startAt = remember(items, current) {
+        current?.let { c -> items.indexOfFirst { it == c } }?.takeIf { it >= 0 }
+            ?: items.indexOfFirst { it.title == currentTitle }.coerceAtLeast(0)
+    }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startAt - 3).coerceAtLeast(0))
     AlertDialog(
         onDismissRequest = onDismiss,

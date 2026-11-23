@@ -223,6 +223,9 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 #notepop .nbar button { background: none; border: 0; color: var(--accent); font: 600 14px/32px sans-serif; padding: 0 10px; }
 /* read aloud: the sentence being spoken (CSS Custom Highlight, no DOM change) */
 ::highlight(tts) { background-color: rgba(200, 144, 46, 0.30); }
+/* the sentence being read keeps the text weight (it is drawn again without the outline otherwise — 2.9) */
+html[data-w="1"] #content ::highlight(tts) { -webkit-text-stroke-width: 0.02em; -webkit-text-stroke-color: currentColor; }
+html[data-w="2"] #content ::highlight(tts) { -webkit-text-stroke-width: 0.034em; -webkit-text-stroke-color: currentColor; }
 #hlbar button.look {
   width: auto; border-radius: 14px; padding: 0 10px; margin-left: 4px;
   background: var(--bg); color: var(--fg); font: 600 13px/24px sans-serif; border: 0;
@@ -1053,6 +1056,19 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
     ttsClear: function () {
       try { if (window.CSS && CSS.highlights) CSS.highlights.delete('tts'); } catch (e) {}
       tts = null;
+    },
+    /* 지금 소제목 (2.9): of these anchor ids (in 목차 order; '' = the file's start), the last one
+       already on or before the page on screen; -1 if none */
+    sectionAt: function (ids) {
+      var last = -1;
+      for (var i = 0; i < ids.length; i++) {
+        if (!ids[i]) { last = i; continue; }
+        var el = document.getElementById(ids[i]);
+        if (!el) continue;
+        var r = el.getBoundingClientRect();
+        if (paged ? r.left < window.innerWidth - 1 : r.top < window.innerHeight * 0.5) last = i;
+      }
+      return last;
     },
     /* a few words from the top of the page on screen (bookmark label) */
     pageText: function () {

@@ -66,7 +66,8 @@ object HighlightExport {
         var bestIdx = -1
         for (t in pkg.toc) {
             val i = pkg.spineIndexOf(t.path)
-            if (i in 0..spineIndex && i >= bestIdx) { best = t.title; bestIdx = i }
+            // the first 목차 entry of a file names it (later ones are sections inside it — 2.9)
+            if (i in 0..spineIndex && i > bestIdx) { best = t.title; bestIdx = i }
         }
         return best.orEmpty().trim()
     }

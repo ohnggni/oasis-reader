@@ -36,7 +36,7 @@ object ChapterCue {
             lp += 0.35 * (white - lp)            // soften the hiss
             val hp = lp - prev; prev = lp        // keep the papery top
             val v = (hp * 2.2 + lp * 0.5) * a
-            out[i] = (v.coerceIn(-1.0, 1.0) * 0.32 * Short.MAX_VALUE).toInt().toShort()
+            out[i] = ((v * 1.0).coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
         }
         return out
     }
