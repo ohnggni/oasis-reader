@@ -36,6 +36,8 @@ class AzureSpeaker(
     private val started: (session: Int, index: Int) -> Unit,
     private val done: (session: Int, index: Int) -> Unit,
     private val onFail: (session: Int, index: Int, reason: String) -> Unit,
+    /** 문장 사이 쉼 for this sentence (ReadAloud.gapFor: the level set for Azure). */
+    private val gapOf: (String, Float) -> Long = { s, r -> ReadAloud.gapAfter(s, r) },
 ) : ReadAloud.Speaker {
     private val app = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -78,7 +80,7 @@ class AzureSpeaker(
                 started(session, k)
                 play(file)
                 done(session, k)
-                if (k < items.lastIndex) delay(ReadAloud.gapAfter(items[k], rate))
+                if (k < items.lastIndex) delay(gapOf(items[k], rate))
             }
         }
     }

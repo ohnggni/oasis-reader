@@ -859,7 +859,7 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
   var TTS_END = '.!?。！？…', TTS_CLOSE = '.!?。！？…"\'”’」』)]）〉》';
   /* a sentence also ends with no space before a Korean letter or an opening quote (텍본 EPUBs);
      invisible spaces count as spaces; a long sentence is cut again at a comma or a space */
-  var TTS_OPEN = '“‘「『（〈《([', TTS_LONG = 120, TTS_MIN = 30;
+  var TTS_OPEN = '“‘「『（〈《([', TTS_LONG = 250, TTS_HARD = 400, TTS_MIN = 30;
   function ttsSpace(c) { return /\s/.test(c) || /[\u200B-\u200D\u2060\uFEFF]/.test(c); }
   function ttsAfter(c) { return ttsSpace(c) || TTS_OPEN.indexOf(c) >= 0 || /[\uAC00-\uD7A3\u3131-\u318E]/.test(c); }
   /* note references are not read: a note link (any form), or a small raised number / mark */
@@ -917,12 +917,16 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
         var last = ns[ns.length - 1];
         return { node: last.node, off: last.node.nodeValue.length };
       }
-      /* a long sentence: cut at the last comma (then the last space) before TTS_LONG letters */
+      /* a long sentence: cut at the last comma before TTS_LONG letters; at a space only past
+         TTS_HARD with no comma (text with no sentence ends) — 2.9 */
       function piece(x, y) {
         while (y - x > TTS_LONG) {
           var lim = x + TTS_LONG, cut = -1, k;
           for (k = lim; k > x + TTS_MIN; k--) if (',，、'.indexOf(s.charAt(k - 1)) >= 0 && ttsSpace(s.charAt(k))) { cut = k; break; }
-          if (cut < 0) for (k = lim; k > x + TTS_MIN; k--) if (ttsSpace(s.charAt(k))) { cut = k; break; }
+          if (cut < 0) {
+            if (y - x <= TTS_HARD) break;
+            for (k = lim; k > x + TTS_MIN; k--) if (ttsSpace(s.charAt(k))) { cut = k; break; }
+          }
           if (cut < 0) cut = lim;
           if (y - cut < TTS_MIN) break;
           push(x, cut); x = cut;

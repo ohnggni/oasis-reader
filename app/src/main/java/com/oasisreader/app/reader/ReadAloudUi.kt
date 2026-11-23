@@ -306,6 +306,16 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                             FilterChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
                         }
                     }
+                    // 84: the pause after a sentence, for this engine (engines add their own silence)
+                    var gap by remember(rev, azureMode) { mutableIntStateOf(ra.gapLevel()) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("문장 사이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
+                        ChipFlow {
+                            listOf("없음", "짧게", "보통", "길게").forEachIndexed { v, label ->
+                                FilterChip(selected = gap == v, onClick = { gap = v; ra.changeGap(v) }, label = { Text(label) })
+                            }
+                        }
+                    }
                     // 83: what tells a new chapter has begun
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("장 넘김", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))

@@ -28,15 +28,28 @@ class ReadAloudTextTest {
         )
     }
 
-    @Test fun longSentenceIsCutAtComma() {
+    @Test fun bookLongSentenceStaysWhole() {
+        // 2.9: a long book sentence (~140 letters) is read in one go, not cut mid-phrase
         val long = "그는 아침 일찍 일어나 창문을 열고 밖을 내다보았는데, 거리에는 이미 사람들이 바삐 오가고 있었고 그는 그 모습을 한참 동안 바라보다가, " +
             "문득 오늘이 무슨 날인지 떠올리고는 서둘러 옷을 챙겨 입은 뒤 현관을 나섰고 그대로 역까지 뛰어갔다."
-        assertEquals(
-            listOf(
-                "그는 아침 일찍 일어나 창문을 열고 밖을 내다보았는데, 거리에는 이미 사람들이 바삐 오가고 있었고 그는 그 모습을 한참 동안 바라보다가,",
-                "문득 오늘이 무슨 날인지 떠올리고는 서둘러 옷을 챙겨 입은 뒤 현관을 나섰고 그대로 역까지 뛰어갔다.",
-            ),
-            ReadAloudText.sentences("<p>$long</p>"),
-        )
+        assertEquals(listOf(long), ReadAloudText.sentences("<p>$long</p>"))
+    }
+
+    @Test fun veryLongSentenceIsCutAtComma() {
+        val a = "가".repeat(200) + ","
+        val b = "나".repeat(150) + "."
+        assertEquals(listOf(a, b), ReadAloudText.sentences("<p>$a $b</p>"))
+    }
+
+    @Test fun noCommaUnderHardStaysWhole() {
+        val t = (1..60).joinToString(" ") { "단어$it" }   // ~290 letters, no comma, no end
+        assertEquals(listOf(t), ReadAloudText.sentences("<p>$t</p>"))
+    }
+
+    @Test fun noCommaOverHardIsCutAtSpace() {
+        val t = (1..90).joinToString(" ") { "단어$it" }   // ~440 letters, no comma, no end
+        val got = ReadAloudText.sentences("<p>$t</p>")
+        assertEquals(true, got.size >= 2)
+        assertEquals(t, got.joinToString(" "))
     }
 }

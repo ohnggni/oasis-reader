@@ -14,7 +14,10 @@ object ReadAloudText {
     private const val CLOSE = ".!?。！？…\"'”’」』)]）〉》"
     private const val OPEN = "“‘「『（〈《(["
     private const val COMMA = ",，、"
-    private const val LONG = 120
+    /** Over this a sentence is cut at a comma (2.9: was 120 — book sentences of 150–200 letters were cut mid-phrase). */
+    private const val LONG = 250
+    /** Over this, with no comma, at a space too (text with no sentence ends — 텍본). */
+    private const val HARD = 400
     private const val MIN = 30
     private val INVISIBLE = Regex("[\\u200B-\\u200D\\u2060\\uFEFF]")
 
@@ -56,7 +59,10 @@ object ReadAloudText {
                 var cut = -1
                 var k = lim
                 while (k > x + MIN) { if (COMMA.indexOf(s[k - 1]) >= 0 && space(s[k])) { cut = k; break }; k-- }
-                if (cut < 0) { k = lim; while (k > x + MIN) { if (space(s[k])) { cut = k; break }; k-- } }
+                if (cut < 0) {
+                    if (y - x <= HARD) break
+                    k = lim; while (k > x + MIN) { if (space(s[k])) { cut = k; break }; k-- }
+                }
                 if (cut < 0) cut = lim
                 if (y - cut < MIN) break
                 push(x, cut); x = cut

@@ -186,7 +186,9 @@ class ReadAloud(context: Context) {
             for (k in from until items.size) {
                 tts.speak(items[k], if (k == from) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "$session:$k")
                 // the pause between sentences (its id is not "session:index", so the callbacks skip it)
-                if (k < items.lastIndex) tts.playSilentUtterance(gapAfter(items[k], rate), TextToSpeech.QUEUE_ADD, "gap-$session-$k")
+                if (k < items.lastIndex) gapFor(items[k], rate).takeIf { it > 0 }?.let {
+                    tts.playSilentUtterance(it, TextToSpeech.QUEUE_ADD, "gap-$session-$k")
+                }
             }
         }
         override fun stop() { tts.stop() }
@@ -203,7 +205,7 @@ class ReadAloud(context: Context) {
     val usesAzure: Boolean get() = !azureDown && AzureVoice.on(app)
 
     private fun azureSpeaker(): AzureSpeaker =
-        azure ?: AzureSpeaker(app, ::started, ::done, ::azureFailed).also { azure = it }
+        azure ?: AzureSpeaker(app, ::started, ::done, ::azureFailed, ::gapFor).also { azure = it }
 
     private fun azureFailed(s: Int, i: Int, reason: String) {
         if (s != session) return
@@ -357,6 +359,15 @@ class ReadAloud(context: Context) {
     fun engines(): List<Pair<String, String>> = runCatching { tts.engines.map { it.name to it.label } }.getOrDefault(emptyList())
     fun engine(): String? = prefs.getString("engine", null) ?: runCatching { tts.defaultEngine }.getOrNull()
 
+    /** 문장 사이 쉼 (84, 2.9): kept per engine (Azure has its own) — engines add their own silence, BookFusion a lot. */
+    private fun gapKey() = "gap_" + (if (usesAzure) "azure" else engine() ?: "default")
+    fun gapLevel(): Int = prefs.getInt(gapKey(), GAP_NORMAL)
+    fun changeGap(level: Int) {
+        prefs.edit().putInt(gapKey(), level).apply()
+        if (playing) speakFrom(index)   // the queued sentences carry the old pauses
+    }
+    fun gapFor(s: String, rate: Float): Long = gapAfter(s, rate, gapLevel())
+
     fun setEngine(pkg: String) {
         if (pkg == engine() && prefs.getString("engine", null) != null) return
         val wasPlaying = playing
@@ -458,11 +469,20 @@ class ReadAloud(context: Context) {
          * silence, so a full stop sounded shorter than a comma inside a sentence. A sentence that
          * ends at a comma or a space (a long sentence cut in two, ReadAloudText) gets a short one.
          */
-        fun gapAfter(s: String, rate: Float): Long {
-            val end = s.trimEnd().lastOrNull()
-            val ms = if (end != null && end in ".?!…。？！\"'”’」』)]") 350 else 150
+        fun gapAfter(s: String, rate: Float, level: Int = GAP_NORMAL): Long {
+            val end = s.trimEnd().lastOrNull() ?: return 0
+            val full = GAP_MS[level.coerceIn(0, GAP_MS.lastIndex)]
+            val ms = when {
+                end in ".?!…。？！\"'”’」』)]" -> full
+                end in ",，、" -> 0          // a long sentence cut at its comma: go straight on (2.9)
+                else -> minOf(150, full)     // a line with no end mark (a heading, a 텍본 line)
+            }
             return (ms / rate.coerceIn(0.5f, 3f)).toLong()
         }
+
+        /** 문장 사이: 없음 · 짧게 · 보통(2.4의 350ms) · 길게. */
+        val GAP_MS = intArrayOf(0, 150, 350, 600)
+        const val GAP_NORMAL = 2
 
         const val PREFS = "read_aloud"
 
