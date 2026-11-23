@@ -293,6 +293,15 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                             FilterChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
                         }
                     }
+                    // 83: what tells a new chapter has begun
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("장 넘김", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
+                        ChipFlow {
+                            listOf(ReadAloud.CUE_BOTH to "소리 + 제목", ReadAloud.CUE_SOUND to "소리", ReadAloud.CUE_TITLE to "제목", 0 to "없음").forEach { (v, label) ->
+                                FilterChip(selected = ra.chapterCue == v, onClick = { ra.changeChapterCue(v) }, label = { Text(label) })
+                            }
+                        }
+                    }
                     Row(
                         Modifier.fillMaxWidth().clickable { ra.changeNormalize(!ra.normalize) },
                         verticalAlignment = Alignment.CenterVertically,

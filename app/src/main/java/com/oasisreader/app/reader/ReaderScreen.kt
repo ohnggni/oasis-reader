@@ -464,6 +464,8 @@ private fun ReaderBody(
     val readAloud = remember { ReadAloud(app).also { it.useBook(bookId) } }
     var aloud by remember { mutableStateOf(false) }
     // 82: opened with 🔊 from the 서재, or it was being read aloud when last closed → start when the page is ready
+    // 장 넘김 (83): the sound and the title to give when the next chapter starts being read
+    val turn = remember { ChapterTurn() }
     var autoAloud by remember { mutableStateOf(ReadAloudStart.take(bookId) || readAloud.shouldResume()) }
     var voiceOpen by remember { mutableStateOf(false) }
     if (voiceOpen) VoiceDialog(readAloud) { voiceOpen = false }
@@ -495,6 +497,7 @@ private fun ReaderBody(
         aloud = false
         readAloud.markAloud(false)
         aloudBg.chapter = -1
+        turn.title = null; turn.cue = false
         readAloud.stop()
         ReadAloudService.hide(app)
         webView?.evaluateJavascript("window.Reader && Reader.ttsClear && Reader.ttsClear()", null)
@@ -511,7 +514,8 @@ private fun ReaderBody(
                 stopAloud()
                 Toast.makeText(context, "이 화면에서는 소리 내 읽기를 할 수 없습니다.", Toast.LENGTH_SHORT).show()
             } else if (aloud) {
-                readAloud.play(List(arr.length()) { arr.getString(it) }, o.optInt("start", 0))
+                readAloud.play(List(arr.length()) { arr.getString(it) }, o.optInt("start", 0), intro = turn.title, cue = turn.cue)
+                turn.title = null; turn.cue = false
             }
         }
     }
@@ -553,7 +557,10 @@ private fun ReaderBody(
         when {
             !aloud || pp == null -> {}
             (from + 1) !in pp.spine.indices -> { stopAloud(); Toast.makeText(context, "책 끝까지 읽었습니다.", Toast.LENGTH_SHORT).show() }
-            inFront() && aloudBg.chapter < 0 -> goChapter(from + 1, 0f)   // goes on when the page is ready
+            inFront() && aloudBg.chapter < 0 -> {
+                turn.cue = true; turn.title = turnTitle(pp, from, from + 1)
+                goChapter(from + 1, 0f)   // goes on when the page is ready
+            }
             else -> scope.launch {
                 val next = from + 1
                 val list = withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -563,7 +570,7 @@ private fun ReaderBody(
                 aloudBg.chapter = next; aloudBg.items = list
                 db.books().savePosition(bookId, next, 0f, pp.overall(next, 0f), System.currentTimeMillis())
                 ReadAloudService.update(chapter = chapterTitleFor(pp, next))
-                readAloud.play(list, 0)
+                readAloud.play(list, 0, intro = turnTitle(pp, from, next), cue = true)
             }
         }
     }
@@ -576,7 +583,7 @@ private fun ReaderBody(
         val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_START && aloud && aloudBg.chapter >= 0) {
                 val n = aloudBg.items.size
-                val f = if (n > 0) (readAloud.index.toFloat() / n).coerceIn(0f, 1f) else 0f
+                val f = if (n > 0) (readAloud.sentence.toFloat() / n).coerceIn(0f, 1f) else 0f
                 goChapter(aloudBg.chapter, f)
             }
         }
@@ -589,7 +596,7 @@ private fun ReaderBody(
         if (!aloud) return
         if (aloudBg.chapter >= 0) {
             val items = aloudBg.items
-            val i = readAloud.index
+            val i = readAloud.sentence
             val match = items.getOrNull(i)?.let { it to (if (items.isEmpty()) 0f else i.toFloat() / items.size) }
             aloudBg.chapter = -1; aloudBg.items = emptyList()
             aloudFromHere(match)
@@ -1486,6 +1493,13 @@ object ReadAloudStart {
 }
 
 /** Title of the toc entry that covers spine item [index] (the last one at or before it). */
+/** 장 넘김 (83): what is waiting to be given when the next chapter starts. */
+private class ChapterTurn { var title: String? = null; var cue = false }
+
+/** The title to read going from chapter [from] to [next]: only when the 목차 title changes (one chapter split over files reads it once). */
+private fun turnTitle(p: EpubPackage, from: Int, next: Int): String? =
+    chapterTitleFor(p, next).trim().takeIf { it.isNotEmpty() && it != chapterTitleFor(p, from).trim() }
+
 private fun chapterTitleFor(p: EpubPackage, index: Int): String =
     com.oasisreader.app.data.HighlightExport.chapterTitle(p, index)
 

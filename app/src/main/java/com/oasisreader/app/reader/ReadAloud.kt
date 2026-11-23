@@ -44,6 +44,16 @@ class ReadAloud(context: Context) {
     var playing by mutableStateOf(false)
         private set
     var index by mutableIntStateOf(0)
+
+    /** 장 넘김 (83): how many lines at the front are not the book's (the chapter title read first). */
+    private var lead = 0
+    /** The sentence being read, counted in the book's own list (the title read first is not one). */
+    val sentence: Int get() = (index - lead).coerceAtLeast(0)
+
+    /** 장 넘어갈 때 (83): 0 없음 · 1 소리 · 2 제목 · 3 소리 + 제목. */
+    var chapterCue by mutableIntStateOf(prefs.getInt("chapter_cue", CUE_BOTH))
+        private set
+    fun changeChapterCue(v: Int) { chapterCue = v; prefs.edit().putInt("chapter_cue", v).apply() }
         private set
     var count by mutableIntStateOf(0)
         private set
@@ -222,7 +232,7 @@ class ReadAloud(context: Context) {
     private fun mark(i: Int) {
         if (i == marked) return
         marked = i; index = i
-        onSentence(i)
+        if (i >= lead) onSentence(i - lead)
     }
 
     private fun post(id: String, f: (Int, Int) -> Unit) {
@@ -237,23 +247,41 @@ class ReadAloud(context: Context) {
         onFinished()
     }
 
-    /** Read [sentences] from [from]. An empty chapter (a cover picture) finishes at once. */
-    fun play(sentences: List<String>, from: Int) {
-        // one sentence in, one out: the page marks sentences by their place in this list
-        raw = sentences
-        items = sentences.map { spoken(it) }
-        count = items.size
-        index = from.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+    /**
+     * Read [sentences] from [from]. An empty chapter (a cover picture) finishes at once.
+     * A new chapter (83): [cue] plays the page-turn sound first, and [intro] (its title) is read
+     * before the first sentence — each when 장 넘어갈 때 says so, the title only when the chapter's
+     * own first line is not already that title.
+     */
+    fun play(sentences: List<String>, from: Int, intro: String? = null, cue: Boolean = false) {
+        val head = intro?.trim()?.takeIf {
+            from == 0 && sentences.isNotEmpty() && it.isNotEmpty() && (chapterCue and CUE_TITLE) != 0 && !sameStart(it, sentences.first())
+        }
+        lead = if (head != null) 1 else 0
+        // one sentence in, one out: the page marks sentences by their place in the book's list
+        raw = listOfNotNull(head) + sentences
+        items = raw.map { spoken(it) }
+        count = sentences.size
+        index = if (head != null) 0 else from.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         marked = -1
         playing = true
-        if (items.isEmpty() || from >= items.size) { session++; main.post { finish() }; return }
-        if (usesAzure) { speakFrom(index); onStateChanged(); return }
-        when (available) {
-            true -> speakFrom(index)
-            null -> pending = { speakFrom(index) }
-            false -> { playing = false; onUnavailable() }
+        if (sentences.isEmpty() || from >= sentences.size) { session++; main.post { finish() }; return }
+        val start = start@{
+            if (usesAzure) { speakFrom(index); onStateChanged(); return@start }
+            when (available) {
+                true -> speakFrom(index)
+                null -> pending = { speakFrom(index) }
+                false -> { playing = false; onUnavailable() }
+            }
+            onStateChanged()
         }
-        onStateChanged()
+        if (cue && (chapterCue and CUE_SOUND) != 0) {
+            val s = ++session
+            speaker.stop()
+            ChapterCue.play()
+            onStateChanged()
+            main.postDelayed({ if (s == session && playing) start() }, ChapterCue.MS)
+        } else start()
     }
 
     private fun speakFrom(i: Int) {
@@ -405,7 +433,7 @@ class ReadAloud(context: Context) {
         audio == null || audio.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_FAILED
 
     fun stop() {
-        session++; pending = null; speaker.stop(); playing = false; items = emptyList(); raw = emptyList(); count = 0
+        session++; pending = null; speaker.stop(); playing = false; items = emptyList(); raw = emptyList(); count = 0; lead = 0
         main.removeCallbacks(sleepTask); sleepAt = 0L; sleepAtChapterEnd = false
         audio?.abandonAudioFocusRequest(focusRequest)
         onStateChanged()
@@ -431,6 +459,18 @@ class ReadAloud(context: Context) {
         }
 
         const val PREFS = "read_aloud"
+
+        const val CUE_SOUND = 1
+        const val CUE_TITLE = 2
+        const val CUE_BOTH = 3
+
+        /** The chapter's first line already is its title ("3장" / "3장 멘토와의 만남"): don't read it twice. */
+        fun sameStart(title: String, first: String): Boolean {
+            fun key(x: String) = x.filter { it.isLetterOrDigit() }.lowercase()
+            val a = key(title); val b = key(first)
+            if (a.length < 2 || b.length < 2) return a == b
+            return a.startsWith(b) || b.startsWith(a)
+        }
 
         /** 소리로 읽던 책은 다시 열면 이어서 소리로 (82, 설정 › 읽기). On by default. */
         fun resumeOn(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("resume_aloud", true)
