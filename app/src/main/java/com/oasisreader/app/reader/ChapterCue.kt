@@ -7,45 +7,47 @@ import android.os.Handler
 import android.os.Looper
 import kotlin.math.PI
 import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * 장 넘김 소리 (83, 2.9): a short page-turn sound made here — two soft paper swishes from shaped
- * noise, no sound file (nothing to license, nothing added to the APK). Played on the media
- * stream, so it comes out wherever the voice does (speaker, earphones, car).
+ * 장 넘김 소리 (83, 2.9): one slow, soft page swish made here — noise through a two-pole lowpass
+ * that slides from bright to dull under a smooth rise and long fall (no crackle, no sound file:
+ * nothing to license, nothing added to the APK). 진석님 picked this one ("A") and asked for it
+ * about twice as slow. Played on the media stream, so it comes out wherever the voice does.
  */
 object ChapterCue {
     private const val RATE = 22050
+    private const val LEN_S = 0.64
     /** How long the sound lasts; reading goes on after it. */
-    const val MS = 420L
+    const val MS = 700L
 
     private val pcm: ShortArray by lazy { make() }
 
     private fun make(): ShortArray {
-        val n = (RATE * 0.36).toInt()
-        val out = ShortArray(n)
-        val rnd = Random(83)
-        var lp = 0.0
-        var prev = 0.0
+        val n = (RATE * LEN_S).toInt()
+        val v = DoubleArray(n)
+        val rnd = Random(7)
+        var y1 = 0.0; var y2 = 0.0; var hp = 0.0; var prev = 0.0
         for (i in 0 until n) {
-            val t = i.toDouble() / RATE
-            // two swishes: a light lift (0–0.12 s) and the page falling over (0.13–0.36 s)
-            val a = swell(t, 0.0, 0.12, 0.35) + swell(t, 0.13, 0.23, 0.6)
-            val white = rnd.nextDouble() * 2 - 1
-            lp += 0.35 * (white - lp)            // soften the hiss
-            val hp = lp - prev; prev = lp        // keep the papery top
-            val v = (hp * 2.2 + lp * 0.5) * a
-            out[i] = ((v * 1.0).coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
+            val x = i.toDouble() / n
+            val rise = sin(PI * minOf(1.0, x / 0.35) / 2)
+            val env = rise * rise * (1 - x).pow(1.6)          // rise ~0.22 s, long fall
+            val fc = 4200 * (1 - x) + 700 * x                 // 4.2 kHz → 0.7 kHz
+            val a = 1 - exp(-2 * PI * fc / RATE)
+            val w = rnd.nextDouble() * 2 - 1
+            y1 += a * (w - y1); y2 += a * (y1 - y2)           // two poles: smooth, not crackly
+            hp = 0.985 * (hp + y2 - prev); prev = y2          // drop the rumble
+            v[i] = hp * env
         }
-        return out
-    }
-
-    /** A bump from [start] lasting [len] seconds, peak [peak]: quick rise, gentle fall. */
-    private fun swell(t: Double, start: Double, len: Double, peak: Double): Double {
-        val x = (t - start) / len
-        if (x <= 0 || x >= 1) return 0.0
-        return peak * sin(PI * x) * exp(-1.5 * x)
+        // about −24 dBFS rms (beside a voice), never above 0.9 peak
+        val rms = sqrt(v.sumOf { it * it } / n).coerceAtLeast(1e-9)
+        var g = 10.0.pow(-24.0 / 20) / rms
+        val peak = v.maxOf { kotlin.math.abs(it) } * g
+        if (peak > 0.9) g *= 0.9 / peak
+        return ShortArray(n) { ((v[it] * g).coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort() }
     }
 
     /** Play it once (returns at once; it lasts [MS]). Quiet failures: a missing cue never stops reading. */
