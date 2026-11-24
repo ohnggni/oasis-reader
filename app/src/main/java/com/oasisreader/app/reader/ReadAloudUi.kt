@@ -288,7 +288,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                     VoiceSection(if (pkg == AiVoice.PKG) "$label (AI)" else label, inUse)
                     val list: List<Voice>? = if (pkg == engine) voices.takeIf { ra.available == true }
                         else catalog.voices[pkg]?.let { ra.filterVoices(it, all) }
-                    val rows = list?.filter { VoiceGender.shows(tab, VoiceGender.of(pkg, it.name)) }
+                    val rows = list?.filter { VoiceGender.shows(tab, VoiceGender.of(pkg, it.name, it.features.orEmpty())) }
                     when {
                         list == null && (catalog.failed[pkg] == true || (pkg == engine && ra.available == false)) ->
                             Text("열 수 없음", style = MaterialTheme.typography.bodySmall)
@@ -298,7 +298,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                         else -> rows.orEmpty().forEach { v ->
                             VoiceRow(
                                 name = voiceLabel(v, list ?: emptyList()),
-                                gender = VoiceGender.of(pkg, v.name),
+                                gender = VoiceGender.of(pkg, v.name, v.features.orEmpty()),
                                 cloud = v.isNetworkConnectionRequired,
                                 selected = inUse && picked == v.name,
                                 onPlay = {

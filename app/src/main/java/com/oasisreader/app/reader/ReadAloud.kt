@@ -262,9 +262,11 @@ class ReadAloud(context: Context) {
             it.isNotEmpty() && (chapterCue and CUE_TITLE) != 0 &&
                 (sentences.isEmpty() || (from == 0 && !sameStart(it, sentences.first())))
         }
-        lead = if (head != null) 1 else 0
+        // 89: a heading's pause after the title, and after its chapter number (4장 · 목표에 미칠 때)
+        val heads = head?.let { h -> ReadAloudText.splitLead(h).map { it + ReadAloudText.HEAD } }.orEmpty()
+        lead = heads.size
         // one sentence in, one out: the page marks sentences by their place in the book's list
-        raw = listOfNotNull(head) + sentences
+        raw = heads + sentences
         items = raw.map { spoken(it) }
         count = sentences.size
         index = if (head != null) 0 else from.coerceIn(0, (items.size - 1).coerceAtLeast(0))

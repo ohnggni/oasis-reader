@@ -62,13 +62,29 @@ object ReadAloudText {
 
     fun isLabel(line: String): Boolean = LABEL.matches(line.replace(Regex("\\s+"), " ").trim())
 
+    /** A chapter number at the start of a one-line heading, then its title (89): 4장 목표에 미칠 때. Bare digits need a dot. Same as the page script's TTS_LEAD. */
+    private val LEAD = Regex(
+        "^\\s*((?:제\\s?[0-9]+\\s?[장부편권화절]|[0-9]+\\s?[장부편]|(?:part|chapter|book)\\s*[0-9IVXivx]+|[\\u2460-\\u2473]|[\\u2160-\\u216B]|[0-9]+\\.|prologue|epilogue|프롤로그|에필로그))\\s+(?=\\S)",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "4장 목표에 미칠 때" → ["4장", "목표에 미칠 때"]; anything else → itself. Each read with a heading's pause after it. */
+    fun splitLead(t: String): List<String> {
+        val m = LEAD.find(t) ?: return listOf(t)
+        val rest = t.substring(m.range.last + 1)
+        return if (rest.isBlank()) listOf(t) else listOf(m.groupValues[1], rest)
+    }
+
     /** A heading's inside as one line ending with [HEAD], or two (number line, title) when it starts with a number line. */
     private fun heading(inner: String): String {
         val lines = inner.split(BR).filter { BookSearch.decode(it.replace(Regex("<[^>]+>"), "")).isNotBlank() }
         if (lines.isEmpty()) return inner
-        val first = BookSearch.decode(lines[0].replace(Regex("<[^>]+>"), ""))
-        return if (lines.size > 1 && isLabel(first)) lines[0] + HEAD + "\n" + lines.drop(1).joinToString(" ") + HEAD
-        else lines.joinToString(" ") + HEAD
+        val plain = lines.map { it.replace(Regex("<[^>]+>"), "") }
+        val first = BookSearch.decode(plain[0])
+        // 89: "4장 목표에 미칠 때" on one line also gets its number apart
+        fun lead(t: String) = splitLead(t).joinToString("\n") { it + HEAD }
+        return if (plain.size > 1 && isLabel(first)) plain[0] + HEAD + "\n" + lead(plain.drop(1).joinToString(" "))
+        else lead(plain.joinToString(" "))
     }
 
     private fun split(s: String, out: MutableList<String>) {

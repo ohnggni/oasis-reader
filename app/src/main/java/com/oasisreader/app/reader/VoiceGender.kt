@@ -6,7 +6,8 @@ package com.oasisreader.app.reader
  * - BookFusion Voice (Supertonic): men Alex · Daniel · James · Robert · Sam, women Emily · Jessica ·
  *   Lily · Olivia · Sarah (as its own app lists them), or code names with M1 / F1.
  * - Google: Korean ism · kob and ko-KR-language are women, koc · kod men.
- * - Any engine whose name says female / male.
+ * - Any engine that says so in the voice's features ("female" / "male", 89 — how OG TTS Bridge
+ *   tells it) or in its name.
  */
 object VoiceGender {
     const val FEMALE = 1
@@ -22,8 +23,16 @@ object VoiceGender {
     private val G_MEN = listOf("ko-kr-x-koc", "ko-kr-x-kod")
     private val MALE_WORD = Regex("(?<![a-z])male")
 
-    /** [FEMALE], [MALE] or null (not known). */
-    fun of(engine: String?, name: String): Int? {
+    private val F_TAGS = setOf("female", "gender:female", "gender=female", "woman")
+    private val M_TAGS = setOf("male", "gender:male", "gender=male", "man")
+
+    /** [FEMALE], [MALE] or null (not known). [features] first: an engine that says it is right. */
+    fun of(engine: String?, name: String, features: Set<String> = emptySet()): Int? {
+        for (f in features) {
+            val t = f.trim().lowercase()
+            if (t in F_TAGS) return FEMALE
+            if (t in M_TAGS) return MALE
+        }
         val n = name.lowercase()
         if (engine == BOOKFUSION) {
             if (CODE_F.containsMatchIn(n)) return FEMALE

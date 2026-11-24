@@ -36,4 +36,11 @@ class VoiceGenderTest {
         assertEquals(false, VoiceGender.shows(1, null))
         assertEquals(true, VoiceGender.shows(2, MALE))
     }
+
+    @Test fun features() {
+        // 89: an engine (OG TTS Bridge) can say it in the voice's features
+        assertEquals(FEMALE, VoiceGender.of("io.sample.readerttsbridge", "rd-03", setOf("female")))
+        assertEquals(MALE, VoiceGender.of("x", "wl-1", setOf("networkTimeoutMs", "Male")))
+        assertEquals(MALE, VoiceGender.of(bf, "Sarah", setOf("male")))   // features win
+    }
 }

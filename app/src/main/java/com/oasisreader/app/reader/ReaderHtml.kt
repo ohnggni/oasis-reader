@@ -867,6 +867,7 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
      sentence ends with TTS_HEAD (not spoken, a longer pause after it) */
   var TTS_HEAD = '\u2063', TTS_H = 'h1, h2, h3, h4, h5, h6';
   var TTS_LABEL = /(?:제\s?[0-9]+\s?[장부편권화절]|[0-9]+\s?[장부편]|(?:part|chapter|book)\s*[0-9IVXivx]+|[\u2460-\u2473]|[\u2160-\u216B]|[0-9]+\.?|prologue|epilogue|프롤로그|에필로그)/i;
+  var TTS_LEAD = /(?:제\s?[0-9]+\s?[장부편권화절]|[0-9]+\s?[장부편]|(?:part|chapter|book)\s*[0-9IVXivx]+|[\u2460-\u2473]|[\u2160-\u216B]|[0-9]+\.|prologue|epilogue|프롤로그|에필로그)(?=\s+\S)/i;
   function ttsLabel(t) {
     t = t.replace(/\s+/g, ' ').trim();
     var m = t.match(TTS_LABEL);
@@ -945,7 +946,19 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
         }
         push(x, y);
       }
-      for (var i = 0; i < s.length; i++) {
+      /* 89: "4장 목표에 미칠 때" — the number apart, with a heading's pause */
+      if (seg.head) {
+        var x0 = 0;
+        while (x0 < s.length && ttsSpace(s.charAt(x0))) x0++;
+        var lm = s.slice(x0).match(TTS_LEAD);
+        if (lm && lm.index === 0) {
+          var n0 = out.length;
+          push(x0, x0 + lm[0].length);
+          if (out.length > n0) out[out.length - 1].text += TTS_HEAD;
+          a = x0 + lm[0].length;
+        }
+      }
+      for (var i = a; i < s.length; i++) {
         if (TTS_END.indexOf(s.charAt(i)) < 0) continue;
         var j = i + 1;
         while (j < s.length && TTS_CLOSE.indexOf(s.charAt(j)) >= 0) j++;

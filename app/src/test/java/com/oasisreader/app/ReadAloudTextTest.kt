@@ -75,4 +75,15 @@ class ReadAloudTextTest {
         }
         listOf("3장의 끝", "⑥ 감정의 자각과 행동", "자기 신뢰의").forEach { assertEquals(it, false, ReadAloudText.isLabel(it)) }
     }
+
+    @Test fun oneLineHeadingNumberApart() {
+        // 89: "4장 목표에 미칠 때" on one line: the number apart; bare digits need a dot
+        val h = ReadAloudText.HEAD
+        assertEquals(listOf("4장$h", "목표에 미칠 때$h", "본문."), ReadAloudText.sentences("<h2>4장 목표에 미칠 때</h2><p>본문.</p>"))
+        assertEquals(listOf("제3장$h", "멘토와의 만남$h"), ReadAloudText.sentences("<h1>제3장<br>멘토와의 만남</h1>"))
+        assertEquals(listOf("3 가지 이유$h"), ReadAloudText.sentences("<h3>3 가지 이유</h3>"))
+        assertEquals(listOf("4장", "목표에 미칠 때"), ReadAloudText.splitLead("4장 목표에 미칠 때"))
+        assertEquals(listOf("Chapter 2", "The Road"), ReadAloudText.splitLead("Chapter 2 The Road"))
+        assertEquals(listOf("제3장"), ReadAloudText.splitLead("제3장"))
+    }
 }
