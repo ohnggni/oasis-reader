@@ -54,7 +54,7 @@ class AzureSpeaker(
         player.playbackParameters = PlaybackParameters(rate, pitch)
         val voice = AzureVoice.voice(app)
         val ahead = HashMap<Int, Deferred<File>>()
-        fun fetch(k: Int): Deferred<File> = ahead.getOrPut(k) { scope.async(Dispatchers.IO) { AzureVoice.sentence(app, items[k], voice) } }
+        fun fetch(k: Int): Deferred<File> = ahead.getOrPut(k) { scope.async(Dispatchers.IO) { AzureVoice.sentence(app, ReadAloud.engineText(items[k]), voice) } }
         job = scope.launch {
             var fails = 0
             for (k in from until items.size) {

@@ -9,7 +9,7 @@ class ReadAloudTextTest {
         val html = """<html><body><h1>제목</h1><p>첫 문장입니다. 3.5배 숫자도 있어요!<sup><a href="n.html#n2">2</a></sup> 끝?</p>
             <p>다음 문단은 "따옴표"로 끝납니다." 그리고<a epub:type="noteref" href="#n3">3</a> 이어집니다</p></body></html>"""
         assertEquals(
-            listOf("제목", "첫 문장입니다.", "3.5배 숫자도 있어요!", "끝?", "다음 문단은 \"따옴표\"로 끝납니다.\"", "그리고 이어집니다"),
+            listOf("제목\u2063", "첫 문장입니다.", "3.5배 숫자도 있어요!", "끝?", "다음 문단은 \"따옴표\"로 끝납니다.\"", "그리고 이어집니다"),
             ReadAloudText.sentences(html),
         )
     }
@@ -51,5 +51,28 @@ class ReadAloudTextTest {
         val got = ReadAloudText.sentences("<p>$t</p>")
         assertEquals(true, got.size >= 2)
         assertEquals(t, got.joinToString(" "))
+    }
+
+    @Test fun headingLinesJoinAndNumberLineStaysApart() {
+        // 85: <br> inside a heading is one sentence; a number line alone stays apart; both end with HEAD
+        val h = ReadAloudText.HEAD
+        assertEquals(
+            listOf("자기 신뢰의 행동을 쌓아간다$h", "본문입니다."),
+            ReadAloudText.sentences("<h2>자기 신뢰의<br/>행동을 쌓아간다</h2><p>본문입니다.</p>"),
+        )
+        assertEquals(
+            listOf("제3장$h", "멘토와의 만남$h", "본문."),
+            ReadAloudText.sentences("<h1><span>제3장</span><br>멘토와의<br/>만남</h1><p>본문.</p>"),
+        )
+        assertEquals(listOf("PART 1$h", "시작$h"), ReadAloudText.sentences("<h1>PART 1<br>시작</h1>"))
+        // a <br> outside a heading still ends the line (텍본)
+        assertEquals(listOf("첫 줄", "둘째 줄"), ReadAloudText.sentences("<p>첫 줄<br>둘째 줄</p>"))
+    }
+
+    @Test fun labels() {
+        listOf("제3장", "제 12 장", "3장", "2부", "Chapter 4", "PART IV", "⑥", "Ⅲ", "1.", "프롤로그").forEach {
+            assertEquals(it, true, ReadAloudText.isLabel(it))
+        }
+        listOf("3장의 끝", "⑥ 감정의 자각과 행동", "자기 신뢰의").forEach { assertEquals(it, false, ReadAloudText.isLabel(it)) }
     }
 }

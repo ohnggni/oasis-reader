@@ -860,6 +860,16 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
   /* a sentence also ends with no space before a Korean letter or an opening quote (텍본 EPUBs);
      invisible spaces count as spaces; a long sentence is cut again at a comma or a space */
   var TTS_OPEN = '“‘「『（〈《([', TTS_LONG = 250, TTS_HARD = 400, TTS_MIN = 30;
+  /* headings (85): <br> inside joins the lines; a first line that is only the chapter's number
+     (제3장 · 3장 · PART 1 · ⑥ …, same as ReadAloudText.LABEL) stays apart; the heading's last
+     sentence ends with TTS_HEAD (not spoken, a longer pause after it) */
+  var TTS_HEAD = '\u2063', TTS_H = 'h1, h2, h3, h4, h5, h6';
+  var TTS_LABEL = /(?:제\s?[0-9]+\s?[장부편권화절]|[0-9]+\s?[장부편]|(?:part|chapter|book)\s*[0-9IVXivx]+|[\u2460-\u2473]|[\u2160-\u216B]|[0-9]+\.?|prologue|epilogue|프롤로그|에필로그)/i;
+  function ttsLabel(t) {
+    t = t.replace(/\s+/g, ' ').trim();
+    var m = t.match(TTS_LABEL);
+    return !!m && m.index === 0 && m[0].length === t.length;
+  }
   function ttsSpace(c) { return /\s/.test(c) || /[\u200B-\u200D\u2060\uFEFF]/.test(c); }
   function ttsAfter(c) { return ttsSpace(c) || TTS_OPEN.indexOf(c) >= 0 || /[\uAC00-\uD7A3\u3131-\u318E]/.test(c); }
   /* note references are not read: a note link (any form), or a small raised number / mark */
@@ -888,7 +898,7 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
   }
   function ttsBuild() {
     skipCache = new Map();
-    var out = [], seg = null, shown = new Map();
+    var out = [], seg = null, shown = new Map(), labelBlk = null;
     function visible(el) {
       if (shown.has(el)) return shown.get(el);
       var v = el.getClientRects().length > 0;
@@ -896,7 +906,7 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
     }
     function flush() {
       if (!seg) return;
-      var s = seg.text, a = 0;
+      var s = seg.text, a = 0, before = out.length;
       function push(x, y) {
         while (x < y && ttsSpace(s.charAt(x))) x++;
         while (y > x && ttsSpace(s.charAt(y - 1))) y--;
@@ -912,7 +922,7 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
         var ns = seg.nodes;
         for (var k = 0; k < ns.length; k++) {
           var n = ns[k], len = n.node.nodeValue.length;
-          if (o < n.start + len || (end && o === n.start + len)) return { node: n.node, off: o - n.start };
+          if (o < n.start + len || (end && o === n.start + len)) return { node: n.node, off: Math.max(0, o - n.start) };
         }
         var last = ns[ns.length - 1];
         return { node: last.node, off: last.node.nodeValue.length };
@@ -940,19 +950,26 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
         if (j >= s.length || ttsAfter(s.charAt(j))) { piece(a, j); a = j; i = j - 1; }
       }
       piece(a, s.length);
+      if (seg.head && out.length > before) out[out.length - 1].text += TTS_HEAD;
       seg = null;
     }
     var w = document.createTreeWalker(content, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null), n;
     while ((n = w.nextNode())) {
       /* <br> ends a sentence (텍본 EPUBs put whole chapters in one <p> split by <br>) */
-      if (n.nodeType === 1) { if (n.tagName === 'BR') flush(); continue; }
+      if (n.nodeType === 1) {
+        if (n.tagName !== 'BR') continue;
+        /* in a heading: join, unless what came before is only a chapter number (85) */
+        if (seg && seg.head && n.closest(TTS_H) && !(seg.lines === 0 && ttsLabel(seg.text))) { seg.text += ' '; seg.lines++; }
+        else { if (seg && seg.head && n.closest(TTS_H)) labelBlk = seg.block; flush(); }
+        continue;
+      }
       var par = n.parentNode;
       if (!par || !par.closest) continue;
       if (par.closest('rt, rp, script, style, noscript')) continue;
       if (ttsSkip(par)) continue;      /* note numbers */
       if (!visible(par)) continue;
       var blk = par.closest(TTS_BLOCK) || content;
-      if (!seg || seg.block !== blk) { flush(); seg = { block: blk, text: '', nodes: [] }; }
+      if (!seg || seg.block !== blk) { flush(); seg = { block: blk, text: '', nodes: [], head: !!par.closest(TTS_H), lines: labelBlk === blk ? 1 : 0 }; }
       seg.nodes.push({ node: n, start: seg.text.length });
       seg.text += n.nodeValue;
     }

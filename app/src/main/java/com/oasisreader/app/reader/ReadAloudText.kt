@@ -34,6 +34,8 @@ object ReadAloudText {
             .replace(Regex("(?is)<sup\\b[^>]*>\\s*(?:<a\\b[^>]*>)?\\s*[\\[(]?[0-9*†‡§¶a-z]{1,3}[\\])]?\\s*(?:</a>)?\\s*</sup>"), "")
             .replace(Regex("(?is)<a\\b[^>]*(?:noteref|footnote)[^>]*>.*?</a>"), "")
             .replace(Regex("(?is)<a\\b[^>]*href=\"[^\"]*#[^\"]*\"[^>]*>\\s*[\\[(]?[0-9*†‡§¶]{1,3}[\\])]?\\s*</a>"), "")
+            // headings (85): lines broken by <br> are one sentence; a chapter number line stays apart
+            .replace(HEADING) { m -> "\n" + heading(m.groupValues[2]) + "\n" }
             // blocks: a line each
             .replace(Regex("(?i)<br\\s*/?>|</?(?:p|div|li|h[1-6]|blockquote|dd|dt|td|th|tr|figcaption|caption|pre|section|article|aside|header|footer|table)\\b[^>]*>"), "\n")
             .replace(Regex("<[^>]+>"), "")
@@ -41,6 +43,32 @@ object ReadAloudText {
         val out = ArrayList<String>()
         for (block in text.split('\n')) split(block, out)
         return out
+    }
+
+    /**
+     * Ends a heading's sentence (85): not spoken (ReadAloud.voice takes it off), only tells
+     * ReadAloud.gapAfter to pause a little longer than after a sentence. The page script adds the same.
+     */
+    const val HEAD = '⁣'
+
+    private val HEADING = Regex("(?is)<(h[1-6])\\b[^>]*>(.*?)</\\1\\s*>")
+    private val BR = Regex("(?i)<br\\s*/?>")
+
+    /** A line that is only a chapter's number: 제3장, 3장, 2부, PART 1, Chapter IV, ⑥, Ⅲ, 1., 프롤로그. Same as the page script's TTS_LABEL. */
+    private val LABEL = Regex(
+        "(?:제\\s?[0-9]+\\s?[장부편권화절]|[0-9]+\\s?[장부편]|(?:part|chapter|book)\\s*[0-9IVXivx]+|[\\u2460-\\u2473]|[\\u2160-\\u216B]|[0-9]+\\.?|prologue|epilogue|프롤로그|에필로그)",
+        RegexOption.IGNORE_CASE,
+    )
+
+    fun isLabel(line: String): Boolean = LABEL.matches(line.replace(Regex("\\s+"), " ").trim())
+
+    /** A heading's inside as one line ending with [HEAD], or two (number line, title) when it starts with a number line. */
+    private fun heading(inner: String): String {
+        val lines = inner.split(BR).filter { BookSearch.decode(it.replace(Regex("<[^>]+>"), "")).isNotBlank() }
+        if (lines.isEmpty()) return inner
+        val first = BookSearch.decode(lines[0].replace(Regex("<[^>]+>"), ""))
+        return if (lines.size > 1 && isLabel(first)) lines[0] + HEAD + "\n" + lines.drop(1).joinToString(" ") + HEAD
+        else lines.joinToString(" ") + HEAD
     }
 
     private fun split(s: String, out: MutableList<String>) {

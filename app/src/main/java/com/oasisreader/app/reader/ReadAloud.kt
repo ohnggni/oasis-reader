@@ -184,7 +184,7 @@ class ReadAloud(context: Context) {
             tts.setSpeechRate(rate)
             tts.setPitch(pitch)
             for (k in from until items.size) {
-                tts.speak(items[k], if (k == from) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "$session:$k")
+                tts.speak(engineText(items[k]), if (k == from) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "$session:$k")
                 // the pause between sentences (its id is not "session:index", so the callbacks skip it)
                 if (k < items.lastIndex) gapFor(items[k], rate).takeIf { it > 0 }?.let {
                     tts.playSilentUtterance(it, TextToSpeech.QUEUE_ADD, "gap-$session-$k")
@@ -470,18 +470,25 @@ class ReadAloud(context: Context) {
          * ends at a comma or a space (a long sentence cut in two, ReadAloudText) gets a short one.
          */
         fun gapAfter(s: String, rate: Float, level: Int = GAP_NORMAL): Long {
-            val end = s.trimEnd().lastOrNull() ?: return 0
+            val t = s.trimEnd()
+            val end = t.lastOrNull() ?: return 0
             val full = GAP_MS[level.coerceIn(0, GAP_MS.lastIndex)]
             val ms = when {
+                end == ReadAloudText.HEAD -> HEAD_MS[level.coerceIn(0, HEAD_MS.lastIndex)]   // after a heading (85)
                 end in ".?!…。？！\"'”’」』)]" -> full
                 end in ",，、" -> 0          // a long sentence cut at its comma: go straight on (2.9)
-                else -> minOf(150, full)     // a line with no end mark (a heading, a 텍본 line)
+                else -> minOf(150, full)     // a line with no end mark (a 텍본 line)
             }
             return (ms / rate.coerceIn(0.5f, 3f)).toLong()
         }
 
         /** 문장 사이: 없음 · 짧게 · 보통(2.4의 350ms) · 길게. */
         val GAP_MS = intArrayOf(0, 150, 350, 600)
+        /** After a heading or a chapter number line (85): a step longer than after a sentence. */
+        val HEAD_MS = intArrayOf(150, 350, 600, 900)
+
+        /** What the engine gets: the heading mark off (85). */
+        fun engineText(s: String): String = s.replace(ReadAloudText.HEAD.toString(), "")
         const val GAP_NORMAL = 2
 
         const val PREFS = "read_aloud"
