@@ -1389,9 +1389,10 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
       if (paged) layout(f);
     }, 8000);
   })();
-  /* 94: a book that sets its sub-headings smaller than the text (▶ 소제목, ⑥ …): short lines
-     (a block of at most 80 letters, no sentence of text around it) below 95% of the text's size
-     go up to it. Notes, tables, captions, small print and ruby are left as the book has them. */
+  /* 94: a book that sets its sub-headings or list items smaller than the text (▶ 소제목, ⑥ …):
+     blocks at 75~95% of the text's size go up to it, whatever their length (#2.10: an 80-letter
+     limit left the long ▶ items small). Smaller still is fine print (copyright, sources) and stays;
+     so do notes, tables, captions, small and ruby. */
   (function liftHeads() {
     if (!CFG.liftHeads) return;
     var base = parseFloat(getComputedStyle(content).fontSize) || 16;
@@ -1400,16 +1401,15 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
       var b = bs[i];
       if (b.closest('aside, table, figure, figcaption, small, sup, sub, rt, nav, [epub\\:type~="footnote"], [epub\\:type~="endnote"], .footnote, .note')) continue;
       if (b.querySelector('p, div, li, table, img, svg')) continue;
-      var t = (b.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!t || t.length > 80) continue;
+      if (!(b.textContent || '').trim()) continue;
       var fs = parseFloat(getComputedStyle(b).fontSize);
-      if (fs && fs < base * 0.95) b.style.setProperty('font-size', base + 'px', 'important');
+      if (fs && fs < base * 0.95 && fs >= base * 0.75) b.style.setProperty('font-size', base + 'px', 'important');
       /* or the small size sits on a span inside the line */
       var ins = b.querySelectorAll('span, b, strong, em, i, font');
       for (var k = 0; k < ins.length; k++) {
         if (ins[k].closest('sup, sub, rt, small')) continue;
         var f2 = parseFloat(getComputedStyle(ins[k]).fontSize);
-        if (f2 && f2 < base * 0.95) ins[k].style.setProperty('font-size', base + 'px', 'important');
+        if (f2 && f2 < base * 0.95 && f2 >= base * 0.75) ins[k].style.setProperty('font-size', base + 'px', 'important');
       }
     }
   })();

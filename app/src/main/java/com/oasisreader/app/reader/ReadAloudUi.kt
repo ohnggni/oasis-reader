@@ -254,16 +254,15 @@ private fun BarButton(glyph: String, label: String, onClick: () -> Unit) {
 }
 
 /**
- * 목소리 (88, like Readest): every engine's voices in one list — Azure, then the phone's engines —
- * a row each (▶ plays a sample, the row picks it), 전체 / 여성 / 남성 on top, engines left out at
- * the bottom; then 읽는 방법.
+ * 목소리 (88 → 2.10 정리): 전체 / 여성 / 남성, the engine in a dropdown (Azure too), that engine's
+ * voices as rows (▶ plays a sample, the row picks it — another engine is switched to only then),
+ * then 읽는 방법 as one-line rows whose values open small menus.
  */
 @Composable
 fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
     var rev by remember { mutableIntStateOf(0) }           // engine changed / voices loaded
     var all by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }            // 0 전체 · 1 여성 · 2 남성
-    var hidden by remember { mutableStateOf(ra.hiddenEngines()) }
     var catalogRev by remember { mutableIntStateOf(0) }
     // a new engine needs a moment to list its voices
     LaunchedEffect(ra.available, rev) { if (ra.available == null) { delay(400); rev++ } }
@@ -292,52 +291,61 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
 
     var azureMode by remember { mutableStateOf(AzureVoice.on(ctx)) }
     var setup by remember { mutableStateOf(false) }
-    var howOpen by remember { mutableStateOf(false) }
-    // the engine in use always shows; the others unless left out
-    val shown = engines.filter { (pkg, _) -> pkg !in hidden || (pkg == engine && !azureMode) }
-    LaunchedEffect(shown.map { it.first }, engine, catalogRev) {
-        shown.forEach { (pkg, _) -> if (pkg != engine) catalog.load(pkg) }
-    }
+    // the engine whose voices are listed: the one in use to begin with
+    var view by remember { mutableStateOf(if (AzureVoice.on(ctx)) AZURE else ra.engine().orEmpty()) }
+    LaunchedEffect(engine) { if (view.isEmpty() && engine != null) view = engine }
+    LaunchedEffect(view, engine, catalogRev) { if (view != AZURE && view.isNotEmpty() && view != engine) catalog.load(view) }
+    val sources = listOf(AZURE to "Azure 음성") + engines.map { (pkg, label) -> pkg to (if (pkg == AiVoice.PKG) "$label (AI)" else label) }
+    val viewLabel = sources.firstOrNull { it.first == view }?.second ?: "엔진"
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("목소리") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("전체", "여성", "남성").forEachIndexed { i, label ->
                         com.oasisreader.app.ui.OgChip(selected = tab == i, onClick = { tab = i }, label = { Text(label) })
                     }
                 }
 
-                // 82: this book keeps its own 빠르기 · 목소리 (only when opened from a book)
-                if (ra.bookId != null) Row(
-                    Modifier.fillMaxWidth().clickable { ra.changeOwn(!ra.own); picked = ra.voiceName() },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("이 책만 따로 (빠르기 · 목소리)", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    Switch(checked = ra.own, onCheckedChange = { ra.changeOwn(it); picked = ra.voiceName() })
+                // the engine: a dropdown; the one in use is marked
+                var engMenu by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("엔진", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(72.dp))
+                    Box(Modifier.weight(1f)) {
+                        TextButton(onClick = { engMenu = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
+                            Text("$viewLabel ▾", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        OgMenu(expanded = engMenu, onDismissRequest = { engMenu = false }) {
+                            sources.forEach { (pkg, label) ->
+                                val inUse = if (pkg == AZURE) azureMode else !azureMode && pkg == engine
+                                DropdownMenuItem(
+                                    text = { Text(if (inUse) "$label · 사용 중" else label) },
+                                    leadingIcon = { com.oasisreader.app.ui.CheckMark(pkg == view) },
+                                    onClick = { engMenu = false; catalog.stop(); view = pkg },
+                                )
+                            }
+                        }
+                    }
                 }
 
                 // the AI voice card only when there is something to do: not installed yet, or
-                // in use but not ready (no voices / did not open). Installed = just a section.
+                // in use but not ready (no voices / did not open)
                 val aiInstalled = engines.any { it.first == AiVoice.PKG }
                 val aiStuck = !azureMode && engine == AiVoice.PKG && (ra.available == false || (ra.available == true && voices.isEmpty()))
-                if (!aiInstalled || aiStuck) AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
+                if ((view == AiVoice.PKG || !aiInstalled) && (!aiInstalled || aiStuck)) AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
 
-                if ("azure" !in hidden || azureMode) {
-                    VoiceSection("Azure 음성", azureMode)
+                if (view == AZURE) {
                     AzureVoiceRows(
                         ra, tab, azureMode,
                         onSetup = { setup = true },
                         onPlay = { catalog.stop() },
                         onPick = { azureMode = true; catalog.stop(); rev++ },
                     )
-                }
-
-                shown.forEach { (pkg, label) ->
+                } else if (view.isNotEmpty()) {
+                    val pkg = view
                     val inUse = !azureMode && pkg == engine
-                    VoiceSection(if (pkg == AiVoice.PKG) "$label (AI)" else label, inUse)
                     val list: List<Voice>? = if (pkg == engine) voices.takeIf { ra.available == true }
                         else catalog.voices[pkg]?.let { ra.filterVoices(it, all) }
                     val rows = list?.filter { VoiceGender.shows(tab, VoiceGender.of(pkg, it.name, it.features.orEmpty())) }
@@ -368,81 +376,69 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                             )
                         }
                     }
+                    TextButton(onClick = { all = !all }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
+                        Text(if (all) "한국어만 보기" else "다른 언어도 보기", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
 
-                TextButton(onClick = { all = !all }) { Text(if (all) "한국어만 보기" else "다른 언어도 보기") }
-
-                // engines to list (the one in use always shows)
-                Text("보이는 엔진", style = MaterialTheme.typography.labelLarge)
-                ChipFlow {
-                    (listOf("azure" to "Azure") + engines).forEach { (pkg, label) ->
-                        com.oasisreader.app.ui.OgChip(
-                            selected = pkg !in hidden,
-                            onClick = {
-                                val hide = pkg !in hidden
-                                ra.setHidden(pkg, hide); hidden = ra.hiddenEngines()
-                            },
-                            label = { Text(label, maxLines = 1) },
-                        )
-                    }
+                // 82: this book keeps its own 빠르기 · 목소리 (only when opened from a book)
+                if (ra.bookId != null) Row(
+                    Modifier.fillMaxWidth().clickable { ra.changeOwn(!ra.own); picked = ra.voiceName() },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("이 책만 따로 (빠르기 · 목소리)", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Switch(checked = ra.own, onCheckedChange = { ra.changeOwn(it); picked = ra.voiceName() })
                 }
 
                 HorizontalDivider(thickness = 0.5.dp)
-                // 읽는 방법: one line until opened
-                val pitchLabel = ReadAloud.PITCHES.firstOrNull { it.first == ra.pitch }?.second ?: "보통"
+                // 읽는 방법: one line each, the value opens a small menu (2.10)
+                PickRow("음높이", ReadAloud.PITCHES.map { it.second }, ReadAloud.PITCHES.indexOfFirst { it.first == ra.pitch }.coerceAtLeast(0)) { i ->
+                    ra.changePitch(ReadAloud.PITCHES[i].first)
+                }
+                // 84: the pause after a sentence, for this engine (engines add their own silence)
+                var gap by remember(rev, azureMode) { mutableIntStateOf(ra.gapLevel()) }
+                PickRow("문장 사이", listOf("없음", "짧게", "보통", "길게"), gap) { i -> gap = i; ra.changeGap(i) }
+                // 83: what tells a new chapter has begun
+                val cues = listOf(ReadAloud.CUE_BOTH to "소리 + 제목", ReadAloud.CUE_SOUND to "소리", ReadAloud.CUE_TITLE to "제목", 0 to "없음")
+                PickRow("장 넘김", cues.map { it.second }, cues.indexOfFirst { it.first == ra.chapterCue }.coerceAtLeast(0)) { i ->
+                    ra.changeChapterCue(cues[i].first)
+                }
                 Row(
-                    Modifier.fillMaxWidth().clickable { howOpen = !howOpen }.padding(vertical = 4.dp),
+                    Modifier.fillMaxWidth().clickable { ra.changeNormalize(!ra.normalize) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("읽는 방법", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            "음높이 $pitchLabel · 숫자 읽기 ${if (ra.normalize) "켬" else "끔"} · 발음 사전 ${PronDict.entries.size}개",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    Text(if (howOpen) "⌃" else "⌄", style = MaterialTheme.typography.titleMedium)
+                    Text("숫자 · 기호를 한글로", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
                 }
-                if (howOpen) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("음높이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
-                        ReadAloud.PITCHES.forEach { (p, label) ->
-                            com.oasisreader.app.ui.OgChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
-                        }
-                    }
-                    // 84: the pause after a sentence, for this engine (engines add their own silence)
-                    var gap by remember(rev, azureMode) { mutableIntStateOf(ra.gapLevel()) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("문장 사이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
-                        ChipFlow {
-                            listOf("없음", "짧게", "보통", "길게").forEachIndexed { v, label ->
-                                com.oasisreader.app.ui.OgChip(selected = gap == v, onClick = { gap = v; ra.changeGap(v) }, label = { Text(label) })
-                            }
-                        }
-                    }
-                    // 83: what tells a new chapter has begun
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("장 넘김", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
-                        ChipFlow {
-                            listOf(ReadAloud.CUE_BOTH to "소리 + 제목", ReadAloud.CUE_SOUND to "소리", ReadAloud.CUE_TITLE to "제목", 0 to "없음").forEach { (v, label) ->
-                                com.oasisreader.app.ui.OgChip(selected = ra.chapterCue == v, onClick = { ra.changeChapterCue(v) }, label = { Text(label) })
-                            }
-                        }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().clickable { ra.changeNormalize(!ra.normalize) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("숫자 · 기호를 한글로", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Switch(checked = ra.normalize, onCheckedChange = { ra.changeNormalize(it) })
-                    }
-                    PronDictRow(ra)
-                }
+                PronDictRow(ra)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
     )
     if (setup) AzureSetupDialog(ra, onDismiss = { setup = false; azureMode = AzureVoice.on(ctx) })
+}
+
+private const val AZURE = "azure"
+
+/** 제목 · 값 › on one line; the value opens a small menu (2.10, like the settings screen). */
+@Composable
+private fun PickRow(title: String, options: List<String>, selected: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Box {
+            Text(options.getOrElse(selected) { "" } + " ›", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OgMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEachIndexed { i, label ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        leadingIcon = { com.oasisreader.app.ui.CheckMark(i == selected) },
+                        onClick = { open = false; onPick(i) },
+                    )
+                }
+            }
+        }
+    }
 }
 
 /** A source's heading in the voice dialog; ✓ on the one in use. */
