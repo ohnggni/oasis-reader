@@ -20,6 +20,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
@@ -242,6 +245,8 @@ private fun ReaderBody(
     var fontProgress by remember { mutableFloatStateOf(0f) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var panel by remember { mutableStateOf(Panel.NONE) }
+    var aaMenu by remember { mutableStateOf(false) }          // 90: Aa's small menu
+    val lastAa = remember { arrayOf(Panel.TEXT) }             // the card keeps its panel while it slides away
     var brightness by remember { mutableFloatStateOf(prefs.brightness) }
     var weight by remember { mutableIntStateOf(prefs.weight) }
     var keepOn by remember { mutableStateOf(prefs.keepScreenOn) }
@@ -1102,6 +1107,116 @@ private fun ReaderBody(
             com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
             ImmersiveBars(readingChrome, appBarsUp = barsVisible)
 
+            // the panels' insides: ☰ under the top bar, Aa's three in the card at the bottom (90)
+            val panelBody: @Composable ColumnScope.(Panel) -> Unit = { which ->
+                    when (which) {
+                        Panel.SCREEN -> {
+                            BrightnessPanel(value = brightness, onChange = { brightness = it; prefs.brightness = it })
+                            ThemeRow(theme, onTheme)
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", null, keepOn, { keepOn = it; prefs.keepScreenOn = it }, Modifier.weight(1f))
+                                com.oasisreader.app.ui.PanelSwitch("바 자동 숨김", null, autoHide, {
+                                    autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
+                                }, Modifier.weight(1f))
+                            }
+                            // 🔊 볼륨 버튼으로 쪽 넘기기 (the same setting as in 설정, easier to find here)
+                            var volKeys by remember { mutableStateOf(com.oasisreader.app.ui.PageKeys.volumeKeys(context)) }
+                            com.oasisreader.app.ui.PanelSwitch("🔊 볼륨 버튼으로 쪽 넘기기", null, volKeys, { volKeys = it; com.oasisreader.app.ui.PageKeys.setVolumeKeys(context, it) })
+                        }
+                        Panel.TEXT -> {
+                            FontPanel(
+                                fonts = fonts,
+                                selectedId = fontId,
+                                busyId = fontBusy,
+                                progress = fontProgress,
+                                onPick = { f -> pickFont(f) },
+                                onAdd = {
+                                    fontFilePicker.launch(arrayOf("font/ttf", "font/otf", "font/woff", "font/woff2", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
+                                },
+                                onRemove = { f ->
+                                    fonts.removeCustom(f)
+                                    applyFont(FontManager.byId(null))
+                                    Toast.makeText(context, "「${f.label}」 글꼴을 삭제했습니다.", Toast.LENGTH_SHORT).show()
+                                },
+                            )
+                            SizePanel(
+                                weight = weight,
+                                onWeight = { w ->
+                                    weight = w; prefs.weight = w
+                                    webView?.evaluateJavascript("Reader.setWeight($w)", null)
+                                },
+                                value = fontPx,
+                                onChange = { v ->
+                                    if (v != fontPx) {
+                                        fontPx = v; prefs.fontPx = v
+                                        webView?.evaluateJavascript("Reader.setFont($v)", null)
+                                    }
+                                },
+                                lineHeight = lineHeight,
+                                onLineHeight = { lh ->
+                                    lineHeight = lh; prefs.lineHeight = lh
+                                    webView?.evaluateJavascript("Reader.setLineHeight(${lh / 10f})", null)
+                                },
+                            )
+                            com.oasisreader.app.ui.PanelSwitch("책 디자인 사용 (제목·문단 모양)", null, publisherStyle, {
+                                publisherStyle = it; prefs.publisherStyle = it; reloadHere()
+                            })
+                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
+                        }
+                        Panel.PAGE -> {
+                            com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) { i ->
+                                setMode(if (i == 0) ReaderMode.PAGE else ReaderMode.SCROLL)
+                            }
+                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.PanelChoice("두 쪽 보기", SPREAD_LABELS, spreadMode) { i ->
+                                spreadMode = i; prefs.spreadMode = i
+                            }
+                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
+                                current = turnStyle, speed = turnSpeed,
+                                onPick = { st ->
+                                    turnStyle = st; prefs.turnStyle = st
+                                    webView?.evaluateJavascript("Reader.setTurn('${st.id}')", null)
+                                },
+                                onSpeed = { sp -> turnSpeed = sp; prefs.turnSpeed = sp },
+                            )
+                            MarginPanel(
+                                top = mTop, bottom = mBottom, left = mLeft, right = mRight,
+                                onChange = { t, b, l, r ->
+                                    mTop = t; mBottom = b; mLeft = l; mRight = r
+                                    prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
+                                },
+                            )
+                            ChromeSwitches(readingChrome, onChange = ::setChrome)
+                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
+                        }
+                        Panel.NAV -> {
+                            val finished = book?.finishedAt != null
+                            fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
+                            com.oasisreader.app.ui.PanelGrid(buildList {
+                                if (p != null) add(T("📑", "목차") { panel = Panel.NONE; tocOpen = true })
+                                if (p != null) add(T("🔍", "검색") { findOpen = true })
+                                if (p != null) add(T("🔊", if (aloud) "읽기 끝" else "소리 읽기") { if (aloud) stopAloud() else requestAloud() })
+                                add(T("🔖", if (bookmarks.isEmpty()) "책갈피" else "책갈피 ${bookmarks.size}") { marksOpen = true })
+                                add(T("🖍️", "하이라이트") { panel = Panel.NONE; hlListOpen = true })
+                                add(T("📝", "내보내기") { panel = Panel.NONE; exportOpen = true })
+                                add(T(if (finished) "↩️" else "✅", if (finished) "읽음 취소" else "다 읽음") {
+                                    val at = if (finished) null else System.currentTimeMillis()
+                                    book = book?.copy(finishedAt = at)
+                                    scope.launch { db.books().setFinished(bookId, at) }
+                                })
+                                add(T("⏭️", "다음 권") {
+                                    panel = Panel.NONE
+                                    scope.launch { findAndOpenNext(context, book, nextVol, onOpenBook) }
+                                })
+                                if (canOpenOrigin(book)) add(T("📂", "있던 폴더") {
+                                    panel = Panel.NONE
+                                    book?.let(onOpenFolder)
+                                })
+                            })
+                        }
+                        else -> {}
+                    }
+            }
+
             // compact overlay bar: it only ever covers the top margin, never text
             AnimatedVisibility(visible = showBars, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut())) {
                 Surface(
@@ -1122,31 +1237,32 @@ private fun ReaderBody(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f).padding(end = 8.dp),
                             )
-                            IconButton(onClick = { toggleBookmark() }, modifier = Modifier.size(40.dp)) {
-                                BookmarkGlyph(filled = hereMark != null, color = if (hereMark != null) MaterialTheme.colorScheme.primary else chrome, width = 13.dp)
+                            // 90: 🎧 소리 내 읽기 · Aa 보기 (부메뉴 → 아래 카드) · ☰ 이동 — three roomy buttons
+                            val on = MaterialTheme.colorScheme.primary
+                            if (p != null) IconButton(onClick = { if (aloud) stopAloud() else requestAloud() }) {
+                                EmojiText("🎧", fontSize = 20.sp, color = if (aloud) on else chrome)
                             }
-                            // [ ☀️ 화면 | 가 글자 | ▤ 쪽 | ☰ 이동 ]: each opens its panel under the bar
-                            PillGroup(paper) {
-                                PillSegment(selected = panel == Panel.SCREEN, onClick = { panel = panel.toggle(Panel.SCREEN) }) {
-                                    EmojiText("☀️", fontSize = 14.sp)
+                            Box {
+                                IconButton(onClick = { aaMenu = true }) {
+                                    Text("Aa", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = if (panel in AA_PANELS) on else chrome)
                                 }
-                                PillDivider()
-                                PillSegment(selected = panel == Panel.TEXT, onClick = { panel = panel.toggle(Panel.TEXT) }) {
-                                    Text("가", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                com.oasisreader.app.ui.OgMenu(expanded = aaMenu, onDismissRequest = { aaMenu = false }) {
+                                    listOf(Triple(Panel.SCREEN, "☀️", "화면"), Triple(Panel.TEXT, "가", "글자"), Triple(Panel.PAGE, "▤", "쪽")).forEach { (pp, e, l) ->
+                                        DropdownMenuItem(
+                                            text = { Text(l) },
+                                            leadingIcon = { EmojiText(e, fontSize = 16.sp) },
+                                            onClick = { aaMenu = false; panel = pp },
+                                        )
+                                    }
                                 }
-                                PillDivider()
-                                PillSegment(selected = panel == Panel.PAGE, onClick = { panel = panel.toggle(Panel.PAGE) }) {
-                                    Text("▤", fontSize = 16.sp)
-                                }
-                                PillDivider()
-                                PillSegment(selected = panel == Panel.NAV, onClick = { panel = panel.toggle(Panel.NAV) }) {
-                                    EmojiText("☰", fontSize = 15.sp)
-                                }
+                            }
+                            IconButton(onClick = { panel = panel.toggle(Panel.NAV) }) {
+                                EmojiText("☰", fontSize = 20.sp, color = if (panel == Panel.NAV) on else chrome)
                             }
                         }
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                         AnimatedVisibility(
-                            visible = panel != Panel.NONE,
+                            visible = panel == Panel.NAV,
                             enter = com.oasisreader.app.ui.theme.calm(expandVertically() + fadeIn()),
                             exit = com.oasisreader.app.ui.theme.calm(shrinkVertically() + fadeOut()),
                         ) {
@@ -1158,112 +1274,7 @@ private fun ReaderBody(
                                         .padding(horizontal = 16.dp, vertical = 6.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
-                                    when (panel) {
-                                        Panel.SCREEN -> {
-                                            BrightnessPanel(value = brightness, onChange = { brightness = it; prefs.brightness = it })
-                                            ThemeRow(theme, onTheme)
-                                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                                com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", null, keepOn, { keepOn = it; prefs.keepScreenOn = it }, Modifier.weight(1f))
-                                                com.oasisreader.app.ui.PanelSwitch("바 자동 숨김", null, autoHide, {
-                                                    autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
-                                                }, Modifier.weight(1f))
-                                            }
-                                            // 🔊 볼륨 버튼으로 쪽 넘기기 (the same setting as in 설정, easier to find here)
-                                            var volKeys by remember { mutableStateOf(com.oasisreader.app.ui.PageKeys.volumeKeys(context)) }
-                                            com.oasisreader.app.ui.PanelSwitch("🔊 볼륨 버튼으로 쪽 넘기기", null, volKeys, { volKeys = it; com.oasisreader.app.ui.PageKeys.setVolumeKeys(context, it) })
-                                        }
-                                        Panel.TEXT -> {
-                                            FontPanel(
-                                                fonts = fonts,
-                                                selectedId = fontId,
-                                                busyId = fontBusy,
-                                                progress = fontProgress,
-                                                onPick = { f -> pickFont(f) },
-                                                onAdd = {
-                                                    fontFilePicker.launch(arrayOf("font/ttf", "font/otf", "font/woff", "font/woff2", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
-                                                },
-                                                onRemove = { f ->
-                                                    fonts.removeCustom(f)
-                                                    applyFont(FontManager.byId(null))
-                                                    Toast.makeText(context, "「${f.label}」 글꼴을 삭제했습니다.", Toast.LENGTH_SHORT).show()
-                                                },
-                                            )
-                                            SizePanel(
-                                                weight = weight,
-                                                onWeight = { w ->
-                                                    weight = w; prefs.weight = w
-                                                    webView?.evaluateJavascript("Reader.setWeight($w)", null)
-                                                },
-                                                value = fontPx,
-                                                onChange = { v ->
-                                                    if (v != fontPx) {
-                                                        fontPx = v; prefs.fontPx = v
-                                                        webView?.evaluateJavascript("Reader.setFont($v)", null)
-                                                    }
-                                                },
-                                                lineHeight = lineHeight,
-                                                onLineHeight = { lh ->
-                                                    lineHeight = lh; prefs.lineHeight = lh
-                                                    webView?.evaluateJavascript("Reader.setLineHeight(${lh / 10f})", null)
-                                                },
-                                            )
-                                            com.oasisreader.app.ui.PanelSwitch("책 디자인 사용 (제목·문단 모양)", null, publisherStyle, {
-                                                publisherStyle = it; prefs.publisherStyle = it; reloadHere()
-                                            })
-                                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
-                                        }
-                                        Panel.PAGE -> {
-                                            com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) { i ->
-                                                setMode(if (i == 0) ReaderMode.PAGE else ReaderMode.SCROLL)
-                                            }
-                                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.PanelChoice("두 쪽 보기", SPREAD_LABELS, spreadMode) { i ->
-                                                spreadMode = i; prefs.spreadMode = i
-                                            }
-                                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
-                                                current = turnStyle, speed = turnSpeed,
-                                                onPick = { st ->
-                                                    turnStyle = st; prefs.turnStyle = st
-                                                    webView?.evaluateJavascript("Reader.setTurn('${st.id}')", null)
-                                                },
-                                                onSpeed = { sp -> turnSpeed = sp; prefs.turnSpeed = sp },
-                                            )
-                                            MarginPanel(
-                                                top = mTop, bottom = mBottom, left = mLeft, right = mRight,
-                                                onChange = { t, b, l, r ->
-                                                    mTop = t; mBottom = b; mLeft = l; mRight = r
-                                                    prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
-                                                },
-                                            )
-                                            ChromeSwitches(readingChrome, onChange = ::setChrome)
-                                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
-                                        }
-                                        Panel.NAV -> {
-                                            val finished = book?.finishedAt != null
-                                            fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
-                                            com.oasisreader.app.ui.PanelGrid(buildList {
-                                                if (p != null) add(T("📑", "목차") { panel = Panel.NONE; tocOpen = true })
-                                                if (p != null) add(T("🔍", "검색") { findOpen = true })
-                                                if (p != null) add(T("🔊", if (aloud) "읽기 끝" else "소리 읽기") { if (aloud) stopAloud() else requestAloud() })
-                                                add(T("🔖", if (bookmarks.isEmpty()) "책갈피" else "책갈피 ${bookmarks.size}") { marksOpen = true })
-                                                add(T("🖍️", "하이라이트") { panel = Panel.NONE; hlListOpen = true })
-                                                add(T("📝", "내보내기") { panel = Panel.NONE; exportOpen = true })
-                                                add(T(if (finished) "↩️" else "✅", if (finished) "읽음 취소" else "다 읽음") {
-                                                    val at = if (finished) null else System.currentTimeMillis()
-                                                    book = book?.copy(finishedAt = at)
-                                                    scope.launch { db.books().setFinished(bookId, at) }
-                                                })
-                                                add(T("⏭️", "다음 권") {
-                                                    panel = Panel.NONE
-                                                    scope.launch { findAndOpenNext(context, book, nextVol, onOpenBook) }
-                                                })
-                                                if (canOpenOrigin(book)) add(T("📂", "있던 폴더") {
-                                                    panel = Panel.NONE
-                                                    book?.let(onOpenFolder)
-                                                })
-                                            })
-                                        }
-                                        else -> {}
-                                    }
+                                    panelBody(panel)
                                 }
                                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                             }
@@ -1307,6 +1318,14 @@ private fun ReaderBody(
                 )
             }
 
+            // 91: the top-right corner puts a bookmark in / takes it out (where the ribbon shows)
+            if (state is LoadState.Ready && !showBars && panel == Panel.NONE) Box(
+                Modifier.align(Alignment.TopEnd).let { if (readingChrome.hideStatus) it else it.statusBarsPadding() }
+                    .size(56.dp)
+                    .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { toggleBookmark() }
+                    .semantics { contentDescription = if (hereMark != null) "책갈피 빼기" else "책갈피 꽂기" },
+            )
+
             // this page is bookmarked: a small ribbon in the top corner
             if (hereMark != null && state is LoadState.Ready && !showBars) BookmarkGlyph(
                 filled = true, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), width = 11.dp,
@@ -1335,6 +1354,8 @@ private fun ReaderBody(
                 fill = barColor,
                 onVoice = { voiceOpen = true },
                 onClose = { stopAloud() },
+                title = title, chapter = chapterTitle,
+                cover = remember(bookId) { store.coverFile(bookId) },
                 // 82: the bottom-left edge, clear of the page number in the middle
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = if (showBars) 70.dp else 10.dp),
             )
@@ -1353,6 +1374,44 @@ private fun ReaderBody(
                         goChapter(i, f)
                     },
                 )
+            }
+
+            // 90: Aa's panels (화면 · 글자 · 쪽) in a card at the bottom, the page above left as it is
+            // (no dimming) so a change shows while it is made; tabs move between the three
+            if (panel in AA_PANELS) lastAa[0] = panel
+            AnimatedVisibility(
+                visible = showBars && panel in AA_PANELS,
+                enter = com.oasisreader.app.ui.theme.calm(slideInVertically { it / 2 } + fadeIn()),
+                exit = com.oasisreader.app.ui.theme.calm(slideOutVertically { it / 2 } + fadeOut()),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                val which = lastAa[0]
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = barColor.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.94f), contentColor = chrome,
+                    border = com.oasisreader.app.ui.theme.einkBorder(), shadowElevation = 6.dp,
+                    modifier = Modifier.navigationBarsPadding().padding(10.dp).fillMaxWidth(),
+                ) {
+                    Column(
+                        Modifier.heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            listOf(Triple(Panel.SCREEN, "☀️", "화면"), Triple(Panel.TEXT, "가", "글자"), Triple(Panel.PAGE, "▤", "쪽")).forEach { (pp, e, l) ->
+                                FilterChip(
+                                    selected = which == pp, onClick = { panel = pp },
+                                    label = { EmojiText("$e $l", fontSize = 14.sp) },
+                                    modifier = Modifier.padding(end = 6.dp),
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { panel = Panel.NONE }) { Text("✕", color = chrome) }
+                        }
+                        Column(Modifier.padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { panelBody(which) }
+                    }
+                }
             }
         }
     }
@@ -1853,6 +1912,9 @@ private fun rememberSpread(spreadMode: Int = 0): Boolean {
 
 /** 두 쪽 보기 choices, in [ReaderPrefs.spreadMode] order. */
 internal val SPREAD_LABELS = listOf("자동", "한 쪽만", "가로일 때만")
+
+/** The panels under Aa (90), shown in the bottom card. */
+private val AA_PANELS = setOf(Panel.SCREEN, Panel.TEXT, Panel.PAGE)
 
 private enum class Panel {
     NONE, SCREEN, TEXT, PAGE, NAV;

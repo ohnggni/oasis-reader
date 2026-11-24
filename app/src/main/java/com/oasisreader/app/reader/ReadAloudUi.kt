@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.layout.onSizeChanged
@@ -66,7 +67,10 @@ import kotlinx.coroutines.delay
  * or its background and the place is kept for next time.
  */
 @Composable
-fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun ReadAloudBar(
+    ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier,
+    title: String = "", chapter: String = "", cover: java.io.File? = null,
+) {
     val ctx = LocalContext.current
     val prefs = remember { ctx.getSharedPreferences(ReadAloud.PREFS, android.content.Context.MODE_PRIVATE) }
     var off by remember { mutableStateOf(androidx.compose.ui.geometry.Offset(prefs.getFloat("bar_x", 0f), prefs.getFloat("bar_y", 0f))) }
@@ -86,53 +90,100 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
     )
     val eink = com.oasisreader.app.ui.theme.ThemeMode.eink
     fun tap(f: () -> Unit): () -> Unit = { touch++; f() }
+    val drag = Modifier.pointerInput(Unit) {
+        detectDragGestures(
+            onDragEnd = { off = clamp(off); prefs.edit().putFloat("bar_x", off.x).putFloat("bar_y", off.y).apply() },
+        ) { change, d ->
+            change.consume()
+            off = clamp(off + d); touch++
+        }
+    }
+    val border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (eink) 1f else 0.4f))
+    if (!open) {
+        // the simple bar (82): ⠿ ⏯, more see-through (92)
+        Surface(
+            modifier = modifier
+                .onSizeChanged { size = it }
+                .offset { val c = clamp(off); androidx.compose.ui.unit.IntOffset(c.x.toInt(), c.y.toInt()) }
+                .then(drag),
+            shape = RoundedCornerShape(24.dp),
+            color = fill.copy(alpha = if (eink) 1f else 0.42f),
+            border = border,
+            shadowElevation = if (eink) 0.dp else 1.dp,
+        ) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalMinimumInteractiveComponentSize provides androidx.compose.ui.unit.Dp.Unspecified,
+            ) {
+                Row(
+                    Modifier.height(34.dp).padding(horizontal = 4.dp).clickable { open = true; touch++ },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) { open = true; touch++ }
+                    BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기", tap { ra.toggle() })
+                }
+            }
+        }
+        return
+    }
+    // 92: opened, like Readest — cover · title · chapter, ⏮ ⏯ ⏭ ✕, and 빠르기 · 수면 · 목소리 under
+    // the title; the card spans the width at the bar's height and folds back after a while
     Surface(
         modifier = modifier
-            .onSizeChanged { size = it }
-            .offset { val c = clamp(off); androidx.compose.ui.unit.IntOffset(c.x.toInt(), c.y.toInt()) }
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = { off = clamp(off); prefs.edit().putFloat("bar_x", off.x).putFloat("bar_y", off.y).apply() },
-                ) { change, drag ->
-                    change.consume()
-                    off = clamp(off + drag); touch++
-                }
-            },
-        shape = RoundedCornerShape(24.dp),
-        color = fill.copy(alpha = if (eink) 1f else 0.6f),
-        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (eink) 1f else 0.5f)),
-        shadowElevation = if (eink) 0.dp else 2.dp,
+            .offset { androidx.compose.ui.unit.IntOffset(0, clamp(off).y.toInt()) }
+            .fillMaxWidth()
+            .padding(end = 10.dp)
+            .then(drag),
+        shape = RoundedCornerShape(22.dp),
+        color = fill.copy(alpha = if (eink) 1f else 0.82f),
+        border = border,
+        shadowElevation = if (eink) 0.dp else 3.dp,
     ) {
-        // thin (#223): the buttons keep their size, the space above and below them goes
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.material3.LocalMinimumInteractiveComponentSize provides androidx.compose.ui.unit.Dp.Unspecified,
         ) {
-        Row(
-            Modifier.height(34.dp).padding(horizontal = 4.dp).clickable(enabled = !open) { open = true },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) { open = !open; touch++ }
-            if (open) BarButton("⏮", "이전 문장", tap { ra.skip(-1) })
-            BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기", tap { ra.toggle() })
-            if (open) {
-                BarButton("⏭", "다음 문장", tap { ra.skip(1) })
-                var speedOpen by remember { mutableStateOf(false) }
-                LaunchedEffect(speedOpen) { menuOpen = speedOpen }
-                Box {
-                    TextButton(
-                        onClick = { speedOpen = true },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        modifier = Modifier.height(32.dp),
-                    ) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelLarge) }
-                    OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
-                        RateSlider(ra)
+            Row(Modifier.padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                com.oasisreader.app.ui.BookCover(
+                    cover?.takeIf { it.exists() }, title,
+                    Modifier.size(width = 40.dp, height = 56.dp).clip(RoundedCornerShape(6.dp)).clickable { open = false },
+                )
+                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                    Text(title.ifBlank { "소리 내 읽기" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (chapter.isNotBlank()) Text(
+                        chapter, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        var speedOpen by remember { mutableStateOf(false) }
+                        var sleepMenu by remember { mutableStateOf(false) }
+                        LaunchedEffect(speedOpen, sleepMenu) { menuOpen = speedOpen || sleepMenu }
+                        Box {
+                            TextButton(
+                                onClick = { speedOpen = true; touch++ },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                modifier = Modifier.height(28.dp),
+                            ) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelMedium) }
+                            OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) { RateSlider(ra) }
+                        }
+                        SleepButton(ra) { sleepMenu = it }
+                        BarButton("🎙", "목소리", tap(onVoice))
                     }
                 }
-                SleepButton(ra) { menuOpen = it }
-                BarButton("🎙", "목소리", tap(onVoice))
+                BarButton("⏮", "이전 문장", tap { ra.skip(-1) })
+                // the main button, big and filled
+                Surface(
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(horizontal = 4.dp).size(46.dp).clickable(onClick = tap { ra.toggle() })
+                        .semantics { contentDescription = if (ra.playing) "일시정지" else "계속 읽기" },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        EmojiText(if (ra.playing) "⏸" else "▶", fontSize = 20.sp, color = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
+                BarButton("⏭", "다음 문장", tap { ra.skip(1) })
                 BarButton("✕", "소리 내 읽기 끝내기", onClose)
             }
-        }
         }
     }
 }
