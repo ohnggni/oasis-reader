@@ -138,4 +138,16 @@ class ReadAloudNormalizeTest {
         assertEquals("육\u2063", ReadAloudNormalize.apply("⑥\u2063"))
         assertEquals("일, 사과 세 개", ReadAloudNormalize.apply("① 사과 3개"))
     }
+
+    @Test fun joinsAndGlosses() {
+        // 100: · is a list, + is 플러스, a gloss in another script is said once
+        assertEquals("언어, 언어학, 문학, 역사", ReadAloudNormalize.apply("언어·언어학·문학·역사"))
+        assertEquals("‘주어 플러스 목적어 플러스 서술어’", ReadAloudNormalize.apply("‘주어+목적어+서술어’"))
+        assertEquals("세계적인 언어학자 소쉬르는 언어학", ReadAloudNormalize.apply("세계적인 언어학자 소쉬르Saussure는 언어학"))
+        assertEquals("불교의 ‘공’에서", ReadAloudNormalize.apply("불교의 ‘공空’에서"))
+        assertEquals("인문학이란 소쉬르의 말", ReadAloudNormalize.apply("인문학(人文學)이란 소쉬르(Ferdinand de Saussure)의 말"))
+        assertEquals("삼일 운동", ReadAloudNormalize.apply("3·1 운동"))           // numbers stay with the number rules
+        assertEquals("일 더하기 이는 삼", ReadAloudNormalize.apply("1+2는 3"))
+        assertEquals("TV를 켠다", ReadAloudNormalize.apply("TV를 켠다"))               // Latin first: not a gloss
+    }
 }

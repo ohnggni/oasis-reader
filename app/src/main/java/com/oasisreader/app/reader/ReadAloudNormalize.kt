@@ -244,8 +244,36 @@ object ReadAloudNormalize {
         return rules(sentence)
     }
 
+    // ── words joined, words glossed (100, 진석님 2026-11-24) ──
+
+    private const val HANJA = "\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF"
+    /** 인문학(人文學) · 소쉬르(Saussure): a gloss in another script right after a Korean word. */
+    private val GLOSS_PAREN = Regex("(?<=[가-힣])\\s?[(（](?:[A-Za-z][A-Za-z\\s.'&-]*|[$HANJA][$HANJA\\s·,]*)[)）]")
+    /** 소쉬르Saussure · 공空: the same, with no brackets. */
+    private val GLOSS_LATIN = Regex("(?<=[가-힣])[A-Za-z][A-Za-z.'-]*")
+    private val GLOSS_HANJA = Regex("(?<=[가-힣])[$HANJA]+")
+    /** 언어·언어학·문학: a list — a comma's pause. Numbers (3·1 운동) are left to the number rules. */
+    private val MID_DOT = Regex("(?<=[가-힣A-Za-z)’'\"])\\s?[·・ㆍ]\\s?(?=[가-힣A-Za-z(‘'\"])")
+    /** 주어+목적어: read 플러스 (numbers: 더하기, in the number rules). */
+    private val PLUS = Regex("(?<=[가-힣A-Za-z’'\"])\\s?\\+\\s?(?=[가-힣A-Za-z‘'\"])")
+
+    /**
+     * A gloss is said once: a Latin or Hanja word right after a Korean one, in brackets or not,
+     * only explains it (소쉬르Saussure는 → 소쉬르는, 공空 → 공, 인문학(人文學) → 인문학).
+     * Words joined by · are a list (a comma's pause), by + are read 플러스.
+     */
+    fun joins(sentence: String): String {
+        var s = sentence
+        s = GLOSS_PAREN.replace(s, "")
+        s = GLOSS_LATIN.replace(s, "")
+        s = GLOSS_HANJA.replace(s, "")
+        s = MID_DOT.replace(s, ", ")
+        s = PLUS.replace(s, " 플러스 ")
+        return s
+    }
+
     private fun rules(sentence: String): String {
-        val signed = signs(sentence)
+        val signed = signs(joins(sentence))
         if (!HAS_DIGIT.containsMatchIn(signed)) return signed
         var s = signed
         for (r in RULES) s = r.re.replace(s) { m -> runCatching { r.to(m) }.getOrDefault(m.value) }
