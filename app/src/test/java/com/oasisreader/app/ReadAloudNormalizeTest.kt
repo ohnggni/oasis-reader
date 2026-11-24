@@ -125,4 +125,17 @@ class ReadAloudNormalizeTest {
         val s = listOf("1. 첫째", "2026년 3월", "그냥 문장", "3~5개")
         assertEquals(s.size, s.map { apply(it) }.size)
     }
+
+    @Test fun signs() {
+        // 86: circled and roman numbers, circled letters, ※, ○○
+        assertEquals("육, 감정의 자각과 행동", ReadAloudNormalize.apply("⑥ 감정의 자각과 행동"))
+        assertEquals("하나는 ‘모모를 할 수 있다’는 자신감이다.", ReadAloudNormalize.apply("하나는 ‘○○를 할 수 있다’는 자신감이다."))
+        assertEquals("김모수 씨와 모모 씨", ReadAloudNormalize.apply("김○수 씨와 ◯◯ 씨"))
+        assertEquals("일과 이를 보면 삼번째", ReadAloudNormalize.apply("①과 ②를 보면 ③번째"))
+        assertEquals("제삼장 가와 나", ReadAloudNormalize.apply("제Ⅲ장 ㉠와 ㉡"))
+        assertEquals("주의 사항이 있다.", ReadAloudNormalize.apply("※ 주의 사항이 있다."))
+        assertEquals("십이", ReadAloudNormalize.apply("⑫"))
+        assertEquals("육\u2063", ReadAloudNormalize.apply("⑥\u2063"))
+        assertEquals("일, 사과 세 개", ReadAloudNormalize.apply("① 사과 3개"))
+    }
 }

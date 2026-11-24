@@ -198,15 +198,56 @@ object ReadAloudNormalize {
     private val HANGUL = Regex("[가-힣]")
     private val HAS_DIGIT = Regex("[0-9]")
 
+    // ── signs (86) ──
+
+    private const val GANADA = "가나다라마바사아자차카타파하"
+    /** ① ⑴ ⒈ Ⅰ ⅰ ㉠ ㉮ ※ ○○: signs the engines skip or read as their shape. */
+    private val SIGNS = Regex("[\\u2460-\\u249B\\u2160-\\u217B\\u3260-\\u327B※○◯]")
+    /** A list number at the start of a line (⑥ 감정의 자각과 행동): read with a short pause after it. */
+    private val LEAD_NUMBER = Regex("^(\\s*)([\\u2460-\\u249B\\u2160-\\u217B\\u3260-\\u327B])\\s+(?=\\S)")
+
+    /** The number or letter a sign stands for: ⑥ → 육, ⑿ → 십이, Ⅲ → 삼, ㉡ → 나; null if not one. */
+    fun signWord(c: Char): String? = when (c) {
+        in '\u2460'..'\u2473' -> sino((c - '\u2460' + 1).toLong())       // ① … ⑳
+        in '\u2474'..'\u2487' -> sino((c - '\u2474' + 1).toLong())       // ⑴ … ⒇
+        in '\u2488'..'\u249B' -> sino((c - '\u2488' + 1).toLong())       // ⒈ … ⒛
+        in '\u2160'..'\u216B' -> sino((c - '\u2160' + 1).toLong())       // Ⅰ … Ⅻ
+        in '\u2170'..'\u217B' -> sino((c - '\u2170' + 1).toLong())       // ⅰ … ⅻ
+        in '\u3260'..'\u326D' -> GANADA[c - '\u3260'].toString()          // ㉠ … ㉭
+        in '\u326E'..'\u327B' -> GANADA[c - '\u326E'].toString()          // ㉮ … ㉻
+        else -> null
+    }
+
+    /**
+     * Signs in words: ①~⑳ ⑴ ⒈ Ⅰ ⅰ → 일 이 …, ㉠ ㉮ → 가 나 …, ※ not read, ○○ (a name or thing left
+     * out) → 모모(某某), one ○ inside a name (김○수) → 모. A list number at the line start gets a comma.
+     */
+    fun signs(sentence: String): String {
+        if (!SIGNS.containsMatchIn(sentence)) return sentence
+        var s = LEAD_NUMBER.replace(sentence) { m -> m.groupValues[1] + (signWord(m.groupValues[2][0]) ?: m.groupValues[2]) + ", " }
+        s = s.replace(Regex("[○◯]{2,}"), "모모")
+            .replace(Regex("(?<=[가-힣])[○◯](?=[가-힣])"), "모")
+            .replace(Regex("\\s*※\\s*"), " ")
+        val out = StringBuilder(s.length)
+        for (c in s) out.append(signWord(c) ?: c)
+        return out.toString().replace(Regex(" {2,}"), " ").trim()
+    }
+
+    /** A line that is only a list or chapter number (⑥, Ⅲ — a heading's number line). */
+    private fun signOnly(s: String) = SIGN_ONLY.matches(s.trim())
+    private val SIGN_ONLY = Regex("[\\u2460-\\u249B\\u2160-\\u217B\\u3260-\\u327B][.\\u2063]*")
+
     /** The sentence as it should be spoken. Sentences without Hangul (other languages) are kept as they are. */
     fun apply(sentence: String): String {
+        if (signOnly(sentence)) return signs(sentence)
         if (!HANGUL.containsMatchIn(sentence)) return sentence
         return rules(sentence)
     }
 
     private fun rules(sentence: String): String {
-        if (!HAS_DIGIT.containsMatchIn(sentence)) return sentence
-        var s = sentence
+        val signed = signs(sentence)
+        if (!HAS_DIGIT.containsMatchIn(signed)) return signed
+        var s = signed
         for (r in RULES) s = r.re.replace(s) { m -> runCatching { r.to(m) }.getOrDefault(m.value) }
         return s
     }
@@ -227,7 +268,7 @@ object ReadAloudNormalize {
      * particles may follow (홍길동은). Latin letters match in any case.
      */
     fun speak(sentence: String, dict: List<Pair<String, String>>, normalize: Boolean): String {
-        if (dict.isEmpty()) return if (normalize) apply(sentence) else sentence
+        if (dict.isEmpty() || (normalize && signOnly(sentence))) return if (normalize) apply(sentence) else sentence
         val words = dict.filter { it.first.isNotBlank() }.sortedByDescending { it.first.length }
         val out = StringBuilder()
         val readings = ArrayList<String>()

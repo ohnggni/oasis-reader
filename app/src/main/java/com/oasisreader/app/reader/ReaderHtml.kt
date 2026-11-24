@@ -112,6 +112,8 @@ body {
 :where(#content) h2 { font-size: 1.3em; margin: 0.8em 0 0.7em; }
 :where(#content) h3 { font-size: 1.15em; margin: 0.8em 0 0.5em; }
 :where(#content) h4 { font-size: 1.05em; }
+/* h5 · h6: the web view's own 0.83em / 0.67em made sub-headings smaller than the text (86) */
+:where(#content) :where(h5, h6) { font-size: 1em; line-height: 1.4; break-after: avoid; }
 :where(html.plain #content) p { margin: 0 0 0.85em; }
 :where(html.plain #content) :where(h1, h2, h3, h4) { text-align: left; }
 :where(#content) :where(img, svg) { display: block; max-width: 100%; height: auto; margin: 0.6em auto; }
@@ -912,7 +914,7 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
         while (y > x && ttsSpace(s.charAt(y - 1))) y--;
         if (y <= x) return;
         var t = s.slice(x, y).replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
-        if (!/[0-9A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7A3]/.test(t)) return;
+        if (!/[0-9A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7A3\u2160-\u217B\u2460-\u249B\u3260-\u327B]/.test(t)) return;
         var r = document.createRange();
         var A = at(x, false), B = at(y, true);
         r.setStart(A.node, A.off); r.setEnd(B.node, B.off);

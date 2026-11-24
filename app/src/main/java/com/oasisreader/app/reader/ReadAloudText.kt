@@ -24,7 +24,7 @@ object ReadAloudText {
     private fun space(c: Char) = c.isWhitespace() || c == '\u00A0' || c in '\u200B'..'\u200D' || c == '\u2060' || c == '\uFEFF'
     private fun after(c: Char) = space(c) || OPEN.indexOf(c) >= 0 || c in '\uAC00'..'\uD7A3' || c in '\u3131'..'\u318E'
 
-    private val WORDY = Regex("[0-9A-Za-z\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u3040-\\u30FF\\u3400-\\u9FFF\\uAC00-\\uD7A3]")
+    private val WORDY = Regex("[0-9A-Za-z\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u3040-\\u30FF\\u3400-\\u9FFF\\uAC00-\\uD7A3\\u2160-\\u217B\\u2460-\\u249B\\u3260-\\u327B]")
 
     fun sentences(html: String): List<String> {
         var body = Regex("(?is)<body\\b[^>]*>(.*)</body>").find(html)?.groupValues?.get(1) ?: html
