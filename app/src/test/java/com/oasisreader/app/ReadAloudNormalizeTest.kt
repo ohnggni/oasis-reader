@@ -149,5 +149,9 @@ class ReadAloudNormalizeTest {
         assertEquals("삼일 운동", ReadAloudNormalize.apply("3·1 운동"))           // numbers stay with the number rules
         assertEquals("일 더하기 이는 삼", ReadAloudNormalize.apply("1+2는 3"))
         assertEquals("TV를 켠다", ReadAloudNormalize.apply("TV를 켠다"))               // Latin first: not a gloss
+        // several Latin words after the Korean ones
+        assertEquals("영화 「리틀 포레스트」에 이런", ReadAloudNormalize.apply("영화 「리틀 포레스트Little Forest」에 이런"))
+        assertEquals("신화학자 조지프 캠벨은 ‘타트 트밤 아시’라는", ReadAloudNormalize.apply("신화학자 조지프 캠벨Joseph Campbell은 ‘타트 트밤 아시Tat tvam asi’라는"))
+        assertEquals("마테를링크의 『파랑새』", ReadAloudNormalize.apply("마테를링크Maeterlinck의 『파랑새』"))
     }
 }

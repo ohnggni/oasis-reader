@@ -249,8 +249,12 @@ object ReadAloudNormalize {
     private const val HANJA = "\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF"
     /** 인문학(人文學) · 소쉬르(Saussure): a gloss in another script right after a Korean word. */
     private val GLOSS_PAREN = Regex("(?<=[가-힣])\\s?[(（](?:[A-Za-z][A-Za-z\\s.'&-]*|[$HANJA][$HANJA\\s·,]*)[)）]")
-    /** 소쉬르Saussure · 공空: the same, with no brackets. */
-    private val GLOSS_LATIN = Regex("(?<=[가-힣])[A-Za-z][A-Za-z.'-]*")
+    /**
+     * 소쉬르Saussure · 공空: the same, with no brackets. The Latin may run on over several words —
+     * 조지프 캠벨Joseph Campbell은, 리틀 포레스트Little Forest」, 타트 트밤 아시Tat tvam asi’ (2.10.x):
+     * every word after it that is Latin only goes with it, up to the first Korean or sign.
+     */
+    private val GLOSS_LATIN = Regex("(?<=[가-힣])[A-Za-z][A-Za-z.'-]*(?:\\s+[A-Za-z][A-Za-z.'-]*)*")
     private val GLOSS_HANJA = Regex("(?<=[가-힣])[$HANJA]+")
     /** 언어·언어학·문학: a list — a comma's pause. Numbers (3·1 운동) are left to the number rules. */
     private val MID_DOT = Regex("(?<=[가-힣A-Za-z)’'\"])\\s?[·・ㆍ]\\s?(?=[가-힣A-Za-z(‘'\"])")
