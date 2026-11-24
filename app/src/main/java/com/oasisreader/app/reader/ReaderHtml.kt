@@ -1413,6 +1413,24 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
       }
     }
   })();
+  /* 101: a box of text floated to one side (a pull quote: "선택하라. 지금 필요한 건 …") makes the
+     page look like two columns on a phone. Text boxes come out of the float and sit full width
+     between the paragraphs, their lines and borders kept; floated pictures stay as they are. */
+  (function unfloat() {
+    var els = content.querySelectorAll('div, aside, p, blockquote, section, table, span');
+    for (var i = 0; i < els.length; i++) {
+      var e = els[i], cs = getComputedStyle(e);
+      if (cs.cssFloat === 'none' || !cs.cssFloat) continue;
+      if (e.querySelector('img, svg, image, video')) continue;
+      if (!(e.textContent || '').trim()) continue;
+      e.style.setProperty('float', 'none', 'important');
+      e.style.setProperty('width', 'auto', 'important');
+      e.style.setProperty('max-width', '100%', 'important');
+      e.style.setProperty('margin-left', '0', 'important');
+      e.style.setProperty('margin-right', '0', 'important');
+      if (cs.display === 'inline') e.style.setProperty('display', 'block', 'important');
+    }
+  })();
   layout(CFG.start);
   /* the app may go on from here (read aloud continues into this chapter) */
   setTimeout(function () { if (bridge.ready) bridge.ready(); }, 250);
