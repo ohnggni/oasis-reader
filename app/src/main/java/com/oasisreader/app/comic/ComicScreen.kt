@@ -485,9 +485,10 @@ private fun ComicViewer(
     }
 
     // the bar hides itself
-    LaunchedEffect(barsVisible, barsShownAt, panel, autoHide) {
-        if (!barsVisible) { panel = com.oasisreader.app.ui.ReadPanel.NONE; return@LaunchedEffect }
-        if (panel != com.oasisreader.app.ui.ReadPanel.NONE || !autoHide) return@LaunchedEffect
+    LaunchedEffect(barsVisible, barsShownAt, panel, autoHide, aaMenu) {
+        // Aa's menu open: the bar stays; the bar gone: the menu goes too, so it does not pop up again with it (2.10.x)
+        if (!barsVisible) { panel = com.oasisreader.app.ui.ReadPanel.NONE; aaMenu = false; return@LaunchedEffect }
+        if (panel != com.oasisreader.app.ui.ReadPanel.NONE || aaMenu || !autoHide) return@LaunchedEffect
         delay(2_500)
         barsVisible = false
     }

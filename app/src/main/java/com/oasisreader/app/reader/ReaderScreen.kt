@@ -421,9 +421,11 @@ private fun ReaderBody(
         }
     }
 
-    LaunchedEffect(barsVisible, barsShownAt, panel, menuOpen, tocOpen, hlListOpen, autoHide, state is LoadState.Ready) {
+    LaunchedEffect(barsVisible, barsShownAt, panel, menuOpen, tocOpen, hlListOpen, autoHide, aaMenu, state is LoadState.Ready) {
+        // Aa's menu goes with the bars, so it does not pop up again with them (2.10.x)
+        if (!barsVisible) aaMenu = false
         if (!autoHide || !barsVisible || state !is LoadState.Ready) return@LaunchedEffect
-        if (panel != Panel.NONE || menuOpen || tocOpen || hlListOpen) return@LaunchedEffect
+        if (panel != Panel.NONE || menuOpen || tocOpen || hlListOpen || aaMenu) return@LaunchedEffect
         delay(2_500)
         barsVisible = false
     }
