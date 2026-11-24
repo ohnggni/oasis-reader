@@ -101,14 +101,14 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 Text("종류", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp))
                 listOf("general" to "일반", "adult" to "성인", com.oasisreader.app.data.ServerSettings.AUDIOBOOK to "오디오북").forEach { (v, label) ->
-                    androidx.compose.material3.FilterChip(
+                    com.oasisreader.app.ui.OgChip(
                         selected = !remote && metaDb == v,
                         onClick = { metaDb = v; proto = ""; status = null },
                         label = { Text(label) },
                         modifier = Modifier.padding(end = 8.dp),
                     )
                 }
-                androidx.compose.material3.FilterChip(
+                com.oasisreader.app.ui.OgChip(
                     selected = remote,
                     onClick = { if (!remote) proto = com.oasisreader.app.remote.Remote.WEBDAV; status = null },
                     label = { Text("🗄️ 파일 서버") },
@@ -120,7 +120,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
             ) {
                 Text("방식", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp))
                 com.oasisreader.app.remote.Remote.ALL.forEach { p ->
-                    androidx.compose.material3.FilterChip(
+                    com.oasisreader.app.ui.OgChip(
                         selected = proto == p,
                         onClick = { proto = p; status = null },
                         label = { Text(com.oasisreader.app.remote.Remote.label(p)) },

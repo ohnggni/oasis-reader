@@ -93,7 +93,7 @@ fun StatsScreen(ui: StatsUi, onBack: () -> Unit, onOpenBook: (String) -> Unit) {
             SectionTitle("기간별")
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("일간", "월간", "연간").forEachIndexed { i, t ->
-                    FilterChip(selected = period == i, onClick = { period = i }, label = { Text(t) })
+                    com.oasisreader.app.ui.OgChip(selected = period == i, onClick = { period = i }, label = { Text(t) })
                 }
             }
             Spacer(Modifier.height(12.dp))

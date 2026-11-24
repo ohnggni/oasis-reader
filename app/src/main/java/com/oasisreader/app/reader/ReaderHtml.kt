@@ -33,6 +33,7 @@ data class ReaderConfig(
     val headShow: Boolean = true,    // false: no running head in the page (off, or drawn by the app on the status line)
     val hasPrev: Boolean = false,
     val hasNext: Boolean = false,
+    val liftHeads: Boolean = true,   // 94: short lines smaller than the text at the text's size
 )
 
 /**
@@ -1387,6 +1388,30 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
       if (focusId === '__find') focusId = null;
       if (paged) layout(f);
     }, 8000);
+  })();
+  /* 94: a book that sets its sub-headings smaller than the text (▶ 소제목, ⑥ …): short lines
+     (a block of at most 80 letters, no sentence of text around it) below 95% of the text's size
+     go up to it. Notes, tables, captions, small print and ruby are left as the book has them. */
+  (function liftHeads() {
+    if (!CFG.liftHeads) return;
+    var base = parseFloat(getComputedStyle(content).fontSize) || 16;
+    var bs = content.querySelectorAll('h1, h2, h3, h4, h5, h6, p, div, li, dt');
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (b.closest('aside, table, figure, figcaption, small, sup, sub, rt, nav, [epub\\:type~="footnote"], [epub\\:type~="endnote"], .footnote, .note')) continue;
+      if (b.querySelector('p, div, li, table, img, svg')) continue;
+      var t = (b.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!t || t.length > 80) continue;
+      var fs = parseFloat(getComputedStyle(b).fontSize);
+      if (fs && fs < base * 0.95) b.style.setProperty('font-size', base + 'px', 'important');
+      /* or the small size sits on a span inside the line */
+      var ins = b.querySelectorAll('span, b, strong, em, i, font');
+      for (var k = 0; k < ins.length; k++) {
+        if (ins[k].closest('sup, sub, rt, small')) continue;
+        var f2 = parseFloat(getComputedStyle(ins[k]).fontSize);
+        if (f2 && f2 < base * 0.95) ins[k].style.setProperty('font-size', base + 'px', 'important');
+      }
+    }
   })();
   layout(CFG.start);
   /* the app may go on from here (read aloud continues into this chapter) */

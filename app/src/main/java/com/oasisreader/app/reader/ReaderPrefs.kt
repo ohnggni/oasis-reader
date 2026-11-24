@@ -102,6 +102,11 @@ class ReaderPrefs(context: Context, private val bookId: String? = null, private 
         get() = bool("publisher_style", true)
         set(v) = setBool("publisher_style", v)
 
+    /** 94: short lines the book sets smaller than the text (sub-headings) shown at the text's size */
+    var liftHeads: Boolean
+        get() = bool("lift_heads", true)
+        set(v) = setBool("lift_heads", v)
+
     /** line height x10 (18 = 1.8) */
     var lineHeight: Int
         get() = int("line_height", 18)

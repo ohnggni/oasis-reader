@@ -240,6 +240,7 @@ private fun ReaderBody(
     var mLeft by remember { mutableIntStateOf(prefs.marginLeft) }
     var mRight by remember { mutableIntStateOf(prefs.marginRight) }
     var publisherStyle by remember { mutableStateOf(prefs.publisherStyle) }
+    var liftHeads by remember { mutableStateOf(prefs.liftHeads) }
     var fontId by remember { mutableStateOf(prefs.fontId) }
     var fontBusy by remember { mutableStateOf<String?>(null) }
     var fontProgress by remember { mutableFloatStateOf(0f) }
@@ -405,6 +406,7 @@ private fun ReaderBody(
                     headShow = readingChrome.head && !readingChrome.hideStatus,
                     hasPrev = t.index > 0,
                     hasNext = t.index < p.spine.size - 1,
+                    liftHeads = liftHeads,
                 ),
                 fontCssHref = fontHref(font),
                 publisherStyle = publisherStyle,
@@ -737,7 +739,7 @@ private fun ReaderBody(
         prefs.resetBook()
         readingChrome = ReadingChrome.of(prefs)
         fontPx = prefs.fontPx; lineHeight = prefs.lineHeight; mode = prefs.mode
-        weight = prefs.weight; fontId = prefs.fontId; publisherStyle = prefs.publisherStyle
+        weight = prefs.weight; fontId = prefs.fontId; publisherStyle = prefs.publisherStyle; liftHeads = prefs.liftHeads
         turnStyle = prefs.turnStyle; turnSpeed = prefs.turnSpeed
         mTop = prefs.marginTop; mBottom = prefs.marginBottom; mLeft = prefs.marginLeft; mRight = prefs.marginRight
         onTheme(prefs.theme)
@@ -1105,7 +1107,7 @@ private fun ReaderBody(
 
             // the running head (chapter title) is drawn inside the page, so it turns with it
             com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
-            ImmersiveBars(readingChrome, appBarsUp = barsVisible)
+            ImmersiveBars(readingChrome, appBarsUp = barsVisible && panel !in AA_PANELS)
 
             // the panels' insides: ☰ under the top bar, Aa's three in the card at the bottom (90)
             val panelBody: @Composable ColumnScope.(Panel) -> Unit = { which ->
@@ -1160,6 +1162,9 @@ private fun ReaderBody(
                             )
                             com.oasisreader.app.ui.PanelSwitch("책 디자인 사용 (제목·문단 모양)", null, publisherStyle, {
                                 publisherStyle = it; prefs.publisherStyle = it; reloadHere()
+                            })
+                            com.oasisreader.app.ui.PanelSwitch("작은 소제목 키우기", null, liftHeads, {
+                                liftHeads = it; prefs.liftHeads = it; reloadHere()
                             })
                             com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
                         }
@@ -1218,7 +1223,8 @@ private fun ReaderBody(
             }
 
             // compact overlay bar: it only ever covers the top margin, never text
-            AnimatedVisibility(visible = showBars, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut())) {
+            // 96: while Aa's card is open the bars go, so the page shows the change clearly
+            AnimatedVisibility(visible = showBars && panel !in AA_PANELS, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut())) {
                 Surface(
                     color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder(),
                     modifier = Modifier.fillMaxWidth().let { if (readingChrome.hideStatus) it.padding(start = cut.left, end = cut.right) else it },
@@ -1362,7 +1368,7 @@ private fun ReaderBody(
 
             // with the top bar: a bottom bar whose thin slider spans the whole book
             if (p != null) AnimatedVisibility(
-                visible = showBars && state is LoadState.Ready,
+                visible = showBars && state is LoadState.Ready && panel !in AA_PANELS,
                 enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
@@ -1379,18 +1385,20 @@ private fun ReaderBody(
             // 90: Aa's panels (화면 · 글자 · 쪽) in a card at the bottom, the page above left as it is
             // (no dimming) so a change shows while it is made; tabs move between the three
             if (panel in AA_PANELS) lastAa[0] = panel
+            // 97: setting the bottom margin, the card moves to the top (out of the way of what changes)
+            val cardTop = lastAa[0] == Panel.PAGE && MarginEdit.side == 1
             AnimatedVisibility(
-                visible = showBars && panel in AA_PANELS,
-                enter = com.oasisreader.app.ui.theme.calm(slideInVertically { it / 2 } + fadeIn()),
-                exit = com.oasisreader.app.ui.theme.calm(slideOutVertically { it / 2 } + fadeOut()),
-                modifier = Modifier.align(Alignment.BottomCenter),
+                visible = panel in AA_PANELS,
+                enter = com.oasisreader.app.ui.theme.calm(fadeIn()),
+                exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
+                modifier = Modifier.align(if (cardTop) Alignment.TopCenter else Alignment.BottomCenter),
             ) {
                 val which = lastAa[0]
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = barColor.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.94f), contentColor = chrome,
                     border = com.oasisreader.app.ui.theme.einkBorder(), shadowElevation = 6.dp,
-                    modifier = Modifier.navigationBarsPadding().padding(10.dp).fillMaxWidth(),
+                    modifier = (if (cardTop) Modifier.statusBarsPadding() else Modifier.navigationBarsPadding()).padding(10.dp).fillMaxWidth(),
                 ) {
                     Column(
                         Modifier.heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp)
@@ -1400,14 +1408,14 @@ private fun ReaderBody(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             listOf(Triple(Panel.SCREEN, "☀️", "화면"), Triple(Panel.TEXT, "가", "글자"), Triple(Panel.PAGE, "▤", "쪽")).forEach { (pp, e, l) ->
-                                FilterChip(
+                                com.oasisreader.app.ui.OgChip(
                                     selected = which == pp, onClick = { panel = pp },
                                     label = { EmojiText("$e $l", fontSize = 14.sp) },
                                     modifier = Modifier.padding(end = 6.dp),
                                 )
                             }
                             Spacer(Modifier.weight(1f))
-                            IconButton(onClick = { panel = Panel.NONE }) { Text("✕", color = chrome) }
+                            IconButton(onClick = { panel = Panel.NONE; barsVisible = true; barsShownAt = System.currentTimeMillis() }) { Text("✕", color = chrome) }
                         }
                         Column(Modifier.padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { panelBody(which) }
                     }
@@ -1913,6 +1921,9 @@ private fun rememberSpread(spreadMode: Int = 0): Boolean {
 /** 두 쪽 보기 choices, in [ReaderPrefs.spreadMode] order. */
 internal val SPREAD_LABELS = listOf("자동", "한 쪽만", "가로일 때만")
 
+/** Which margin is being set (0 위 · 1 아래 · 2 왼쪽 · 3 오른쪽) — the Aa card goes to the top for 아래 (97). */
+internal object MarginEdit { var side by mutableIntStateOf(0) }
+
 /** The panels under Aa (90), shown in the bottom card. */
 private val AA_PANELS = setOf(Panel.SCREEN, Panel.TEXT, Panel.PAGE)
 
@@ -2024,7 +2035,7 @@ internal fun FontPanel(
 /** Page margins: pick a side, then one slim slider for it (relative to the default; 0 = as before). */
 @Composable
 internal fun MarginPanel(top: Int, bottom: Int, left: Int, right: Int, onChange: (Int, Int, Int, Int) -> Unit) {
-    var side by remember { mutableIntStateOf(0) }
+    val side = MarginEdit.side
     val sides = listOf("위", "아래", "왼쪽", "오른쪽")
     val v = listOf(top, bottom, left, right)[side]
     val range = if (side < 2) ReaderPrefs.MARGIN_V else ReaderPrefs.MARGIN_H
@@ -2035,7 +2046,7 @@ internal fun MarginPanel(top: Int, bottom: Int, left: Int, right: Int, onChange:
         else -> onChange(top, bottom, left, x)
     }
     com.oasisreader.app.ui.PanelRow("여백") {
-        com.oasisreader.app.ui.PanelDropdown(sides[side], sides, { side = it })
+        com.oasisreader.app.ui.PanelDropdown(sides[side], sides, { MarginEdit.side = it })
         Spacer(Modifier.width(6.dp))
         com.oasisreader.app.ui.ThinSlider(
             value = v.toFloat(), range = range.first.toFloat()..range.last.toFloat(),

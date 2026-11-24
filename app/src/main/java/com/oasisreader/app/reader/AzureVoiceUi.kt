@@ -142,7 +142,7 @@ fun AzureSetupDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                 Text("지역", style = MaterialTheme.typography.labelMedium)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AzureVoice.REGIONS.forEach { (id, label) ->
-                        FilterChip(selected = region == id, onClick = { region = id; status = null }, label = { Text(label) })
+                        com.oasisreader.app.ui.OgChip(selected = region == id, onClick = { region = id; status = null }, label = { Text(label) })
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

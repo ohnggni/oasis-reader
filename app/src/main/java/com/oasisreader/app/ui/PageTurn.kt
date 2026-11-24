@@ -86,7 +86,7 @@ fun TurnStyleDialog(
                     )
                     androidx.compose.foundation.layout.Row {
                         TurnSpeed.entries.forEach { sp ->
-                            androidx.compose.material3.FilterChip(
+                            com.oasisreader.app.ui.OgChip(
                                 selected = sp == speed, onClick = { onSpeed(sp) },
                                 label = { com.oasisreader.app.ui.Text(sp.label) },
                                 modifier = Modifier.padding(end = 8.dp),

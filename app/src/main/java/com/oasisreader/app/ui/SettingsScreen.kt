@@ -102,7 +102,7 @@ fun SettingsScreen(onBack: () -> Unit, onServer: () -> Unit, onDoc: (String) -> 
             Section("화면")
             val tm = com.oasisreader.app.ui.theme.ThemeMode
             var themeOpen by remember { mutableStateOf(false) }
-            Item("🌓", "테마", value = tm.label(tm.mode), enabled = true) { themeOpen = true }
+            Item("🌓", "테마", value = if (tm.mode == tm.SYSTEM) "시스템 · ${tm.label(tm.lightPick)} / ${tm.label(tm.darkPick)}" else tm.label(tm.mode), enabled = true) { themeOpen = true }
             if (themeOpen) com.oasisreader.app.ui.theme.ThemePickDialog { themeOpen = false }
             val us = com.oasisreader.app.ui.theme.UiScale
             var scaleOpen by remember { mutableStateOf(false) }

@@ -74,7 +74,8 @@ fun ReadAloudBar(
     val ctx = LocalContext.current
     val prefs = remember { ctx.getSharedPreferences(ReadAloud.PREFS, android.content.Context.MODE_PRIVATE) }
     var off by remember { mutableStateOf(androidx.compose.ui.geometry.Offset(prefs.getFloat("bar_x", 0f), prefs.getFloat("bar_y", 0f))) }
-    var open by remember { mutableStateOf(false) }
+    // 95: the big card first when reading starts, the simple bar after a while
+    var open by remember { mutableStateOf(true) }
     var touch by remember { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
     LaunchedEffect(open, touch, menuOpen) { if (open && !menuOpen) { delay(3500); open = false } }
@@ -134,7 +135,7 @@ fun ReadAloudBar(
             .padding(end = 10.dp)
             .then(drag),
         shape = RoundedCornerShape(22.dp),
-        color = fill.copy(alpha = if (eink) 1f else 0.82f),
+        color = fill.copy(alpha = if (eink) 1f else 0.92f),
         border = border,
         shadowElevation = if (eink) 0.dp else 3.dp,
     ) {
@@ -305,7 +306,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("전체", "여성", "남성").forEachIndexed { i, label ->
-                        FilterChip(selected = tab == i, onClick = { tab = i }, label = { Text(label) })
+                        com.oasisreader.app.ui.OgChip(selected = tab == i, onClick = { tab = i }, label = { Text(label) })
                     }
                 }
 
@@ -375,7 +376,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                 Text("보이는 엔진", style = MaterialTheme.typography.labelLarge)
                 ChipFlow {
                     (listOf("azure" to "Azure") + engines).forEach { (pkg, label) ->
-                        FilterChip(
+                        com.oasisreader.app.ui.OgChip(
                             selected = pkg !in hidden,
                             onClick = {
                                 val hide = pkg !in hidden
@@ -406,7 +407,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("음높이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
                         ReadAloud.PITCHES.forEach { (p, label) ->
-                            FilterChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
+                            com.oasisreader.app.ui.OgChip(selected = ra.pitch == p, onClick = { ra.changePitch(p) }, label = { Text(label) }, modifier = Modifier.padding(end = 6.dp))
                         }
                     }
                     // 84: the pause after a sentence, for this engine (engines add their own silence)
@@ -415,7 +416,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                         Text("문장 사이", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
                         ChipFlow {
                             listOf("없음", "짧게", "보통", "길게").forEachIndexed { v, label ->
-                                FilterChip(selected = gap == v, onClick = { gap = v; ra.changeGap(v) }, label = { Text(label) })
+                                com.oasisreader.app.ui.OgChip(selected = gap == v, onClick = { gap = v; ra.changeGap(v) }, label = { Text(label) })
                             }
                         }
                     }
@@ -424,7 +425,7 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                         Text("장 넘김", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
                         ChipFlow {
                             listOf(ReadAloud.CUE_BOTH to "소리 + 제목", ReadAloud.CUE_SOUND to "소리", ReadAloud.CUE_TITLE to "제목", 0 to "없음").forEach { (v, label) ->
-                                FilterChip(selected = ra.chapterCue == v, onClick = { ra.changeChapterCue(v) }, label = { Text(label) })
+                                com.oasisreader.app.ui.OgChip(selected = ra.chapterCue == v, onClick = { ra.changeChapterCue(v) }, label = { Text(label) })
                             }
                         }
                     }
