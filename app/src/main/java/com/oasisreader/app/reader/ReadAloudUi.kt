@@ -201,11 +201,18 @@ private fun BarButton(glyph: String, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Engine (Samsung, Google …), voice with a sample, and pitch. */
+/**
+ * 목소리 (88, like Readest): every engine's voices in one list — Azure, then the phone's engines —
+ * a row each (▶ plays a sample, the row picks it), 전체 / 여성 / 남성 on top, engines left out at
+ * the bottom; then 읽는 방법.
+ */
 @Composable
 fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
     var rev by remember { mutableIntStateOf(0) }           // engine changed / voices loaded
     var all by remember { mutableStateOf(false) }
+    var tab by remember { mutableIntStateOf(0) }            // 0 전체 · 1 여성 · 2 남성
+    var hidden by remember { mutableStateOf(ra.hiddenEngines()) }
+    var catalogRev by remember { mutableIntStateOf(0) }
     // a new engine needs a moment to list its voices
     LaunchedEffect(ra.available, rev) { if (ra.available == null) { delay(400); rev++ } }
     val engines = remember(rev, ra.available) { ra.engines() }
@@ -213,8 +220,10 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
     val voices = remember(rev, ra.available, all) { ra.voices(all) }
     var picked by remember(rev) { mutableStateOf(ra.voiceName()) }
     val sample = "안녕하세요. 이 목소리로 책을 읽어 드립니다."
-    // back from the store / the AI voice app: pick it up (new engine, or new voices in it)
     val ctx = LocalContext.current
+    val catalog = remember { VoiceCatalog(ctx.applicationContext) }
+    DisposableEffect(Unit) { onDispose { catalog.close() } }
+    // back from the store / the AI voice app: pick it up (new engine, or new voices in it)
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
         val obs = LifecycleEventObserver { _, e ->
@@ -222,36 +231,31 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
             if (AiVoice.takeReturn(ctx) && ra.engines().any { it.first == AiVoice.PKG }) {
                 if (ra.engine() != AiVoice.PKG) ra.setEngine(AiVoice.PKG) else ra.reload()
             }
+            catalog.close(); catalogRev++
             rev++
         }
         owner.lifecycle.addObserver(obs)
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
 
-    // where the voice comes from: the phone's engine, or Azure (only one shows at a time)
     var azureMode by remember { mutableStateOf(AzureVoice.on(ctx)) }
     var setup by remember { mutableStateOf(false) }
     var howOpen by remember { mutableStateOf(false) }
+    // the engine in use always shows; the others unless left out
+    val shown = engines.filter { (pkg, _) -> pkg !in hidden || (pkg == engine && !azureMode) }
+    LaunchedEffect(shown.map { it.first }, engine, catalogRev) {
+        shown.forEach { (pkg, _) -> if (pkg != engine) catalog.load(pkg) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("목소리") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = !azureMode, modifier = Modifier.weight(1f),
-                        onClick = { if (azureMode) { AzureVoice.setOn(ctx, false); ra.azureChanged(); azureMode = false } },
-                        label = { Text("휴대폰 목소리", maxLines = 1) },
-                    )
-                    FilterChip(
-                        selected = azureMode, modifier = Modifier.weight(1f),
-                        onClick = {
-                            if (!AzureVoice.hasKey(ctx)) setup = true
-                            else if (!azureMode) { AzureVoice.setOn(ctx, true); ra.azureChanged(); azureMode = true }
-                        },
-                        label = { Text("Azure 음성", maxLines = 1) },
-                    )
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("전체", "여성", "남성").forEachIndexed { i, label ->
+                        FilterChip(selected = tab == i, onClick = { tab = i }, label = { Text(label) })
+                    }
                 }
 
                 // 82: this book keeps its own 빠르기 · 목소리 (only when opened from a book)
@@ -263,43 +267,71 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
                     Switch(checked = ra.own, onCheckedChange = { ra.changeOwn(it); picked = ra.voiceName() })
                 }
 
-                if (azureMode) AzureVoicePanel(ra, onSetup = { setup = true })
-                else {
-                    // the AI voice card only when there is something to do: not installed yet, or
-                    // in use but not ready (no voices / did not open). Installed = just an engine chip.
-                    val aiInstalled = engines.any { it.first == AiVoice.PKG }
-                    val aiStuck = engine == AiVoice.PKG && (ra.available == false || (ra.available == true && voices.isEmpty()))
-                    if (!aiInstalled || aiStuck) AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
-                    if (engines.size > 1) {
-                        Text("엔진", style = MaterialTheme.typography.labelLarge)
-                        ChipFlow {
-                            engines.forEach { (pkg, label) ->
-                                FilterChip(
-                                    selected = pkg == engine,
-                                    onClick = { if (pkg != engine) { ra.setEngine(pkg); picked = null; rev++ } },
-                                    label = { Text(if (pkg == AiVoice.PKG) "$label (AI)" else label, maxLines = 1) },
-                                )
-                            }
+                // the AI voice card only when there is something to do: not installed yet, or
+                // in use but not ready (no voices / did not open). Installed = just a section.
+                val aiInstalled = engines.any { it.first == AiVoice.PKG }
+                val aiStuck = !azureMode && engine == AiVoice.PKG && (ra.available == false || (ra.available == true && voices.isEmpty()))
+                if (!aiInstalled || aiStuck) AiVoiceCard(ra, engines, engine, voices.size, onChanged = { picked = null; rev++ })
+
+                if ("azure" !in hidden || azureMode) {
+                    VoiceSection("Azure 음성", azureMode)
+                    AzureVoiceRows(
+                        ra, tab, azureMode,
+                        onSetup = { setup = true },
+                        onPlay = { catalog.stop() },
+                        onPick = { azureMode = true; catalog.stop(); rev++ },
+                    )
+                }
+
+                shown.forEach { (pkg, label) ->
+                    val inUse = !azureMode && pkg == engine
+                    VoiceSection(if (pkg == AiVoice.PKG) "$label (AI)" else label, inUse)
+                    val list: List<Voice>? = if (pkg == engine) voices.takeIf { ra.available == true }
+                        else catalog.voices[pkg]?.let { ra.filterVoices(it, all) }
+                    val rows = list?.filter { VoiceGender.shows(tab, VoiceGender.of(pkg, it.name)) }
+                    when {
+                        list == null && (catalog.failed[pkg] == true || (pkg == engine && ra.available == false)) ->
+                            Text("열 수 없음", style = MaterialTheme.typography.bodySmall)
+                        list == null -> Text("불러오는 중…", style = MaterialTheme.typography.bodySmall)
+                        list?.isEmpty() == true -> Text("목소리 없음 — 휴대폰 설정 › 텍스트 음성 변환에서 받기", style = MaterialTheme.typography.bodySmall)
+                        rows.isNullOrEmpty() -> Text("이 성별 목소리 없음", style = MaterialTheme.typography.bodySmall)
+                        else -> rows.orEmpty().forEach { v ->
+                            VoiceRow(
+                                name = voiceLabel(v, list ?: emptyList()),
+                                gender = VoiceGender.of(pkg, v.name),
+                                cloud = v.isNetworkConnectionRequired,
+                                selected = inUse && picked == v.name,
+                                onPlay = {
+                                    catalog.stop()
+                                    if (pkg == engine) ra.preview(v, sample)
+                                    else { ra.quietForPreview(); catalog.preview(pkg, v, sample, ra.rate, ra.pitch) }
+                                },
+                                onPick = {
+                                    catalog.stop()
+                                    val switching = pkg != engine
+                                    ra.chooseVoice(pkg, v.name)
+                                    azureMode = false; picked = v.name
+                                    if (switching) rev++
+                                },
+                            )
                         }
                     }
-                    Text("목소리", style = MaterialTheme.typography.labelLarge)
-                    when {
-                        ra.available == null -> Text("엔진을 여는 중…", style = MaterialTheme.typography.bodySmall)
-                        voices.isEmpty() -> Text(
-                            "목소리 없음 — 휴대폰 설정 › 텍스트 음성 변환에서 받기",
-                            style = MaterialTheme.typography.bodySmall,
+                }
+
+                TextButton(onClick = { all = !all }) { Text(if (all) "한국어만 보기" else "다른 언어도 보기") }
+
+                // engines to list (the one in use always shows)
+                Text("보이는 엔진", style = MaterialTheme.typography.labelLarge)
+                ChipFlow {
+                    (listOf("azure" to "Azure") + engines).forEach { (pkg, label) ->
+                        FilterChip(
+                            selected = pkg !in hidden,
+                            onClick = {
+                                val hide = pkg !in hidden
+                                ra.setHidden(pkg, hide); hidden = ra.hiddenEngines()
+                            },
+                            label = { Text(label, maxLines = 1) },
                         )
-                        else -> ChipFlow {
-                            FilterChip(selected = picked == null, onClick = { picked = null; ra.setVoice(null); if (!ra.playing) ra.preview(null, sample) }, label = { Text("기본") })
-                            voices.forEach { v ->
-                                FilterChip(
-                                    selected = picked == v.name,
-                                    onClick = { picked = v.name; ra.setVoice(v); if (!ra.playing) ra.preview(v, sample) },
-                                    label = { Text(voiceLabel(v, voices) + if (v.isNetworkConnectionRequired) " ☁" else "", maxLines = 1) },
-                                )
-                            }
-                            FilterChip(selected = all, onClick = { all = !all }, label = { Text(if (all) "한국어만" else "다른 언어도") })
-                        }
                     }
                 }
 
@@ -359,6 +391,41 @@ fun VoiceDialog(ra: ReadAloud, onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
     )
     if (setup) AzureSetupDialog(ra, onDismiss = { setup = false; azureMode = AzureVoice.on(ctx) })
+}
+
+/** A source's heading in the voice dialog; ✓ on the one in use. */
+@Composable
+internal fun VoiceSection(title: String, inUse: Boolean) {
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            title, style = MaterialTheme.typography.labelLarge,
+            color = if (inUse) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+        if (inUse) Text("사용 중", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+/** One voice: ▶ sample · name · 여성/남성 · ☁ · ✔️ when chosen. The row picks it. */
+@Composable
+internal fun VoiceRow(name: String, gender: Int?, cloud: Boolean, selected: Boolean, onPlay: () -> Unit, onPick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onPick).heightIn(min = 40.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onPlay, modifier = Modifier.size(36.dp).semantics { contentDescription = "$name 들어 보기" }) {
+            EmojiText("▶", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+        }
+        Text(
+            name + if (cloud) " ☁" else "", style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+        )
+        VoiceGender.label(gender)?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+        }
+        Spacer(Modifier.weight(1f))
+        com.oasisreader.app.ui.CheckMark(selected)
+    }
 }
 
 /** Chips that wrap to the next line. */

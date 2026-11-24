@@ -389,14 +389,50 @@ class ReadAloud(context: Context) {
     }
 
     /** Voices of the engine for the book's language (all voices if [all]). */
-    fun voices(all: Boolean = false): List<Voice> {
-        val vs = runCatching { tts.voices?.toList() }.getOrNull().orEmpty()
-            .filter { !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+    fun voices(all: Boolean = false): List<Voice> = filterVoices(
+        runCatching { tts.voices?.toList() }.getOrNull().orEmpty()
+            .filter { !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) },
+        all,
+    )
+
+    /** [vs] for the book's language (all if [all]), best first — the same order every time. */
+    fun filterVoices(vs: List<Voice>, all: Boolean): List<Voice> {
         val lang = (language?.takeIf { it.isNotBlank() } ?: "ko").substringBefore('-').lowercase()
         val mine = if (all) vs else vs.filter { it.locale.language.lowercase() == lang }
         return mine.sortedWith(compareByDescending<Voice> { it.quality }.thenBy { it.isNetworkConnectionRequired }.thenBy { it.name })
     }
     fun voiceName(): String? = prefs.getString(voiceKey(), null)
+
+    /**
+     * Voice [name] of engine [pkg] (88, the voice dialog lists every engine): Azure goes off, another
+     * engine is switched to first and the voice is put on when it is up (create → applyVoice).
+     */
+    fun chooseVoice(pkg: String, name: String) {
+        if (AzureVoice.on(app)) { AzureVoice.setOn(app, false); azureChanged() }
+        if (pkg != engine() || prefs.getString("engine", null) == null) {
+            setEngine(pkg)
+            prefs.edit().putString(voiceKey(), name).apply()
+        } else {
+            prefs.edit().putString(voiceKey(), name).apply()
+            applyVoice(tts)
+            if (playing) speakFrom(index)
+        }
+    }
+
+    /** Before a sample from another engine (88): reading pauses, nothing else plays. */
+    fun quietForPreview() {
+        if (playing) pause()
+        session++
+        azure?.stop()
+        runCatching { tts.stop() }
+    }
+
+    /** Engines left out of the voice dialog (88, "azure" for Azure). */
+    fun hiddenEngines(): Set<String> = prefs.getStringSet("hidden_engines", emptySet()).orEmpty()
+    fun setHidden(pkg: String, hide: Boolean) {
+        val now = hiddenEngines().toMutableSet().apply { if (hide) add(pkg) else remove(pkg) }
+        prefs.edit().putStringSet("hidden_engines", now).apply()
+    }
 
     fun setVoice(v: Voice?) {
         prefs.edit().apply { if (v == null) remove(voiceKey()) else putString(voiceKey(), v.name) }.apply()

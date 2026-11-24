@@ -52,42 +52,45 @@ private val FALLBACK = listOf(
     AzureVoice.VoiceInfo("ko-KR-InJoonNeural", "인준", "Male", "ko-KR", "Neural"),
 )
 
-/** Azure voices, women and men apart, as chips: a tap picks the voice and plays a sample. */
+/**
+ * Azure voices as rows in the voice dialog (88): ▶ plays a sample, the row picks the voice (and
+ * turns Azure on). Without a key, one row to set it up.
+ */
 @Composable
-fun AzureVoicePanel(ra: ReadAloud, onSetup: () -> Unit) {
+fun AzureVoiceRows(ra: ReadAloud, tab: Int, inUse: Boolean, onSetup: () -> Unit, onPlay: () -> Unit, onPick: () -> Unit) {
     val ctx = LocalContext.current
+    if (!AzureVoice.hasKey(ctx)) {
+        TextButton(onClick = onSetup) { Text("키를 넣고 쓰기 ›") }
+        return
+    }
     var voice by remember { mutableStateOf(AzureVoice.voice(ctx)) }
     var voices by remember { mutableStateOf(FALLBACK) }
     LaunchedEffect(Unit) {
         val key = AzureVoice.key(ctx) ?: return@LaunchedEffect
         runCatching { AzureVoice.voices(key, AzureVoice.region(ctx)) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { voices = it }
     }
-    Text("목소리 · 누르면 골라서 들려줍니다", style = MaterialTheme.typography.labelLarge)
-    listOf("Female" to "여성", "Male" to "남성").forEach { (g, label) ->
-        val group = voices.filter { it.Gender.equals(g, true) }
-        if (group.isEmpty()) return@forEach
-        Row(verticalAlignment = Alignment.Top) {
-            Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 14.dp, end = 8.dp))
-            ChipFlow {
-                group.forEach { v ->
-                    FilterChip(
-                        selected = voice == v.ShortName,
-                        onClick = {
-                            voice = v.ShortName; AzureVoice.setVoice(ctx, v.ShortName); ra.azureChanged()
-                            if (!ra.playing) ra.previewAzure(v.ShortName, SAMPLE)
-                        },
-                        label = { Text(voiceName(v), maxLines = 1) },
-                    )
-                }
-            }
-        }
+    val rows = voices.filter { VoiceGender.shows(tab, VoiceGender.ofAzure(it.Gender)) }
+    if (rows.isEmpty()) Text("이 성별 목소리 없음", style = MaterialTheme.typography.bodySmall)
+    rows.forEach { v ->
+        VoiceRow(
+            name = voiceName(v),
+            gender = VoiceGender.ofAzure(v.Gender),
+            cloud = false,
+            selected = inUse && voice == v.ShortName,
+            onPlay = { onPlay(); ra.previewAzure(v.ShortName, SAMPLE) },
+            onPick = {
+                voice = v.ShortName; AzureVoice.setVoice(ctx, v.ShortName)
+                if (!AzureVoice.on(ctx)) AzureVoice.setOn(ctx, true)
+                ra.azureChanged(); onPick()
+            },
+        )
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "이번 달 이 폰에서 약 ${"%,d".format(AzureVoice.usedThisMonth(ctx))}자 / 무료 ${"%,d".format(AzureVoice.FREE_CHARS)}자",
+            "이번 달 약 ${"%,d".format(AzureVoice.usedThisMonth(ctx))}자 / 무료 ${"%,d".format(AzureVoice.FREE_CHARS)}자",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onSetup) { Text("설정·사용법") }
+        TextButton(onClick = onSetup) { Text("설정") }
     }
 }
 

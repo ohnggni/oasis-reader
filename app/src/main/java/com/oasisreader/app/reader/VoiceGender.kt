@@ -1,0 +1,54 @@
+package com.oasisreader.app.reader
+
+/**
+ * 여성 / 남성 of a phone voice (88). Android's Voice has no gender, so it comes from what is known
+ * about each engine's voices; unknown voices show only under 전체. Azure voices carry their own.
+ * - BookFusion Voice (Supertonic): men Alex · Daniel · James · Robert · Sam, women Emily · Jessica ·
+ *   Lily · Olivia · Sarah (as its own app lists them), or code names with M1 / F1.
+ * - Google: Korean ism · kob and ko-KR-language are women, koc · kod men.
+ * - Any engine whose name says female / male.
+ */
+object VoiceGender {
+    const val FEMALE = 1
+    const val MALE = 2
+
+    private const val BOOKFUSION = "com.bookfusion.voice"
+    private val BF_MEN = setOf("alex", "daniel", "james", "robert", "sam")
+    private val BF_WOMEN = setOf("emily", "jessica", "lily", "olivia", "sarah")
+    private val CODE_M = Regex("(?:^|[-_ ])m\\d")
+    private val CODE_F = Regex("(?:^|[-_ ])f\\d")
+    private val WORD = Regex("[a-z]+")
+    private val G_WOMEN = listOf("ko-kr-x-ism", "ko-kr-x-kob")
+    private val G_MEN = listOf("ko-kr-x-koc", "ko-kr-x-kod")
+    private val MALE_WORD = Regex("(?<![a-z])male")
+
+    /** [FEMALE], [MALE] or null (not known). */
+    fun of(engine: String?, name: String): Int? {
+        val n = name.lowercase()
+        if (engine == BOOKFUSION) {
+            if (CODE_F.containsMatchIn(n)) return FEMALE
+            if (CODE_M.containsMatchIn(n)) return MALE
+            for (w in WORD.findAll(n)) {
+                if (w.value in BF_WOMEN) return FEMALE
+                if (w.value in BF_MEN) return MALE
+            }
+        }
+        if (G_WOMEN.any { n.startsWith(it) } || n == "ko-kr-language") return FEMALE
+        if (G_MEN.any { n.startsWith(it) }) return MALE
+        if ("female" in n) return FEMALE
+        if (MALE_WORD.containsMatchIn(n)) return MALE
+        return null
+    }
+
+    /** Azure's "Female" / "Male". */
+    fun ofAzure(g: String): Int? = when {
+        g.equals("Female", true) -> FEMALE
+        g.equals("Male", true) -> MALE
+        else -> null
+    }
+
+    fun label(g: Int?): String? = when (g) { FEMALE -> "여성"; MALE -> "남성"; else -> null }
+
+    /** Does a voice of gender [g] show under the tab [tab] (0 전체 · 1 여성 · 2 남성)? */
+    fun shows(tab: Int, g: Int?): Boolean = tab == 0 || g == tab
+}
