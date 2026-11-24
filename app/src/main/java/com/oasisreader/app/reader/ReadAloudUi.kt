@@ -125,13 +125,7 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
                         modifier = Modifier.height(32.dp),
                     ) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelLarge) }
                     OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) {
-                        ReadAloud.RATES.forEach { r ->
-                            DropdownMenuItem(
-                                text = { Text(ReadAloud.rateLabel(r)) },
-                                leadingIcon = { com.oasisreader.app.ui.CheckMark(r == ra.rate) },
-                                onClick = { speedOpen = false; ra.changeRate(r) },
-                            )
-                        }
+                        RateSlider(ra)
                     }
                 }
                 SleepButton(ra) { menuOpen = it }
@@ -139,6 +133,32 @@ fun ReadAloudBar(ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () ->
                 BarButton("✕", "소리 내 읽기 끝내기", onClose)
             }
         }
+        }
+    }
+}
+
+/**
+ * 빠르기 (87): − slider + by 0.05 from 0.5 to 2.0. Buttons change it at once; the slider when let
+ * go (each change starts the sentence again).
+ */
+@Composable
+private fun RateSlider(ra: ReadAloud) {
+    var v by remember { mutableStateOf(ra.rate) }
+    LaunchedEffect(ra.rate) { v = ra.rate }
+    val steps = Math.round((ReadAloud.RATE_MAX - ReadAloud.RATE_MIN) / ReadAloud.RATE_STEP) - 1
+    Column(Modifier.width(280.dp).padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Text("빠르기 " + ReadAloud.rateLabel(v), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { ra.changeRate(ra.rate - ReadAloud.RATE_STEP) }, enabled = ra.rate > ReadAloud.RATE_MIN) { Text("−", style = MaterialTheme.typography.titleMedium) }
+            androidx.compose.material3.Slider(
+                value = v,
+                onValueChange = { v = ReadAloud.snapRate(it) },
+                onValueChangeFinished = { ra.changeRate(v) },
+                valueRange = ReadAloud.RATE_MIN..ReadAloud.RATE_MAX,
+                steps = steps,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { ra.changeRate(ra.rate + ReadAloud.RATE_STEP) }, enabled = ra.rate < ReadAloud.RATE_MAX) { Text("+", style = MaterialTheme.typography.titleMedium) }
         }
     }
 }

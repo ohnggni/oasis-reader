@@ -323,7 +323,9 @@ class ReadAloud(context: Context) {
         if (playing) speakFrom(to) else { marked = -1; mark(to) }
     }
 
-    fun changeRate(r: Float) {
+    fun changeRate(r0: Float) {
+        val r = snapRate(r0)
+        if (r == rate) return
         rate = r
         prefs.edit().putFloat(rateKey(), r).apply()
         if (playing) speakFrom(index)
@@ -510,14 +512,21 @@ class ReadAloud(context: Context) {
         fun resumeOn(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("resume_aloud", true)
         fun setResumeOn(c: Context, on: Boolean) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("resume_aloud", on).apply()
         const val MAX_LEN = 3000      // under the engines' input limit (4000)
-        // 0.9~1.15 촘촘하게 (2.6): the range most listening happens in
-        val RATES = listOf(0.5f, 0.75f, 0.9f, 0.95f, 1f, 1.05f, 1.1f, 1.15f, 1.25f, 1.5f, 1.75f, 2f)
+        /** 빠르기 (87): 0.5 ~ 2.0 by 0.05, on a slider (was a list of 12, 2.6). */
+        const val RATE_MIN = 0.5f
+        const val RATE_MAX = 2f
+        const val RATE_STEP = 0.05f
+        /** To the nearest step, inside the range. */
+        fun snapRate(r: Float): Float = (Math.round(r / RATE_STEP) * RATE_STEP).coerceIn(RATE_MIN, RATE_MAX).let { Math.round(it * 100) / 100f }
         val PITCHES = listOf(0.8f to "낮게", 1f to "보통", 1.2f to "높게")
         val SLEEP = listOf(15, 30, 45, 60)
         private val ATTRS = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
-        fun rateLabel(r: Float) = (if (r == r.toInt().toFloat()) "${r.toInt()}.0" else "$r") + "배"
+        fun rateLabel(r: Float): String {
+            val c = Math.round(snapRate(r) * 100)
+            return "${c / 100}." + (if (c % 10 == 0) "${c / 10 % 10}" else "%02d".format(c % 100)) + "배"
+        }
     }
 }
