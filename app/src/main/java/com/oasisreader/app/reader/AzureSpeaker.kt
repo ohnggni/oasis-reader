@@ -125,7 +125,7 @@ class AzureSpeaker(
     }
 
     companion object {
-        const val AHEAD = 2
-        const val MAX_FAILS = 3
+        const val AHEAD = TtsTuning.AZURE_AHEAD
+        const val MAX_FAILS = TtsTuning.AZURE_MAX_FAILS
     }
 }

@@ -523,20 +523,20 @@ class ReadAloud(context: Context) {
         }
 
         /** 문장 사이: 없음 · 짧게 · 보통(2.4의 350ms) · 길게. */
-        val GAP_MS = intArrayOf(0, 150, 350, 600)
+        val GAP_MS = TtsTuning.GAP_MS
         /** After a heading or a chapter number line (85): a step longer than after a sentence. */
-        val HEAD_MS = intArrayOf(150, 350, 600, 900)
+        val HEAD_MS = TtsTuning.HEAD_MS
 
         /** What the engine gets: the heading mark off (85). */
         fun engineText(s: String): String = s.replace(ReadAloudText.HEAD.toString(), "")
-        const val GAP_NORMAL = 2
+        const val GAP_NORMAL = TtsTuning.GAP_NORMAL
 
         const val PREFS = "read_aloud"
 
         const val CUE_SOUND = 1
         const val CUE_TITLE = 2
         const val CUE_BOTH = 3
-        private const val CUE_GAP_MS = 8_000L
+        private const val CUE_GAP_MS = TtsTuning.CUE_GAP_MS
 
         /** The chapter's first line already is its title ("3장" / "3장 멘토와의 만남"): don't read it twice. */
         fun sameStart(title: String, first: String): Boolean {
@@ -549,15 +549,15 @@ class ReadAloud(context: Context) {
         /** 소리로 읽던 책은 다시 열면 이어서 소리로 (82, 설정 › 읽기). On by default. */
         fun resumeOn(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("resume_aloud", true)
         fun setResumeOn(c: Context, on: Boolean) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("resume_aloud", on).apply()
-        const val MAX_LEN = 3000      // under the engines' input limit (4000)
+        const val MAX_LEN = TtsTuning.MAX_LEN
         /** 빠르기 (87): 0.5 ~ 2.0 by 0.05, on a slider (was a list of 12, 2.6). */
-        const val RATE_MIN = 0.5f
-        const val RATE_MAX = 2f
-        const val RATE_STEP = 0.05f
+        const val RATE_MIN = TtsTuning.RATE_MIN
+        const val RATE_MAX = TtsTuning.RATE_MAX
+        const val RATE_STEP = TtsTuning.RATE_STEP
         /** To the nearest step, inside the range. */
         fun snapRate(r: Float): Float = (Math.round(r / RATE_STEP) * RATE_STEP).coerceIn(RATE_MIN, RATE_MAX).let { Math.round(it * 100) / 100f }
-        val PITCHES = listOf(0.8f to "낮게", 1f to "보통", 1.2f to "높게")
-        val SLEEP = listOf(15, 30, 45, 60)
+        val PITCHES = TtsTuning.PITCHES
+        val SLEEP = TtsTuning.SLEEP
         private val ATTRS = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)

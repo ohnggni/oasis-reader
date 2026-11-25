@@ -10,17 +10,14 @@ package com.oasisreader.app.reader
  */
 object ReadAloudText {
 
-    private const val END = ".!?。！？…"
-    private const val CLOSE = ".!?。！？…\"'”’」』)]）〉》"
-    private const val OPEN = "“‘「『（〈《(["
-    /** Closing quotes and brackets: after one, Korean right on (’와, ”라고) means the sentence goes on. */
-    private const val QUOTE_END = "\"'”’」』)]）〉》"
-    private const val COMMA = ",，、"
-    /** Over this a sentence is cut at a comma (2.9: was 120 — book sentences of 150–200 letters were cut mid-phrase). */
-    private const val LONG = 250
-    /** Over this, with no comma, at a space too (text with no sentence ends — 텍본). */
-    private const val HARD = 400
-    private const val MIN = 30
+    private const val END = TtsTuning.TEXT_END
+    private const val CLOSE = TtsTuning.TEXT_CLOSE
+    private const val OPEN = TtsTuning.TEXT_OPEN
+    private const val QUOTE_END = TtsTuning.TEXT_QUOTE_END
+    private const val COMMA = TtsTuning.TEXT_COMMA
+    private const val LONG = TtsTuning.TEXT_LONG
+    private const val HARD = TtsTuning.TEXT_HARD
+    private const val MIN = TtsTuning.TEXT_MIN
     private val INVISIBLE = Regex("[\\u200B-\\u200D\\u2060\\uFEFF]")
 
     private fun space(c: Char) = c.isWhitespace() || c == '\u00A0' || c in '\u200B'..'\u200D' || c == '\u2060' || c == '\uFEFF'

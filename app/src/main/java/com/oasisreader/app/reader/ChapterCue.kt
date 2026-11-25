@@ -19,10 +19,10 @@ import kotlin.random.Random
  * about twice as slow. Played on the media stream, so it comes out wherever the voice does.
  */
 object ChapterCue {
-    private const val RATE = 22050
-    private const val LEN_S = 0.64
+    private const val RATE = TtsTuning.CUE_SAMPLE_RATE
+    private const val LEN_S = TtsTuning.CUE_LEN_S
     /** How long the sound lasts; reading goes on after it. */
-    const val MS = 700L
+    const val MS = TtsTuning.CUE_MS
 
     private val pcm: ShortArray by lazy { make() }
 

@@ -32,7 +32,7 @@ object AzureVoice {
     const val DEFAULT_REGION = "koreacentral"
     const val FREE_CHARS = 500_000
     private const val FORMAT = "audio-24khz-48kbitrate-mono-mp3"
-    private const val CACHE_MAX = 200L * 1024 * 1024
+    private const val CACHE_MAX = TtsTuning.AZURE_CACHE_MAX
 
     /** Regions offered in the setup screen (Korea Central first; others for those who made it elsewhere). */
     val REGIONS = listOf(
