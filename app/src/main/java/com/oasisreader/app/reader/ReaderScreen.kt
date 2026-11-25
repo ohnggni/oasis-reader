@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -59,15 +58,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
-
-internal const val ASSET_HOST = BookStore.ASSET_HOST
-internal const val BAR_DP = 52
-/** Height of the top bar itself; the page keeps reserving [BAR_DP] + 10 so text does not reflow. */
-internal const val TOP_BAR_DP = 60
-internal const val RUNNING_HEAD_DP = 30
-internal const val SIDEWAYS_PAD_DP = 24
-internal const val SIDEWAYS_EXTRA_BOTTOM = 14   // a little more air above the page label
-internal val CompactPad = PaddingValues(horizontal = 8.dp)
 
 /** The reader in its page colours: menus and panels take the theme's light or dark look. */
 @Composable
