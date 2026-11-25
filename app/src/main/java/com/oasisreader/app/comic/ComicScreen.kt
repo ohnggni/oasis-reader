@@ -2,19 +2,12 @@ package com.oasisreader.app.comic
 
 import com.oasisreader.app.ui.EmojiText
 import android.app.Activity
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.BitmapRegionDecoder
-import android.graphics.Rect
-import android.os.Build
-import android.util.LruCache
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -37,7 +30,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -58,10 +50,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -78,7 +68,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -89,13 +78,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.positionChanged
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -111,7 +98,6 @@ import com.oasisreader.app.data.BookStore
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.data.db.ReadingTimeEntity
-import com.oasisreader.app.ui.theme.BarColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -122,46 +108,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
 import kotlin.math.roundToInt
-
-/** A horizontal strip of one page (webtoon pages can be 20 000 px tall: never decode them whole). */
-private data class Slice(val page: Int, val path: String, val w: Int, val top: Int, val bottom: Int) {
-    val h get() = bottom - top
-}
-
-private const val SLICE_SRC = 1600   // source pixels per strip
-
-private fun slicesOf(pkg: ComicPackage): List<Slice> = pkg.pages.flatMapIndexed { i, p ->
-    val n = (p.h + SLICE_SRC - 1) / SLICE_SRC
-    (0 until n).map { k -> Slice(i, p.path, p.w, k * SLICE_SRC, minOf(p.h, (k + 1) * SLICE_SRC)) }
-}
-
-private object StripCache {
-    val mem = object : LruCache<String, Bitmap>(96 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
-    }
-}
-
-/** A PDF "page" path points into book.pdf next to the content folder. */
-private fun pdfOf(file: File) = File(file.parentFile!!.parentFile, PdfPages.FILE)
-
-/** Decode one strip at roughly [targetW] pixels wide. */
-private fun decodeStrip(file: File, s: Slice, targetW: Int): Bitmap? {
-    if (PdfPages.isPdfPage(s.path)) return PdfPages.render(pdfOf(file), PdfPages.indexOf(s.path), targetW, s.top, s.bottom)
-    var sample = 1
-    while (s.w / (sample * 2) >= targetW) sample *= 2
-    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-    return try {
-        val decoder = if (Build.VERSION.SDK_INT >= 31) BitmapRegionDecoder.newInstance(file.path)
-                      else @Suppress("DEPRECATION") BitmapRegionDecoder.newInstance(file.path, false)
-        try { decoder.decodeRegion(Rect(0, s.top, s.w, s.bottom), opts) } finally { decoder.recycle() }
-    } catch (e: Exception) {
-        // formats the region decoder cannot read (gif, …): decode whole, then cut
-        val full = BitmapFactory.decodeFile(file.path, opts) ?: return null
-        val top = s.top / sample
-        val h = (s.h / sample).coerceAtMost(full.height - top).coerceAtLeast(1)
-        Bitmap.createBitmap(full, 0, top.coerceIn(0, full.height - 1), full.width, h)
-    }
-}
 
 /** Vertical, gap-free webtoon viewer for CBZ/ZIP books. */
 @Composable
@@ -1154,128 +1100,3 @@ private fun ComicViewer(
         }
     }
 }
-
-/**
- * 만화·PDF 하단바 (like the book's): the title and "12 / 180" on top, −/+ (one page) and a slider
- * below. While dragging only the number changes; letting go opens that page. Right-to-left books
- * run the slider the other way.
- */
-@Composable
-private fun ComicSeekBar(
-    title: String, page: Int, count: Int, rtl: Boolean, barColor: Color, chrome: Color, navPad: Boolean,
-    onTouch: () -> Unit, onJump: (Int) -> Unit,
-) {
-    var drag by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(page) { drag = null }
-    val p = drag ?: page
-    val last = (count - 1).coerceAtLeast(1)
-    fun go(t: Int) { val c = t.coerceIn(0, count - 1); drag = c; onTouch(); onJump(c) }
-    Surface(color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder(), modifier = Modifier.fillMaxWidth()) {
-        Column(
-            Modifier.let { if (navPad) it.navigationBarsPadding() else it }
-                .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 20.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.labelMedium, color = chrome, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text("${p + 1} / $count", style = MaterialTheme.typography.labelMedium, color = chrome)
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // − + : one page back / on (in reading order)
-                com.oasisreader.app.ui.StepButtons(onMinus = { go(p - 1) }, onPlus = { go(p + 1) }, repeat = false)
-                Spacer(Modifier.width(8.dp))
-                val v = p.toFloat() / last
-                com.oasisreader.app.ui.ThinSlider(
-                    value = if (rtl) 1f - v else v, range = 0f..1f,
-                    onChange = { f -> drag = ((if (rtl) 1f - f else f) * last).roundToInt().coerceIn(0, count - 1); onTouch() },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-    }
-    // let go: open the page the slider rests on
-    LaunchedEffect(drag) {
-        val d = drag ?: return@LaunchedEffect
-        if (d == page) return@LaunchedEffect
-        kotlinx.coroutines.delay(350)
-        onJump(d)
-    }
-}
-
-/**
- * A finished bitmap as a GPU (hardware) bitmap: uploaded here, on the worker thread, instead of
- * on the render thread the first time the page slides into view.
- */
-private fun toGpu(b: Bitmap): Bitmap =
-    runCatching { b.copy(Bitmap.Config.HARDWARE, false) }.getOrNull()?.also { if (it !== b) b.recycle() } ?: b
-
-/**
- * One whole page, decoded to fit [boxW] x [boxH] pixels and shown with ContentScale.Fit.
- * [sharp]: the page is zoomed in — draw it again at higher resolution (the plain one stays until then).
- * [waitIdle]: wait with the work until page turning has stopped (pages prepared off screen).
- */
-@Composable
-private fun PageImage(
-    file: File, page: ComicPage, boxW: Int, boxH: Int, align: Alignment,
-    sharp: Boolean = false, waitIdle: (suspend () -> Unit)? = null,
-) {
-    val base = "${file.path}#page#$boxW#$boxH"
-    val key = if (sharp) "$base#sharp" else base
-    val bmp by produceState(StripCache.mem.get(key) ?: StripCache.mem.get(base), key) {
-        StripCache.mem.get(key)?.let { value = it; return@produceState }
-        val pdf = PdfPages.isPdfPage(page.path)
-        waitIdle?.invoke()
-        val fresh = withContext(if (pdf) PdfPages.dispatcher else Dispatchers.IO) {
-            runCatching {
-                if (pdf) {
-                    // 1x the size on screen; 2.5x when zoomed in
-                    val fit = minOf(boxW.toFloat() / page.w, boxH.toFloat() / page.h) * (if (sharp) 2.5f else 1f)
-                    PdfPages.render(pdfOf(file), PdfPages.indexOf(page.path), (page.w * fit).toInt())
-                } else {
-                    var sample = 1
-                    if (!sharp) while (page.w / (sample * 2) >= boxW && page.h / (sample * 2) >= boxH) sample *= 2
-                    BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
-                }?.let(::toGpu)
-            }.getOrNull()
-        }
-        if (fresh != null) { StripCache.mem.put(key, fresh); value = fresh }
-    }
-    val b = bmp
-    if (b == null) {
-        CircularProgressIndicator(Modifier.padding(24.dp))
-    } else {
-        Image(
-            bitmap = b.asImageBitmap(),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-            alignment = align,
-        )
-    }
-}
-
-@Composable
-private fun Strip(file: File, s: Slice, targetPx: Int) {
-    val key = "${file.path}#${s.top}#$targetPx"
-    val bmp by produceState(StripCache.mem.get(key), key) {
-        if (value != null) return@produceState
-        value = withContext(if (PdfPages.isPdfPage(s.path)) PdfPages.dispatcher else Dispatchers.IO) {
-            runCatching { decodeStrip(file, s, targetPx)?.let(::toGpu) }.getOrNull()
-        }
-            ?.also { StripCache.mem.put(key, it) }
-    }
-    val ratio = s.w.toFloat() / s.h.coerceAtLeast(1)
-    Box(
-        Modifier.fillMaxWidth().aspectRatio(ratio).background(if (bmp == null) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent),
-    ) {
-        bmp?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-    }
-}
-
