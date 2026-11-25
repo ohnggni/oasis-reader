@@ -82,8 +82,6 @@ class MainActivity : ComponentActivity() {
         com.oasisreader.app.ui.DiskCovers.dir = java.io.File(cacheDir, "covers")
         com.oasisreader.app.data.MetaApi.cacheDir = java.io.File(cacheDir, "meta")
         com.oasisreader.app.audio.AudioDownloads.migrateLegacy(this)   // plain kept tracks → encrypted (once)
-        com.oasisreader.app.audio.AudioProgressSync.schedule(this)      // listening places that did not go out yet
-        com.oasisreader.app.data.BookQueue.resumeWaiting(this)          // books still waiting to be received
         // 독후감: text shared from another app (not again when the activity is rebuilt with the same intent)
         // …or book files (공유 › OG Reader, 다른 앱으로 열기), or a tap on the 독서 습관 알림
         fun incoming(i: android.content.Intent?) {
@@ -92,7 +90,14 @@ class MainActivity : ComponentActivity() {
         }
         if (savedInstanceState == null) incoming(intent)
         addOnNewIntentListener { i -> incoming(i) }
-        com.oasisreader.app.stats.ReadingHabit.ensure(this)
+        // nothing on the first screen waits for these: once it has been drawn and the app is idle
+        val later = applicationContext
+        android.os.Looper.myQueue().addIdleHandler {
+            com.oasisreader.app.audio.AudioProgressSync.schedule(later)     // listening places that did not go out yet
+            com.oasisreader.app.data.BookQueue.resumeWaiting(later)         // books still waiting to be received
+            com.oasisreader.app.stats.ReadingHabit.ensure(later)
+            false
+        }
         setContent {
             OasisTheme {
                 // Surface supplies onBackground as the default text colour (dark mode)
