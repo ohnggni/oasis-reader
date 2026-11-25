@@ -1,5 +1,7 @@
 package com.oasisreader.app.comic
 
+import com.oasisreader.app.data.ComicPackage
+import com.oasisreader.app.data.PdfPages
 import com.oasisreader.app.ui.EmojiText
 import android.app.Activity
 import android.widget.Toast

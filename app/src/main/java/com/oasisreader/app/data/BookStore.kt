@@ -4,8 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import com.oasisreader.app.comic.ComicPackage
-import com.oasisreader.app.comic.ComicParser
+import com.oasisreader.app.data.ComicPackage
+import com.oasisreader.app.data.ComicParser
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.epub.EpubPackage
@@ -79,7 +79,7 @@ class BookStore(private val context: Context) {
     private fun originalName(format: String) = when (format) {
         FORMAT_COMIC -> "book.cbz"
         FORMAT_TXT -> "book.txt"
-        FORMAT_PDF -> com.oasisreader.app.comic.PdfPages.FILE
+        FORMAT_PDF -> com.oasisreader.app.data.PdfPages.FILE
         else -> "book.epub"
     }
 
@@ -91,7 +91,7 @@ class BookStore(private val context: Context) {
      * an EPUB folder. Returns the book's format.
      */
     fun extract(src: File, into: File, title: String?): String {
-        if (com.oasisreader.app.comic.PdfPages.isPdf(src)) {
+        if (com.oasisreader.app.data.PdfPages.isPdf(src)) {
             into.mkdirs()   // nothing to unpack: pages are drawn from book.pdf beside it
             return FORMAT_PDF
         }
@@ -106,15 +106,15 @@ class BookStore(private val context: Context) {
     /** Parse an extracted archive into [into] (book.json / comic.json + cover). */
     private fun describe(format: String, into: File, content: File, titleHint: String?, fallbackTitle: String? = null): Described {
         if (format == FORMAT_PDF) {
-            val pdf = File(content.parentFile, com.oasisreader.app.comic.PdfPages.FILE)
-            val pkg = com.oasisreader.app.comic.ComicPackage(
+            val pdf = File(content.parentFile, com.oasisreader.app.data.PdfPages.FILE)
+            val pkg = com.oasisreader.app.data.ComicPackage(
                 title = titleHint?.ifBlank { null } ?: fallbackTitle ?: "PDF",
-                pages = com.oasisreader.app.comic.PdfPages.pages(pdf),
+                pages = com.oasisreader.app.data.PdfPages.pages(pdf),
             )
             File(into, "comic.json").writeText(Http.json.encodeToString(ComicPackage.serializer(), pkg))
             val cover = runCatching {
                 val p0 = pkg.pages.first()
-                val bmp = com.oasisreader.app.comic.PdfPages.render(pdf, 0, (THUMB_H * p0.w.toFloat() / p0.h).toInt().coerceIn(100, 1200))
+                val bmp = com.oasisreader.app.data.PdfPages.render(pdf, 0, (THUMB_H * p0.w.toFloat() / p0.h).toInt().coerceIn(100, 1200))
                 File(into, "cover.jpg").outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
             }.isSuccess
             return Described(pkg.title, null, null, null, cover)
@@ -236,7 +236,7 @@ class BookStore(private val context: Context) {
         val tmp = File(d, "content.tmp").apply { deleteRecursively() }
         val format = extract(source, tmp, book?.title)
         if (downloaded != null) downloaded.copyTo(File(d, originalName(format)), overwrite = true)
-        if (format == FORMAT_PDF) com.oasisreader.app.comic.PdfPages.close()
+        if (format == FORMAT_PDF) com.oasisreader.app.data.PdfPages.close()
         val described = describe(format, d, tmp, book?.title)
         contentDir(id).deleteRecursively()
         if (!tmp.renameTo(contentDir(id))) throw IOException("책을 저장하지 못했습니다")
@@ -346,7 +346,7 @@ class BookStore(private val context: Context) {
     private fun dropFiles(id: String) {
         synchronized(packageCache) { packageCache.remove(id) }
         synchronized(comicCache) { comicCache.remove(id) }
-        if (originalOf(id)?.name == com.oasisreader.app.comic.PdfPages.FILE) com.oasisreader.app.comic.PdfPages.close()
+        if (originalOf(id)?.name == com.oasisreader.app.data.PdfPages.FILE) com.oasisreader.app.data.PdfPages.close()
         contentDir(id).deleteRecursively()
         ORIGINALS.forEach { File(dir(id), it).delete() }
     }

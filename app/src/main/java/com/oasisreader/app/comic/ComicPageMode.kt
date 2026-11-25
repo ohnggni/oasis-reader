@@ -1,5 +1,6 @@
 package com.oasisreader.app.comic
 
+import com.oasisreader.app.data.ComicPackage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown

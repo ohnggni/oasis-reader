@@ -60,7 +60,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
-import com.oasisreader.app.comic.ComicParser
+import com.oasisreader.app.data.ComicParser
 import com.oasisreader.app.data.ContinueReading
 import com.oasisreader.app.data.Downloads
 import com.oasisreader.app.data.VolumeRange

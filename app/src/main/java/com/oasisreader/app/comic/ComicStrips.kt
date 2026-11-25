@@ -1,5 +1,8 @@
 package com.oasisreader.app.comic
 
+import com.oasisreader.app.data.ComicPage
+import com.oasisreader.app.data.ComicPackage
+import com.oasisreader.app.data.PdfPages
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder

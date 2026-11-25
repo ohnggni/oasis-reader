@@ -82,7 +82,7 @@ object FolderImport {
             }
         }
         walk(rootId, rootName, 0)
-        out.sortWith { a, b -> com.oasisreader.app.comic.ComicParser.naturalOrder.compare(a.folder + "/" + a.name, b.folder + "/" + b.name) }
+        out.sortWith { a, b -> com.oasisreader.app.data.ComicParser.naturalOrder.compare(a.folder + "/" + a.name, b.folder + "/" + b.name) }
         return rootName to out
     }
 

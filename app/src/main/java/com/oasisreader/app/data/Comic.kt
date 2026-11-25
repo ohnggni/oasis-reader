@@ -1,4 +1,4 @@
-package com.oasisreader.app.comic
+package com.oasisreader.app.data
 
 import android.graphics.BitmapFactory
 import kotlinx.serialization.Serializable
