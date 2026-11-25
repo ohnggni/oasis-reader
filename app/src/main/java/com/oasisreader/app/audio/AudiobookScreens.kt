@@ -227,7 +227,7 @@ fun AudiobookScreen(serverId: String, onBack: () -> Unit, onPlayer: () -> Unit, 
                     cursors[lib] = pg + 1
                     if (!more) done += lib
                 }
-                val cmp = compareBy<AudioItem, String>(com.oasisreader.app.ui.ShelfSearch.natural) { sortKey(it) }
+                val cmp = compareBy<AudioItem, String>(com.oasisreader.app.data.ShelfSearch.natural) { sortKey(it) }
                 val sorted = if (libs.size > 1) batch.sortedWith(if (sortDesc) cmp.reversed() else cmp) else batch
                 items.addAll(sorted); added += sorted.size
                 page++

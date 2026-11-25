@@ -175,7 +175,7 @@ object Downloads {
                     }
                     BookStore.get(app).import(tmp, sourceUrl = url, opdsId = url, titleHint = title, fallbackTitle = title, pinned = pinned, moveSource = true)
                 }
-                collectionId?.let { com.oasisreader.app.ui.ShelfCollections.set(com.oasisreader.app.data.db.AppDatabase.get(app), it, book.id, true) }
+                collectionId?.let { com.oasisreader.app.data.ShelfCollections.set(com.oasisreader.app.data.db.AppDatabase.get(app), it, book.id, true) }
                 recordOrigin(app, book.id, origin)
                 afterImport(app, book, pinned, onDone)
             } catch (e: Exception) {

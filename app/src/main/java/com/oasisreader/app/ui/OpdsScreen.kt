@@ -1,5 +1,7 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.ShelfCollections
+import com.oasisreader.app.data.ShelfSearch
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.alpha

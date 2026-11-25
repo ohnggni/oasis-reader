@@ -229,7 +229,7 @@ fun MetaCatalogScreen(
             if (store.hasFiles(book.id)) {
                 db.books().setPinned(book.id, true)
                 if (!quiet) android.widget.Toast.makeText(context, "서재에 보관합니다: ${book.title}", android.widget.Toast.LENGTH_SHORT).show()
-                collectionId?.let { com.oasisreader.app.ui.ShelfCollections.set(db, it, book.id, true) }
+                collectionId?.let { com.oasisreader.app.data.ShelfCollections.set(db, it, book.id, true) }
             } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
         } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
     }
@@ -240,13 +240,13 @@ fun MetaCatalogScreen(
      */
     fun keepSeries(list: List<MetaBook>, collection: String?) {
         scope.launch {
-            val col = collection?.let { com.oasisreader.app.ui.ShelfCollections.findOrCreate(db, it) }
+            val col = collection?.let { com.oasisreader.app.data.ShelfCollections.findOrCreate(db, it) }
             var n = 0
             list.forEach { b ->
                 val href = api.downloadUrl(b) ?: return@forEach
                 if (!b.readable) return@forEach
                 if (href !in pinnedSet) { keep(b, quiet = true, collectionId = col?.id); n++ }
-                else if (col != null) db.books().findBySource(null, href)?.let { com.oasisreader.app.ui.ShelfCollections.set(db, col.id, it.id, true) }
+                else if (col != null) db.books().findBySource(null, href)?.let { com.oasisreader.app.data.ShelfCollections.set(db, col.id, it.id, true) }
             }
             android.widget.Toast.makeText(
                 context,
@@ -518,7 +518,7 @@ fun MetaCatalogScreen(
                             modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
                         )
                         Spacer(Modifier.height(4.dp))
-                        Text(com.oasisreader.app.ui.ShelfSearch.breakAnywhere(s.seriesName), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(com.oasisreader.app.data.ShelfSearch.breakAnywhere(s.seriesName), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(
                             listOfNotNull("${s.bookCount}권", metaDate(s.latestMtime)).joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,

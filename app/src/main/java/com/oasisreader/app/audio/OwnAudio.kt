@@ -10,7 +10,7 @@ import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.remote.Remote
 import com.oasisreader.app.remote.RemoteFs
-import com.oasisreader.app.ui.ShelfSearch
+import com.oasisreader.app.data.ShelfSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable

@@ -1,4 +1,4 @@
-package com.oasisreader.app.ui
+package com.oasisreader.app.data
 
 /**
  * 서재 검색: ignores spaces and case, and a Korean initial consonant in the query (ㅇㅍㅍㅅ)

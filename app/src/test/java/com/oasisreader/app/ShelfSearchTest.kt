@@ -1,6 +1,6 @@
 package com.oasisreader.app
 
-import com.oasisreader.app.ui.ShelfSearch
+import com.oasisreader.app.data.ShelfSearch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

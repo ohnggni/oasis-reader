@@ -1,7 +1,7 @@
 package com.oasisreader.app.data
 
 import com.oasisreader.app.data.db.BookEntity
-import com.oasisreader.app.ui.ShelfSearch
+import com.oasisreader.app.data.ShelfSearch
 
 /**
  * 이어 읽기 (TODO 65): in a list of volumes, the one to open to carry on reading.

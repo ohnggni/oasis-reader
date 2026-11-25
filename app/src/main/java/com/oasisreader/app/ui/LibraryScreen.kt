@@ -1,5 +1,7 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.ShelfCollections
+import com.oasisreader.app.data.ShelfSearch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background

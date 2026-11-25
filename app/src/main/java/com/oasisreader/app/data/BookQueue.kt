@@ -224,7 +224,7 @@ object BookQueue {
             if (job.meta && (book.format == BookStore.FORMAT_COMIC || book.format == BookStore.FORMAT_PDF) && book.title != job.title) {
                 db.books().rename(book.id, job.title); book = book.copy(title = job.title)
             }
-            job.collectionId?.let { com.oasisreader.app.ui.ShelfCollections.set(db, it, book.id, true) }
+            job.collectionId?.let { com.oasisreader.app.data.ShelfCollections.set(db, it, book.id, true) }
             Downloads.recordOrigin(app, book.id, job.origin)
             change(app) { l -> l.filterNot { it.key == job.key } }
             Downloads.setProgress(job.key, null)

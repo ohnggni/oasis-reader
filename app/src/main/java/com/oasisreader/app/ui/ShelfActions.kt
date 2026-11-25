@@ -1,5 +1,6 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.ShelfCollections
 import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column

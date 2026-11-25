@@ -51,8 +51,8 @@ import com.oasisreader.app.ui.DownloadControl
 import com.oasisreader.app.ui.EmojiButton
 import com.oasisreader.app.ui.MiniChip
 import com.oasisreader.app.ui.Notice
-import com.oasisreader.app.ui.ShelfCollections
-import com.oasisreader.app.ui.ShelfSearch
+import com.oasisreader.app.data.ShelfCollections
+import com.oasisreader.app.data.ShelfSearch
 import com.oasisreader.app.ui.TopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

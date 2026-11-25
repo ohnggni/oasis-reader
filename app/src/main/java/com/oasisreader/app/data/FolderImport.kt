@@ -17,7 +17,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.oasisreader.app.R
 import com.oasisreader.app.data.db.AppDatabase
-import com.oasisreader.app.ui.ShelfCollections
+import com.oasisreader.app.data.ShelfCollections
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File

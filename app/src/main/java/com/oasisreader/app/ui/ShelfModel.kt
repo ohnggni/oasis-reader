@@ -1,5 +1,6 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.ShelfSearch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.oasisreader.app.audio.AudioLibraryLink

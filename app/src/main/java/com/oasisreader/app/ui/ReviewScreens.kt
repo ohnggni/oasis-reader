@@ -1,5 +1,6 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.ShelfSearch
 import android.content.Context
 import android.content.Intent
 import android.net.Uri

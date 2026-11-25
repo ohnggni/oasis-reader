@@ -1,5 +1,6 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.ShelfSearch
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

@@ -6,8 +6,8 @@ import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.meta.MetaApi
 import com.oasisreader.app.opds.OpdsClient
 import com.oasisreader.app.opds.OpdsEntry
-import com.oasisreader.app.ui.ShelfCollections
-import com.oasisreader.app.ui.ShelfSearch
+import com.oasisreader.app.data.ShelfCollections
+import com.oasisreader.app.data.ShelfSearch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
