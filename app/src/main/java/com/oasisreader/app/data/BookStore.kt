@@ -124,8 +124,8 @@ class BookStore(private val context: Context) {
             File(into, "book.json").writeText(Http.json.encodeToString(EpubPackage.serializer(), pkg))
             val cover = pkg.coverPath?.let { makeThumb(File(content, it), File(into, "cover.jpg")) } == true
             // "unknown title" & co. in the OPF: the catalog's name or the file name is better
-            val title = pkg.title.takeUnless { com.oasisreader.app.opds.OpdsClient.isPoorTitle(it) }
-                ?: titleHint?.takeUnless { com.oasisreader.app.opds.OpdsClient.isPoorTitle(it) }
+            val title = pkg.title.takeUnless { com.oasisreader.app.data.OpdsClient.isPoorTitle(it) }
+                ?: titleHint?.takeUnless { com.oasisreader.app.data.OpdsClient.isPoorTitle(it) }
                 ?: fallbackTitle ?: pkg.title
             Described(title, pkg.author, pkg.language, pkg.identifier, cover)
         } else {

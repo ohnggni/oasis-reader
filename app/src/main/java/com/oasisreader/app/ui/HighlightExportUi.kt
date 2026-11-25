@@ -30,7 +30,7 @@ import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.data.db.ReadingTimeEntity
 import com.oasisreader.app.epub.EpubParser
-import com.oasisreader.app.meta.MetaApi
+import com.oasisreader.app.data.MetaApi
 import com.oasisreader.app.data.HighlightExport
 import com.oasisreader.app.data.db.AppDatabase
 import kotlinx.coroutines.Dispatchers

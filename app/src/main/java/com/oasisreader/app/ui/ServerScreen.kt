@@ -37,7 +37,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.oasisreader.app.data.Server
 import com.oasisreader.app.data.ServerSettings
-import com.oasisreader.app.opds.OpdsClient
+import com.oasisreader.app.data.OpdsClient
 import kotlinx.coroutines.launch
 
 /** Add (serverId == null) or edit one OPDS catalog. */
@@ -220,7 +220,7 @@ fun ServerScreen(serverId: String?, onDone: () -> Unit) {
                             } else try {
                                 val feed = OpdsClient(current()).fetch(current().url)
                                 val metaLine = if (current().metaUrl.isBlank()) "" else try {
-                                    val libs = com.oasisreader.app.meta.MetaApi(current()).libraries()
+                                    val libs = com.oasisreader.app.data.MetaApi(current()).libraries()
                                     "\n✅ 메타 API (${if (current().metaDb == "adult") "성인" else "일반"} DB) · 라이브러리 ${libs.size}개"
                                 } catch (e: Exception) {
                                     "\n⚠️ 메타 API: ${e.message ?: e.javaClass.simpleName}"

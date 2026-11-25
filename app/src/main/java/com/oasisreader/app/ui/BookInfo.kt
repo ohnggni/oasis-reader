@@ -28,8 +28,8 @@ import com.oasisreader.app.data.BookStore
 import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.epub.EpubParser
-import com.oasisreader.app.meta.MetaApi
-import com.oasisreader.app.meta.MetaBook
+import com.oasisreader.app.data.MetaApi
+import com.oasisreader.app.data.MetaBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat

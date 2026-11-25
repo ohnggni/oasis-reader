@@ -1,4 +1,4 @@
-package com.oasisreader.app.opds
+package com.oasisreader.app.data
 
 import android.util.Xml
 import com.oasisreader.app.data.Http

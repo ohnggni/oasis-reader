@@ -1,9 +1,10 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.data.MetaApi
 import android.content.Context
 import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.AppDatabase
-import com.oasisreader.app.opds.OpdsClient
+import com.oasisreader.app.data.OpdsClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

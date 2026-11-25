@@ -1,8 +1,8 @@
 package com.oasisreader.app.data
 
 import android.content.Context
-import com.oasisreader.app.opds.OpdsClient
-import com.oasisreader.app.opds.OpdsEntry
+import com.oasisreader.app.data.OpdsClient
+import com.oasisreader.app.data.OpdsEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -202,7 +202,7 @@ object Downloads {
             }
         } else {
             val server = ServerSettings(app).forUrl(url) ?: Server("", "", "", "", "")
-            com.oasisreader.app.opds.OpdsClient(server).download(url, dest, onProgress)
+            com.oasisreader.app.data.OpdsClient(server).download(url, dest, onProgress)
         }
     }
 

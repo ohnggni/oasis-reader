@@ -1,5 +1,7 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.data.MetaLibrary
+import com.oasisreader.app.data.MetaApi
 import com.oasisreader.app.ui.OgMenu
 
 import com.oasisreader.app.ui.EmojiText

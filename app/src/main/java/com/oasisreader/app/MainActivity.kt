@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
         com.oasisreader.app.ui.theme.UiScale.load(this)
         com.oasisreader.app.data.FontManager(this)   // loads the user's own fonts
         com.oasisreader.app.ui.DiskCovers.dir = java.io.File(cacheDir, "covers")
-        com.oasisreader.app.meta.MetaApi.cacheDir = java.io.File(cacheDir, "meta")
+        com.oasisreader.app.data.MetaApi.cacheDir = java.io.File(cacheDir, "meta")
         com.oasisreader.app.audio.AudioDownloads.migrateLegacy(this)   // plain kept tracks → encrypted (once)
         com.oasisreader.app.audio.AudioProgressSync.schedule(this)      // listening places that did not go out yet
         com.oasisreader.app.data.BookQueue.resumeWaiting(this)          // books still waiting to be received
@@ -268,7 +268,7 @@ private fun App() {
             com.oasisreader.app.data.BookOrigin.META -> {
                 val series = o.series ?: return
                 val lib = o.library ?: return
-                com.oasisreader.app.meta.MetaCatalogNav.pending[sid] = com.oasisreader.app.meta.MetaSeries(lib, series)
+                com.oasisreader.app.meta.MetaCatalogNav.pending[sid] = com.oasisreader.app.data.MetaSeries(lib, series)
                 route = Route.CATALOG_OF + sid
             }
             com.oasisreader.app.data.BookOrigin.REMOTE -> {

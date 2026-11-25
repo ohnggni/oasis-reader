@@ -3,9 +3,9 @@ package com.oasisreader.app.data
 import android.content.Context
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.BookEntity
-import com.oasisreader.app.meta.MetaApi
-import com.oasisreader.app.opds.OpdsClient
-import com.oasisreader.app.opds.OpdsEntry
+import com.oasisreader.app.data.MetaApi
+import com.oasisreader.app.data.OpdsClient
+import com.oasisreader.app.data.OpdsEntry
 import com.oasisreader.app.data.ShelfCollections
 import com.oasisreader.app.data.ShelfSearch
 import kotlinx.coroutines.flow.first

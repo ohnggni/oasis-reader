@@ -20,7 +20,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.oasisreader.app.R
 import com.oasisreader.app.data.db.AppDatabase
-import com.oasisreader.app.opds.OpdsClient
+import com.oasisreader.app.data.OpdsClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer

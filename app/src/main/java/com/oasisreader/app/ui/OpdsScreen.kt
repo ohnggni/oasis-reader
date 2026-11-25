@@ -62,9 +62,9 @@ import com.oasisreader.app.data.Downloads
 import com.oasisreader.app.data.VolumeRange
 import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.AppDatabase
-import com.oasisreader.app.opds.OpdsClient
-import com.oasisreader.app.opds.OpdsEntry
-import com.oasisreader.app.opds.OpdsFeed
+import com.oasisreader.app.data.OpdsClient
+import com.oasisreader.app.data.OpdsEntry
+import com.oasisreader.app.data.OpdsFeed
 import kotlinx.coroutines.launch
 
 private sealed interface FeedState {

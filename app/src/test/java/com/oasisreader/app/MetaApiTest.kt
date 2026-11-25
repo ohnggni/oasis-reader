@@ -1,11 +1,11 @@
 package com.oasisreader.app
 
 import com.oasisreader.app.data.Http
-import com.oasisreader.app.meta.MetaApi
-import com.oasisreader.app.meta.MetaBook
-import com.oasisreader.app.meta.MetaPage
-import com.oasisreader.app.meta.MetaSeries
-import com.oasisreader.app.opds.OpdsClient
+import com.oasisreader.app.data.MetaApi
+import com.oasisreader.app.data.MetaBook
+import com.oasisreader.app.data.MetaPage
+import com.oasisreader.app.data.MetaSeries
+import com.oasisreader.app.data.OpdsClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

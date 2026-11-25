@@ -73,7 +73,7 @@ class FtpFs(server: Server, tls: Boolean) : RemoteFs {
                     override fun write(b: ByteArray, off: Int, len: Int) {
                         fos.write(b, off, len)
                         done += len; since += len
-                        if (done > com.oasisreader.app.opds.OpdsClient.MAX_BOOK_BYTES) throw IOException("파일이 너무 큽니다")
+                        if (done > com.oasisreader.app.data.OpdsClient.MAX_BOOK_BYTES) throw IOException("파일이 너무 큽니다")
                         onProgress(done, total)
                         if (since >= 512 * 1024) { since = 0; if (stop()) throw Stopped() }
                     }

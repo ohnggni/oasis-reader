@@ -1,4 +1,4 @@
-package com.oasisreader.app.meta
+package com.oasisreader.app.data
 
 import com.oasisreader.app.data.Http
 import com.oasisreader.app.data.HttpException

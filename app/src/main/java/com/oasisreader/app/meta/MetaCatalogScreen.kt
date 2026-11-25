@@ -1,5 +1,9 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.data.MetaLibrary
+import com.oasisreader.app.data.MetaSeries
+import com.oasisreader.app.data.MetaBook
+import com.oasisreader.app.data.MetaApi
 import com.oasisreader.app.ui.OgMenu
 
 import com.oasisreader.app.ui.EmojiText
@@ -67,7 +71,7 @@ import com.oasisreader.app.data.VolumeRange
 import com.oasisreader.app.data.Server
 import com.oasisreader.app.data.ServerSettings
 import com.oasisreader.app.data.db.AppDatabase
-import com.oasisreader.app.opds.OpdsClient
+import com.oasisreader.app.data.OpdsClient
 import com.oasisreader.app.ui.EmojiButton
 import com.oasisreader.app.ui.RemoteCover
 import com.oasisreader.app.ui.TopBar

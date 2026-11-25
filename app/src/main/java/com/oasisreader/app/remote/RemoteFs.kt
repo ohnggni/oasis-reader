@@ -2,7 +2,7 @@ package com.oasisreader.app.remote
 
 import android.content.Context
 import com.oasisreader.app.data.Server
-import com.oasisreader.app.opds.OpdsClient
+import com.oasisreader.app.data.OpdsClient
 import java.io.Closeable
 import java.io.File
 import java.io.IOException

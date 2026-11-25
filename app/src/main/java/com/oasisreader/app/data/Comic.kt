@@ -78,7 +78,7 @@ object ComicParser {
             ?: fallbackTitle?.ifBlank { null }
             ?: "만화"
         // keep the volume number the catalog gave ("[만화] 1") when the better name lacks it
-        val vol = fallbackTitle?.let { com.oasisreader.app.opds.OpdsClient.numberIn(it) }
+        val vol = fallbackTitle?.let { com.oasisreader.app.data.OpdsClient.numberIn(it) }
         if (vol != null && title != fallbackTitle && !Regex("(^|\\D)0*$vol(\\D|$)").containsMatchIn(title)) title = "$title ${vol}권"
         return ComicPackage(title = title, author = tag("Writer"), pages = pages)
     }

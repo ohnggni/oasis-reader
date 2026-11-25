@@ -1,8 +1,9 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.data.MetaApi
 import android.content.Context
 import com.oasisreader.app.data.Server
-import com.oasisreader.app.opds.OpdsClient
+import com.oasisreader.app.data.OpdsClient
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
