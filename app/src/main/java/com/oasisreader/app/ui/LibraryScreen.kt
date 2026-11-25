@@ -25,10 +25,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -299,31 +297,7 @@ fun LibraryScreen(
             onAll = { selected = if (selected.containsAll(visibleIds)) selected - visibleIds.toSet() else selected + visibleIds },
         ) else TopBar("Reader", brand = true, brandSub = brandSub) {
             // two buttons only, so "OG Reader" fits on narrow bar-type phones too
-            var menu by remember { mutableStateOf(false) }
-            Box {
-                IconButton(onClick = { menu = true }) {
-                    Icon(androidx.compose.material.icons.Icons.Default.Menu, contentDescription = "메뉴")
-                }
-                OgMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    // 간결성 (81): icon tiles like the reading screen's ☰ — 가져오기 한 줄, 도구 한 줄
-                    fun T(e: String, l: String, f: () -> Unit) = PanelTile(e, l) { menu = false; f() }
-                    Column(Modifier.width(320.dp).padding(horizontal = 4.dp)) {
-                        Text(
-                            "가져오기", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 12.dp, top = 2.dp),
-                        )
-                        PanelGrid(listOf(
-                            T("☁️", "서버", onCatalog), T("📄", "파일", onImportFile),
-                            T("📁", "폴더", onImportFolder), T("🎧", "오디오북", onImportAudio),
-                        ), columns = 5)
-                        HorizontalDivider(Modifier.padding(vertical = 2.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                        PanelGrid(listOf(
-                            T("🖍️", "하이라이트", onHighlights), T("📝", "독후감", onReviews), T("📊", "통계", onStats),
-                            T("📦", "보관함", onStorage), T("⬇️", "받기", onDownloads),
-                        ), columns = 5)
-                    }
-                }
-            }
+            LibraryMenuButton(onCatalog, onImportFile, onImportFolder, onImportAudio, onHighlights, onReviews, onStats, onStorage, onDownloads)
             EmojiButton("⚙️", "설정", onSettings)
         }
         UpdateBanner()
