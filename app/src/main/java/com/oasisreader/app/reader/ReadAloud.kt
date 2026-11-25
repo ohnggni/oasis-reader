@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 class ReadAloud(context: Context) {
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    private val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val prefs = TtsPrefs.of(app)
     private val audio = app.getSystemService(AudioManager::class.java)
 
     var onSentence: (Int) -> Unit = {}
@@ -53,14 +53,14 @@ class ReadAloud(context: Context) {
     val sentence: Int get() = (index - lead).coerceAtLeast(0)
 
     /** 장 넘어갈 때 (83): 0 없음 · 1 소리 · 2 제목 · 3 소리 + 제목. */
-    var chapterCue by mutableIntStateOf(prefs.getInt("chapter_cue", CUE_BOTH))
+    var chapterCue by mutableIntStateOf(prefs.getInt(TtsPrefs.CHAPTER_CUE, CUE_BOTH))
         private set
-    fun changeChapterCue(v: Int) { chapterCue = v; prefs.edit().putInt("chapter_cue", v).apply() }
+    fun changeChapterCue(v: Int) { chapterCue = v; prefs.edit().putInt(TtsPrefs.CHAPTER_CUE, v).apply() }
     var count by mutableIntStateOf(0)
         private set
-    var rate by mutableFloatStateOf(prefs.getFloat("rate", 1f))
+    var rate by mutableFloatStateOf(prefs.getFloat(TtsPrefs.RATE, 1f))
         private set
-    var pitch by mutableFloatStateOf(prefs.getFloat("pitch", 1f))
+    var pitch by mutableFloatStateOf(prefs.getFloat(TtsPrefs.PITCH, 1f))
         private set
 
     /** 이 책만 따로 (82): the book open now, and whether it keeps its own 빠르기 · 목소리. */
@@ -68,14 +68,14 @@ class ReadAloud(context: Context) {
         private set
     var own by mutableStateOf(false)
         private set
-    private fun rateKey() = if (own && bookId != null) "rate_$bookId" else "rate"
-    private fun voiceKey() = if (own && bookId != null) "voice_$bookId" else "voice"
+    private fun rateKey() = bookId.let { id -> if (own && id != null) TtsPrefs.rateOf(id) else TtsPrefs.RATE }
+    private fun voiceKey() = bookId.let { id -> if (own && id != null) TtsPrefs.voiceOf(id) else TtsPrefs.VOICE }
 
     /** The book being read: its own 빠르기 · 목소리 when it has them, else the shared ones. */
     fun useBook(id: String) {
         bookId = id
-        own = prefs.getBoolean("own_$id", false)
-        rate = prefs.getFloat(rateKey(), prefs.getFloat("rate", 1f))
+        own = prefs.getBoolean(TtsPrefs.ownOf(id), false)
+        rate = prefs.getFloat(rateKey(), prefs.getFloat(TtsPrefs.RATE, 1f))
         runCatching { applyVoice(tts) }
     }
 
@@ -85,9 +85,9 @@ class ReadAloud(context: Context) {
         if (on == own) return
         prefs.edit().apply {
             if (on) {
-                putBoolean("own_$id", true).putFloat("rate_$id", rate)
-                prefs.getString("voice", null)?.let { putString("voice_$id", it) }
-            } else remove("own_$id").remove("rate_$id").remove("voice_$id")
+                putBoolean(TtsPrefs.ownOf(id), true).putFloat(TtsPrefs.rateOf(id), rate)
+                prefs.getString(TtsPrefs.VOICE, null)?.let { putString(TtsPrefs.voiceOf(id), it) }
+            } else remove(TtsPrefs.ownOf(id)).remove(TtsPrefs.rateOf(id)).remove(TtsPrefs.voiceOf(id))
         }.apply()
         own = on
         rate = prefs.getFloat(rateKey(), 1f)
@@ -96,10 +96,10 @@ class ReadAloud(context: Context) {
     }
 
     /** 소리로 읽던 책 (82): it was being read aloud when last closed. */
-    fun markAloud(on: Boolean) { bookId?.let { prefs.edit().putBoolean("aloud_$it", on).apply() } }
-    fun shouldResume(): Boolean = bookId?.let { resumeOn(app) && prefs.getBoolean("aloud_$it", false) } ?: false
+    fun markAloud(on: Boolean) { bookId?.let { prefs.edit().putBoolean(TtsPrefs.aloudOf(it), on).apply() } }
+    fun shouldResume(): Boolean = bookId?.let { resumeOn(app) && prefs.getBoolean(TtsPrefs.aloudOf(it), false) } ?: false
     /** Numbers and signs written out in Hangul before speaking ([ReadAloudNormalize]). */
-    var normalize by mutableStateOf(prefs.getBoolean("normalize", true))
+    var normalize by mutableStateOf(prefs.getBoolean(TtsPrefs.NORMALIZE, true))
         private set
     /** Sleep timer: stop at this time (ms), or at the end of the chapter. */
     var sleepAt by mutableLongStateOf(0L)
@@ -124,7 +124,7 @@ class ReadAloud(context: Context) {
 
     private fun create(): TextToSpeech {
         available = null
-        val engine = prefs.getString("engine", null)
+        val engine = prefs.getString(TtsPrefs.ENGINE, null)
         lateinit var t: TextToSpeech
         val init = TextToSpeech.OnInitListener { status ->
             main.post {
@@ -342,7 +342,7 @@ class ReadAloud(context: Context) {
     /** Turn number reading on / off; the rest of the chapter is read the new way. */
     fun changeNormalize(on: Boolean) {
         normalize = on
-        prefs.edit().putBoolean("normalize", on).apply()
+        prefs.edit().putBoolean(TtsPrefs.NORMALIZE, on).apply()
         respeak()
     }
 
@@ -355,16 +355,16 @@ class ReadAloud(context: Context) {
 
     fun changePitch(p: Float) {
         pitch = p
-        prefs.edit().putFloat("pitch", p).apply()
+        prefs.edit().putFloat(TtsPrefs.PITCH, p).apply()
         if (playing) speakFrom(index)
     }
 
     /** Engines on the phone (Samsung, Google …): package name to label. */
     fun engines(): List<Pair<String, String>> = runCatching { tts.engines.map { it.name to it.label } }.getOrDefault(emptyList())
-    fun engine(): String? = prefs.getString("engine", null) ?: runCatching { tts.defaultEngine }.getOrNull()
+    fun engine(): String? = prefs.getString(TtsPrefs.ENGINE, null) ?: runCatching { tts.defaultEngine }.getOrNull()
 
     /** 문장 사이 쉼 (84, 2.9): kept per engine (Azure has its own) — engines add their own silence, BookFusion a lot. */
-    private fun gapKey() = "gap_" + (if (usesAzure) "azure" else engine() ?: "default")
+    private fun gapKey() = TtsPrefs.gap(usesAzure, engine())
     fun gapLevel(): Int = prefs.getInt(gapKey(), GAP_NORMAL)
     fun changeGap(level: Int) {
         prefs.edit().putInt(gapKey(), level).apply()
@@ -373,11 +373,11 @@ class ReadAloud(context: Context) {
     fun gapFor(s: String, rate: Float): Long = gapAfter(s, rate, gapLevel())
 
     fun setEngine(pkg: String) {
-        if (pkg == engine() && prefs.getString("engine", null) != null) return
+        if (pkg == engine() && prefs.getString(TtsPrefs.ENGINE, null) != null) return
         val wasPlaying = playing
         session++
         runCatching { tts.stop(); tts.shutdown() }
-        prefs.edit().putString("engine", pkg).remove("voice").apply { bookId?.let { remove("voice_$it") } }.apply()
+        prefs.edit().putString(TtsPrefs.ENGINE, pkg).remove(TtsPrefs.VOICE).apply { bookId?.let { remove(TtsPrefs.voiceOf(it)) } }.apply()
         tts = create()
         if (wasPlaying) pending = { speakFrom(index) }
     }
@@ -411,7 +411,7 @@ class ReadAloud(context: Context) {
      */
     fun chooseVoice(pkg: String, name: String) {
         if (AzureVoice.on(app)) { AzureVoice.setOn(app, false); azureChanged() }
-        if (pkg != engine() || prefs.getString("engine", null) == null) {
+        if (pkg != engine() || prefs.getString(TtsPrefs.ENGINE, null) == null) {
             setEngine(pkg)
             prefs.edit().putString(voiceKey(), name).apply()
         } else {
@@ -430,10 +430,10 @@ class ReadAloud(context: Context) {
     }
 
     /** Engines left out of the voice dialog (88, "azure" for Azure). */
-    fun hiddenEngines(): Set<String> = prefs.getStringSet("hidden_engines", emptySet()).orEmpty()
+    fun hiddenEngines(): Set<String> = prefs.getStringSet(TtsPrefs.HIDDEN_ENGINES, emptySet()).orEmpty()
     fun setHidden(pkg: String, hide: Boolean) {
         val now = hiddenEngines().toMutableSet().apply { if (hide) add(pkg) else remove(pkg) }
-        prefs.edit().putStringSet("hidden_engines", now).apply()
+        prefs.edit().putStringSet(TtsPrefs.HIDDEN_ENGINES, now).apply()
     }
 
     fun setVoice(v: Voice?) {
@@ -531,7 +531,7 @@ class ReadAloud(context: Context) {
         fun engineText(s: String): String = s.replace(ReadAloudText.HEAD.toString(), "")
         const val GAP_NORMAL = TtsTuning.GAP_NORMAL
 
-        const val PREFS = "read_aloud"
+        const val PREFS = TtsPrefs.NAME
 
         const val CUE_SOUND = 1
         const val CUE_TITLE = 2
@@ -547,8 +547,8 @@ class ReadAloud(context: Context) {
         }
 
         /** 소리로 읽던 책은 다시 열면 이어서 소리로 (82, 설정 › 읽기). On by default. */
-        fun resumeOn(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("resume_aloud", true)
-        fun setResumeOn(c: Context, on: Boolean) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("resume_aloud", on).apply()
+        fun resumeOn(c: Context) = TtsPrefs.of(c).getBoolean(TtsPrefs.RESUME_ALOUD, true)
+        fun setResumeOn(c: Context, on: Boolean) = TtsPrefs.of(c).edit().putBoolean(TtsPrefs.RESUME_ALOUD, on).apply()
         const val MAX_LEN = TtsTuning.MAX_LEN
         /** 빠르기 (87): 0.5 ~ 2.0 by 0.05, on a slider (was a list of 12, 2.6). */
         const val RATE_MIN = TtsTuning.RATE_MIN

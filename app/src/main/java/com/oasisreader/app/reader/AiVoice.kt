@@ -29,9 +29,9 @@ import com.oasisreader.app.ui.Text
 object AiVoice {
     const val PKG = "com.bookfusion.voice"
     const val NAME = "BookFusion Voice"
-    private const val AWAY = "ai_away"
+    private const val AWAY = TtsPrefs.AI_AWAY
 
-    private fun prefs(ctx: Context) = ctx.getSharedPreferences("read_aloud", Context.MODE_PRIVATE)
+    private fun prefs(ctx: Context) = TtsPrefs.of(ctx)
 
     /** Left for the store or the engine app: on coming back the voice list is read again. */
     private fun markAway(ctx: Context) = prefs(ctx).edit().putBoolean(AWAY, true).apply()

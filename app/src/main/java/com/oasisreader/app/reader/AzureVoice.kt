@@ -27,7 +27,6 @@ import java.time.LocalDate
  */
 object AzureVoice {
     private const val KEY = "azure_tts_key"
-    private const val PREFS = ReadAloud.PREFS
     const val DEFAULT_VOICE = "ko-KR-SunHiNeural"
     const val DEFAULT_REGION = "koreacentral"
     const val FREE_CHARS = 500_000
@@ -42,35 +41,35 @@ object AzureVoice {
 
     // ── settings ──
 
-    private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(c: Context) = TtsPrefs.of(c)
     fun key(c: Context): String? = SecureStore(c.applicationContext).get(KEY)?.takeIf { it.isNotBlank() }
-    fun region(c: Context): String = prefs(c).getString("azure_region", null) ?: DEFAULT_REGION
-    fun voice(c: Context): String = prefs(c).getString("azure_voice", null) ?: DEFAULT_VOICE
+    fun region(c: Context): String = prefs(c).getString(TtsPrefs.AZURE_REGION, null) ?: DEFAULT_REGION
+    fun voice(c: Context): String = prefs(c).getString(TtsPrefs.AZURE_VOICE, null) ?: DEFAULT_VOICE
     fun hasKey(c: Context) = key(c) != null
     /** Reading with Azure is on (and possible). */
-    fun on(c: Context) = prefs(c).getBoolean("azure_on", false) && hasKey(c)
+    fun on(c: Context) = prefs(c).getBoolean(TtsPrefs.AZURE_ON, false) && hasKey(c)
 
     fun save(c: Context, key: String, region: String) {
         SecureStore(c.applicationContext).put(KEY, key.trim())
-        prefs(c).edit().putString("azure_region", region).apply()
+        prefs(c).edit().putString(TtsPrefs.AZURE_REGION, region).apply()
     }
     fun forget(c: Context) {
         SecureStore(c.applicationContext).put(KEY, null)
-        prefs(c).edit().putBoolean("azure_on", false).apply()
+        prefs(c).edit().putBoolean(TtsPrefs.AZURE_ON, false).apply()
     }
-    fun setOn(c: Context, on: Boolean) = prefs(c).edit().putBoolean("azure_on", on).apply()
-    fun setVoice(c: Context, v: String) = prefs(c).edit().putString("azure_voice", v).apply()
+    fun setOn(c: Context, on: Boolean) = prefs(c).edit().putBoolean(TtsPrefs.AZURE_ON, on).apply()
+    fun setVoice(c: Context, v: String) = prefs(c).edit().putString(TtsPrefs.AZURE_VOICE, v).apply()
 
     // ── this month's characters sent from this phone (an estimate: Azure's own count is in its portal) ──
 
     private fun month() = LocalDate.now().toString().take(7)
     fun usedThisMonth(c: Context): Int {
         val p = prefs(c)
-        return if (p.getString("azure_month", null) == month()) p.getInt("azure_chars", 0) else 0
+        return if (p.getString(TtsPrefs.AZURE_MONTH, null) == month()) p.getInt(TtsPrefs.AZURE_CHARS, 0) else 0
     }
     private fun count(c: Context, chars: Int) {
         val used = usedThisMonth(c) + chars
-        prefs(c).edit().putString("azure_month", month()).putInt("azure_chars", used).apply()
+        prefs(c).edit().putString(TtsPrefs.AZURE_MONTH, month()).putInt(TtsPrefs.AZURE_CHARS, used).apply()
     }
 
     // ── requests ──

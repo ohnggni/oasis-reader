@@ -72,8 +72,8 @@ fun ReadAloudBar(
     title: String = "", chapter: String = "", cover: java.io.File? = null,
 ) {
     val ctx = LocalContext.current
-    val prefs = remember { ctx.getSharedPreferences(ReadAloud.PREFS, android.content.Context.MODE_PRIVATE) }
-    var off by remember { mutableStateOf(androidx.compose.ui.geometry.Offset(prefs.getFloat("bar_x", 0f), prefs.getFloat("bar_y", 0f))) }
+    val prefs = remember { TtsPrefs.of(ctx) }
+    var off by remember { mutableStateOf(androidx.compose.ui.geometry.Offset(prefs.getFloat(TtsPrefs.BAR_X, 0f), prefs.getFloat(TtsPrefs.BAR_Y, 0f))) }
     // 95: the big card first when reading starts, the simple bar after a while
     var open by remember { mutableStateOf(true) }
     var touch by remember { mutableIntStateOf(0) }
@@ -93,7 +93,7 @@ fun ReadAloudBar(
     fun tap(f: () -> Unit): () -> Unit = { touch++; f() }
     val drag = Modifier.pointerInput(Unit) {
         detectDragGestures(
-            onDragEnd = { off = clamp(off); prefs.edit().putFloat("bar_x", off.x).putFloat("bar_y", off.y).apply() },
+            onDragEnd = { off = clamp(off); prefs.edit().putFloat(TtsPrefs.BAR_X, off.x).putFloat(TtsPrefs.BAR_Y, off.y).apply() },
         ) { change, d ->
             change.consume()
             off = clamp(off + d); touch++
