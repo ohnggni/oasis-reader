@@ -3,8 +3,6 @@ package com.oasisreader.app.reader
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
-import android.content.Intent
-import android.net.Uri
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -62,7 +60,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -162,9 +159,7 @@ private fun ReaderBody(
     var mRight by remember { mutableIntStateOf(prefs.marginRight) }
     var publisherStyle by remember { mutableStateOf(prefs.publisherStyle) }
     var liftHeads by remember { mutableStateOf(prefs.liftHeads) }
-    var fontId by remember { mutableStateOf(prefs.fontId) }
-    var fontBusy by remember { mutableStateOf<String?>(null) }
-    var fontProgress by remember { mutableFloatStateOf(0f) }
+    val fs = remember { FontState(prefs) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var panel by remember { mutableStateOf(Panel.NONE) }
     var aaMenu by remember { mutableStateOf(false) }          // 90: Aa's small menu
@@ -404,74 +399,22 @@ private fun ReaderBody(
         }
     }
 
-    fun openLink(url: String) {
-        val u = Uri.parse(url)
-        if (u.host == ASSET_HOST) {
-            val prefix = "/books/$bookId/content/"
-            val path = u.path ?: return
-            if (!path.startsWith(prefix)) return
-            val rel = path.removePrefix(prefix)
-            val idx = pkg?.spineIndexOf(rel) ?: -1
-            if (idx >= 0) { rememberJump(); goChapter(idx, 0f, u.fragment) }
-            return
-        }
-        if (u.scheme == "http" || u.scheme == "https" || u.scheme == "mailto") {
-            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, u)) }
-        }
-    }
-
-    fun imageFile(src: String): File? {
-        val u = Uri.parse(src)
-        if (u.host != ASSET_HOST) return null
-        val path = u.path ?: return null
-        if (!path.startsWith("/books/")) return null
-        val f = File(store.root, path.removePrefix("/books/"))
-        return f.takeIf { it.isFile && it.canonicalPath.startsWith(store.root.canonicalPath + File.separator) }
-    }
-
-    fun applyFont(f: FontOption) {
-        fontId = f.id; prefs.fontId = f.id
-        val href = fontHref(f).orEmpty()
-        val stack = f.cssStack().replace("\\", "").replace("\"", "")
-        webView?.evaluateJavascript("Reader.setFontFamily(" + JSONObject.quote(stack) + "," + JSONObject.quote(href) + ")", null)
-    }
+    fun applyFont(f: FontOption) = fs.apply(f, prefs, fontHref(f), webView)
 
     val fontFilePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            try {
-                val f = fonts.importFont(app, uri)
-                applyFont(f)
-                Toast.makeText(context, "「${f.label}」 글꼴을 추가했습니다.", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                com.oasisreader.app.ui.Notice.show(context, "글꼴 추가 실패: ${e.message}")
-            }
-        }
+        fs.importPicked(uri, scope, app, context, fonts, ::applyFont)
     }
 
-    fun pickFont(f: FontOption) {
-        if (fontBusy != null) return
-        if (fonts.isReady(f)) { applyFont(f); return }
-        fontBusy = f.id; fontProgress = 0f
-        scope.launch {
-            try {
-                fonts.download(f) { d, t -> fontProgress = d.toFloat() / t }
-                applyFont(f)
-            } catch (e: Exception) {
-                com.oasisreader.app.ui.Notice.show(context, "글꼴 받기 실패: ${e.message}")
-            } finally {
-                fontBusy = null
-            }
-        }
-    }
+    fun pickFont(f: FontOption) = fs.pick(f, scope, context, fonts, ::applyFont)
 
     fun resetBookSettings() {
         prefs.resetBook()
         readingChrome = ReadingChrome.of(prefs)
         fontPx = prefs.fontPx; lineHeight = prefs.lineHeight; mode = prefs.mode
-        weight = prefs.weight; fontId = prefs.fontId; publisherStyle = prefs.publisherStyle; liftHeads = prefs.liftHeads
+        weight = prefs.weight; fs.fontId = prefs.fontId; publisherStyle = prefs.publisherStyle; liftHeads = prefs.liftHeads
         pt.turnStyle = prefs.turnStyle; pt.turnSpeed = prefs.turnSpeed
         mTop = prefs.marginTop; mBottom = prefs.marginBottom; mLeft = prefs.marginLeft; mRight = prefs.marginRight
         onTheme(prefs.theme)
@@ -668,7 +611,7 @@ private fun ReaderBody(
                         },
                         onTapHighlight = { id -> deleteTarget = id },
                         onLookup = { t -> lookupText = t },
-                        onOpenImage = { src -> imageFile(src)?.let { viewerFile = it } },
+                        onOpenImage = { src -> bookImageFile(src, store)?.let { viewerFile = it } },
                         onEdge = { dir, tapY ->
                             lastActive = System.currentTimeMillis()
                             fun go() { if (dir > 0) goChapter(curIndex + 1, 0f) else goChapter(curIndex - 1, 1f) }
@@ -679,7 +622,7 @@ private fun ReaderBody(
                                 captureTurn(dir > 0, tapY) { pt.turnHold = true; go() }
                             } else go()
                         },
-                        onLink = { url -> openLink(url) },
+                        onLink = { url -> openBookLink(url, bookId, pkg, context) { idx, frag -> rememberJump(); goChapter(idx, 0f, frag) } },
                         onJump = { rememberJump() },
                         onReady = { al.onReady { requestAloud() } },   // a chapter opened while reading aloud
                         onCover = { on -> pageCovered = on },
@@ -770,7 +713,7 @@ private fun ReaderBody(
                         )
                         Panel.TEXT -> TextPanelBody(
                             prefs = prefs, fonts = fonts, webView = { webView },
-                            fontId = fontId, fontBusy = fontBusy, fontProgress = fontProgress,
+                            fontId = fs.fontId, fontBusy = fs.fontBusy, fontProgress = fs.fontProgress,
                             onPickFont = { f -> pickFont(f) },
                             onAddFont = {
                                 fontFilePicker.launch(arrayOf("font/ttf", "font/otf", "font/woff", "font/woff2", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
