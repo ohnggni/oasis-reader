@@ -12,11 +12,9 @@ import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,13 +40,8 @@ import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -78,10 +71,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -106,12 +97,12 @@ import java.time.LocalDate
 import kotlin.math.roundToInt
 
 internal const val ASSET_HOST = BookStore.ASSET_HOST
-private const val BAR_DP = 52
+internal const val BAR_DP = 52
 /** Height of the top bar itself; the page keeps reserving [BAR_DP] + 10 so text does not reflow. */
-private const val TOP_BAR_DP = 60
-private const val RUNNING_HEAD_DP = 30
-private const val SIDEWAYS_PAD_DP = 24
-private const val SIDEWAYS_EXTRA_BOTTOM = 14   // a little more air above the page label
+internal const val TOP_BAR_DP = 60
+internal const val RUNNING_HEAD_DP = 30
+internal const val SIDEWAYS_PAD_DP = 24
+internal const val SIDEWAYS_EXTRA_BOTTOM = 14   // a little more air above the page label
 internal val CompactPad = PaddingValues(horizontal = 8.dp)
 
 /** Where to open: chapter + fraction, or an element id inside it. [token] forces a reload. */
@@ -1194,72 +1185,14 @@ private fun ReaderBody(
                     }
             }
 
-            // compact overlay bar: it only ever covers the top margin, never text
-            // 96: while Aa's card is open the bars go, so the page shows the change clearly
-            AnimatedVisibility(visible = showBars && panel !in AA_PANELS, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut())) {
-                Surface(
-                    color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder(),
-                    modifier = Modifier.fillMaxWidth().let { if (readingChrome.hideStatus) it.padding(start = cut.left, end = cut.right) else it },
-                ) {
-                    Column {
-                        Row(
-                            Modifier.height(TOP_BAR_DP.dp).padding(end = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
-                            Text(
-                                title,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = chrome,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f).padding(end = 8.dp),
-                            )
-                            // 90: 🎧 소리 내 읽기 · Aa 보기 (부메뉴 → 아래 카드) · ☰ 이동 — three roomy buttons
-                            val on = MaterialTheme.colorScheme.primary
-                            if (p != null) IconButton(onClick = { if (aloud) stopAloud() else requestAloud() }) {
-                                EmojiText("🎧", fontSize = 20.sp, color = if (aloud) on else chrome)
-                            }
-                            Box {
-                                IconButton(onClick = { aaMenu = true }) {
-                                    Text("Aa", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = if (panel in AA_PANELS) on else chrome)
-                                }
-                                com.oasisreader.app.ui.OgMenu(expanded = aaMenu, onDismissRequest = { aaMenu = false }) {
-                                    listOf(Triple(Panel.SCREEN, "☀️", "화면"), Triple(Panel.TEXT, "가", "글자"), Triple(Panel.PAGE, "▤", "쪽")).forEach { (pp, e, l) ->
-                                        DropdownMenuItem(
-                                            text = { Text(l) },
-                                            leadingIcon = { EmojiText(e, fontSize = 16.sp) },
-                                            onClick = { aaMenu = false; panel = pp },
-                                        )
-                                    }
-                                }
-                            }
-                            IconButton(onClick = { panel = panel.toggle(Panel.NAV) }) {
-                                EmojiText("☰", fontSize = 20.sp, color = if (panel == Panel.NAV) on else chrome)
-                            }
-                        }
-                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                        AnimatedVisibility(
-                            visible = panel == Panel.NAV,
-                            enter = com.oasisreader.app.ui.theme.calm(expandVertically() + fadeIn()),
-                            exit = com.oasisreader.app.ui.theme.calm(shrinkVertically() + fadeOut()),
-                        ) {
-                            Column {
-                                Column(
-                                    Modifier.fillMaxWidth()
-                                        .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.42f).dp)
-                                        .verticalScroll(rememberScrollState())
-                                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                                ) {
-                                    panelBody(panel)
-                                }
-                                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                            }
-                        }
-                    }
-                }
-            }
+            ReaderTopBar(
+                showBars = showBars, panel = panel, barColor = barColor, chrome = chrome,
+                readingChrome = readingChrome, cut = cut, title = title,
+                hasBook = p != null, aloud = aloud, aaMenu = aaMenu,
+                onBack = onBack, onAloud = { if (aloud) stopAloud() else requestAloud() },
+                onAaMenu = { aaMenu = it }, onPanel = { panel = it },
+                panelBody = panelBody,
+            )
 
             // after following a link: the way back to where the reading was
             jumpBack?.let { (from, pct) ->
