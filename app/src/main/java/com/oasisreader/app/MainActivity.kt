@@ -73,6 +73,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         com.oasisreader.app.ui.theme.ThemeMode.load(this)
         com.oasisreader.app.ui.OgIcons.load(this)
+        com.oasisreader.app.data.Storage.audioKept = object : com.oasisreader.app.data.AudioKept {
+            override fun bookIds(context: android.content.Context) = com.oasisreader.app.audio.AudioDownloads.bookIds(context)
+            override fun keptBytes(context: android.content.Context, bookId: String) = com.oasisreader.app.audio.AudioDownloads.keptBytes(context, bookId)
+        }
         com.oasisreader.app.ui.theme.UiScale.load(this)
         com.oasisreader.app.data.FontManager(this)   // loads the user's own fonts
         com.oasisreader.app.ui.DiskCovers.dir = java.io.File(cacheDir, "covers")

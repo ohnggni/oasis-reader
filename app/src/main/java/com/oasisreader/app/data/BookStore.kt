@@ -443,6 +443,8 @@ class BookStore(private val context: Context) {
         const val FORMAT_COMIC = "cbz"
         const val FORMAT_TXT = "txt"      // read with the EPUB reader (converted at import)
         const val FORMAT_PDF = "pdf"      // read with the comic viewer (pages drawn from book.pdf)
+        /** an audiobook row on the 서재 (no book files; the tracks live with the audio feature) */
+        const val FORMAT_AUDIOBOOK = "audiobook"
         val ORIGINALS = listOf("book.epub", "book.cbz", "book.txt", "book.pdf")
 
         /** The format a file name suggests, before the file is here (등록만, TODO 78). */

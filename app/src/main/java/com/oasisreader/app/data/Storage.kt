@@ -1,8 +1,6 @@
 package com.oasisreader.app.data
 
 import android.content.Context
-import com.oasisreader.app.audio.AudioDownloads
-import com.oasisreader.app.audio.AudioLibraryLink
 import com.oasisreader.app.data.db.AppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,19 +16,28 @@ data class StorageUsage(
     val freeBytes: Long,
 )
 
+/** The audiobooks kept on the phone: the audio feature answers (set at start-up, so data does not reach up to it). */
+interface AudioKept {
+    fun bookIds(context: Context): Set<String>
+    fun keptBytes(context: Context, bookId: String): Long
+}
+
 object Storage {
+    /** set by the app at start-up */
+    var audioKept: AudioKept? = null
+
     private fun size(f: File): Long = if (!f.exists()) 0L else f.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     suspend fun usage(context: Context): StorageUsage = withContext(Dispatchers.IO) {
         val app = context.applicationContext
         val store = BookStore.get(app)
         val rows = AppDatabase.get(app).books().all()
-        val books = rows.filter { it.format != AudioLibraryLink.FORMAT && store.hasFiles(it.id) }
+        val books = rows.filter { it.format != BookStore.FORMAT_AUDIOBOOK && store.hasFiles(it.id) }
         val kept = books.filter { it.pinned }
         val cached = books.filter { !it.pinned }
         val keptBytes = kept.sumOf { store.filesBytes(it.id) }
         val cacheBytes = cached.sumOf { store.filesBytes(it.id) }
-        val audio = AudioDownloads.bookIds(app).map { AudioDownloads.keptBytes(app, it) }.filter { it > 0 }
+        val audio = (audioKept?.let { k -> k.bookIds(app).map { k.keptBytes(app, it) } } ?: emptyList()).filter { it > 0 }
         val dataDir = File(app.applicationInfo.dataDir)
         val total = size(app.filesDir) + size(app.cacheDir) + size(File(dataDir, "databases")) + size(File(dataDir, "shared_prefs"))
         StorageUsage(

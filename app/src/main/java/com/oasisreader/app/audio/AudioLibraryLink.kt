@@ -22,7 +22,7 @@ import kotlinx.serialization.json.intOrNull
  * taken when it is further along (the web player may have gone on).
  */
 object AudioLibraryLink {
-    const val FORMAT = "audiobook"
+    const val FORMAT = BookStore.FORMAT_AUDIOBOOK
 
     fun bookId(serverId: String, aid: Int) = "ab_${serverId}_$aid"
     private fun tag(serverId: String, aid: Int) = "audiobook:$serverId:$aid"
