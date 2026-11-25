@@ -862,6 +862,7 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
   var TTS_END = '.!?。！？…', TTS_CLOSE = '.!?。！？…"\'”’」』)]）〉》';
   /* a sentence also ends with no space before a Korean letter or an opening quote (텍본 EPUBs);
      invisible spaces count as spaces; a long sentence is cut again at a comma or a space */
+  var TTS_QEND = '"\'”’」』)]）〉》';
   var TTS_OPEN = '“‘「『（〈《([', TTS_LONG = 250, TTS_HARD = 400, TTS_MIN = 30;
   /* headings (85): <br> inside joins the lines; a first line that is only the chapter's number
      (제3장 · 3장 · PART 1 · ⑥ …, same as ReadAloudText.LABEL) stays apart; the heading's last
@@ -963,6 +964,10 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
         if (TTS_END.indexOf(s.charAt(i)) < 0) continue;
         var j = i + 1;
         while (j < s.length && TTS_CLOSE.indexOf(s.charAt(j)) >= 0) j++;
+        /* ‘네가 바로 그것이다.’와 · “…했다.”라고: a quoted sentence the line goes on from is not an end (2.10.x) */
+        var quoted = false;
+        for (var q = i + 1; q < j; q++) if (TTS_QEND.indexOf(s.charAt(q)) >= 0) quoted = true;
+        if (quoted && j < s.length && /[\uAC00-\uD7A3]/.test(s.charAt(j))) continue;
         if (j >= s.length || ttsAfter(s.charAt(j))) { piece(a, j); a = j; i = j - 1; }
       }
       piece(a, s.length);

@@ -86,4 +86,16 @@ class ReadAloudTextTest {
         assertEquals(listOf("Chapter 2", "The Road"), ReadAloudText.splitLead("Chapter 2 The Road"))
         assertEquals(listOf("제3장"), ReadAloudText.splitLead("제3장"))
     }
+
+    @Test fun quotedSentenceGoesOn() {
+        // 2.10.x: ‘…다.’와 — the line goes on, no cut (and no pause) after the quote
+        assertEquals(
+            listOf("‘네가 바로 그것이다.’와 「리틀 포레스트」에 나오는 삶이 있습니다.", "찾고 찾았던 것입니다."),
+            ReadAloudText.sentences("<p>‘네가 바로 그것이다.’와 「리틀 포레스트」에 나오는 삶이 있습니다. 찾고 찾았던 것입니다.</p>"),
+        )
+        assertEquals(listOf("“가자.”라고 말했다."), ReadAloudText.sentences("<p>“가자.”라고 말했다.</p>"))
+        // a quote followed by a space still ends; no quote, Korean right on still ends (다.그)
+        assertEquals(listOf("“가자.”", "그가 말했다."), ReadAloudText.sentences("<p>“가자.” 그가 말했다.</p>"))
+        assertEquals(listOf("갔다.", "그리고 왔다."), ReadAloudText.sentences("<p>갔다.그리고 왔다.</p>"))
+    }
 }

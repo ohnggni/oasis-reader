@@ -13,6 +13,8 @@ object ReadAloudText {
     private const val END = ".!?。！？…"
     private const val CLOSE = ".!?。！？…\"'”’」』)]）〉》"
     private const val OPEN = "“‘「『（〈《(["
+    /** Closing quotes and brackets: after one, Korean right on (’와, ”라고) means the sentence goes on. */
+    private const val QUOTE_END = "\"'”’」』)]）〉》"
     private const val COMMA = ",，、"
     /** Over this a sentence is cut at a comma (2.9: was 120 — book sentences of 150–200 letters were cut mid-phrase). */
     private const val LONG = 250
@@ -119,7 +121,10 @@ object ReadAloudText {
             if (END.indexOf(s[i]) >= 0) {
                 var j = i + 1
                 while (j < s.length && CLOSE.indexOf(s[j]) >= 0) j++
-                if (j >= s.length || after(s[j])) { piece(a, j); a = j; i = j; continue }
+                // ‘네가 바로 그것이다.’와 · “…했다.”라고: a quoted sentence the line goes on from is not an end (2.10.x)
+                val quoted = (i + 1 until j).any { QUOTE_END.indexOf(s[it]) >= 0 }
+                val goesOn = j < s.length && (s[j] in '\uAC00'..'\uD7A3')
+                if (!(quoted && goesOn) && (j >= s.length || after(s[j]))) { piece(a, j); a = j; i = j; continue }
             }
             i++
         }
