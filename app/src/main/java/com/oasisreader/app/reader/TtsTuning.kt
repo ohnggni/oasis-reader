@@ -21,6 +21,16 @@ object TtsTuning {
     const val TEXT_HARD = 400
     const val TEXT_MIN = 30
 
+    private const val NUMBER_HEAD = "제\\s?[0-9]+\\s?[장부편권화절]|[0-9]+\\s?[장부편]|(?:part|chapter|book)\\s*[0-9IVXivx]+|[\\u2460-\\u2473]|[\\u2160-\\u216B]|"
+    private const val NUMBER_TAIL = "|prologue|epilogue|프롤로그|에필로그"
+    /**
+     * A line that is only a chapter number (제3장, 3장, PART 1, ⑥, Ⅲ, 1., 프롤로그), ignoring case.
+     * The same text is the page script's TTS_LABEL.
+     */
+    const val TEXT_LABEL = "(?:" + NUMBER_HEAD + "[0-9]+\\.?" + NUMBER_TAIL + ")"
+    /** A chapter number at the start of a heading line; bare digits need a dot. The page script's TTS_LEAD. */
+    const val TEXT_LEAD = "(?:" + NUMBER_HEAD + "[0-9]+\\." + NUMBER_TAIL + ")"
+
     // ── pauses and limits (ReadAloud) ──
 
     /** 문장 사이: 없음, 짧게, 보통 (2.4의 350ms), 길게. */

@@ -86,6 +86,7 @@ object ReaderHtml {
         val bookCss = if (!publisherStyle) "" else
             doc.stylesheets.joinToString("\n") { "<link rel=\"stylesheet\" href=\"${esc(it)}\">" } +
                 (if (doc.inlineCss.isNotBlank()) "\n<style>${doc.inlineCss}</style>" else "")
+        val ttsDecl = TtsScript.declarations()   // TTS_END ... TTS_LEAD, made from TtsTuning
         return """<!doctype html>
 <html lang="ko" class="${if (config.paged) "paged" else ""} ${if (publisherStyle) "pub" else "plain"} ${if (dark) "dark" else ""}" style="${themeVars(theme)}">
 <head>
@@ -859,17 +860,13 @@ html:not(.paged) #book { position: relative; isolation: isolate; }
   /* ── read aloud: the chapter as sentences (live Ranges, so highlights added later do not break them) ── */
   var tts = null;
   var TTS_BLOCK = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, td, th, figcaption, caption, pre, div, section, article, aside, header, footer, table';
-  var TTS_END = '.!?。！？…', TTS_CLOSE = '.!?。！？…"\'”’」』)]）〉》';
+  $ttsDecl
   /* a sentence also ends with no space before a Korean letter or an opening quote (텍본 EPUBs);
      invisible spaces count as spaces; a long sentence is cut again at a comma or a space */
-  var TTS_QEND = '"\'”’」』)]）〉》';
-  var TTS_OPEN = '“‘「『（〈《([', TTS_LONG = 250, TTS_HARD = 400, TTS_MIN = 30;
   /* headings (85): <br> inside joins the lines; a first line that is only the chapter's number
      (제3장 · 3장 · PART 1 · ⑥ …, same as ReadAloudText.LABEL) stays apart; the heading's last
      sentence ends with TTS_HEAD (not spoken, a longer pause after it) */
   var TTS_HEAD = '\u2063', TTS_H = 'h1, h2, h3, h4, h5, h6';
-  var TTS_LABEL = /(?:제\s?[0-9]+\s?[장부편권화절]|[0-9]+\s?[장부편]|(?:part|chapter|book)\s*[0-9IVXivx]+|[\u2460-\u2473]|[\u2160-\u216B]|[0-9]+\.?|prologue|epilogue|프롤로그|에필로그)/i;
-  var TTS_LEAD = /(?:제\s?[0-9]+\s?[장부편권화절]|[0-9]+\s?[장부편]|(?:part|chapter|book)\s*[0-9IVXivx]+|[\u2460-\u2473]|[\u2160-\u216B]|[0-9]+\.|prologue|epilogue|프롤로그|에필로그)(?=\s+\S)/i;
   function ttsLabel(t) {
     t = t.replace(/\s+/g, ' ').trim();
     var m = t.match(TTS_LABEL);

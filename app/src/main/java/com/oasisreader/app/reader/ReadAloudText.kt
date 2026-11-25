@@ -54,18 +54,12 @@ object ReadAloudText {
     private val BR = Regex("(?i)<br\\s*/?>")
 
     /** A line that is only a chapter's number: 제3장, 3장, 2부, PART 1, Chapter IV, ⑥, Ⅲ, 1., 프롤로그. Same as the page script's TTS_LABEL. */
-    private val LABEL = Regex(
-        "(?:제\\s?[0-9]+\\s?[장부편권화절]|[0-9]+\\s?[장부편]|(?:part|chapter|book)\\s*[0-9IVXivx]+|[\\u2460-\\u2473]|[\\u2160-\\u216B]|[0-9]+\\.?|prologue|epilogue|프롤로그|에필로그)",
-        RegexOption.IGNORE_CASE,
-    )
+    private val LABEL = Regex(TtsTuning.TEXT_LABEL, RegexOption.IGNORE_CASE)
 
     fun isLabel(line: String): Boolean = LABEL.matches(line.replace(Regex("\\s+"), " ").trim())
 
     /** A chapter number at the start of a one-line heading, then its title (89): 4장 목표에 미칠 때. Bare digits need a dot. Same as the page script's TTS_LEAD. */
-    private val LEAD = Regex(
-        "^\\s*((?:제\\s?[0-9]+\\s?[장부편권화절]|[0-9]+\\s?[장부편]|(?:part|chapter|book)\\s*[0-9IVXivx]+|[\\u2460-\\u2473]|[\\u2160-\\u216B]|[0-9]+\\.|prologue|epilogue|프롤로그|에필로그))\\s+(?=\\S)",
-        RegexOption.IGNORE_CASE,
-    )
+    private val LEAD = Regex("^\\s*(" + TtsTuning.TEXT_LEAD + ")\\s+(?=\\S)", RegexOption.IGNORE_CASE)
 
     /** "4장 목표에 미칠 때" → ["4장", "목표에 미칠 때"]; anything else → itself. Each read with a heading's pause after it. */
     fun splitLead(t: String): List<String> {
