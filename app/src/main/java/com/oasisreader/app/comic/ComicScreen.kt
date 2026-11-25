@@ -2,7 +2,6 @@ package com.oasisreader.app.comic
 
 import com.oasisreader.app.ui.EmojiText
 import android.app.Activity
-import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -93,20 +92,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
 import com.oasisreader.app.data.BookStore
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.BookEntity
-import com.oasisreader.app.data.db.ReadingTimeEntity
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.LocalDate
 import kotlin.math.roundToInt
 
 /** Vertical, gap-free webtoon viewer for CBZ/ZIP books. */
@@ -376,26 +371,7 @@ private fun ComicViewer(
 
     // active reading time (same rule as the book reader)
     val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(book.id) {
-        var pending = 0L
-        suspend fun flush() {
-            if (pending <= 0) return
-            val add = pending; pending = 0
-            val day = LocalDate.now().toString()
-            val cur = db.readingTime().get(day, book.id)?.seconds ?: 0L
-            db.readingTime().upsert(ReadingTimeEntity(day, book.id, cur + add))
-        }
-        try {
-            while (true) {
-                delay(5_000)
-                val front = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-                if (front && System.currentTimeMillis() - lastActive < 180_000) pending += 5
-                if (pending >= 30) flush()
-            }
-        } finally {
-            withContext(NonCancellable) { flush() }
-        }
-    }
+    ComicReadingTime(book.id, db, lifecycleOwner, lastActive = { lastActive })
 
     // keep the screen on while reading (released after 10 minutes idle)
     com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
@@ -405,30 +381,7 @@ private fun ComicViewer(
         while (c is android.content.ContextWrapper && c !is Activity) c = c.baseContext
         (c as? Activity)?.window
     }
-    LaunchedEffect(keepOn, window) {
-        val w = window ?: return@LaunchedEffect
-        val flag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        if (!keepOn) { w.clearFlags(flag); return@LaunchedEffect }
-        try {
-            while (true) {
-                if (System.currentTimeMillis() - lastActive < 600_000) w.addFlags(flag) else w.clearFlags(flag)
-                delay(15_000)
-            }
-        } finally { w.clearFlags(flag) }
-    }
-    LaunchedEffect(brightness, window) {
-        window?.let { w ->
-            w.attributes = w.attributes.apply {
-                screenBrightness = if (brightness < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else brightness
-            }
-        }
-    }
-    DisposableEffect(Unit) {
-        onDispose {
-            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } }
-        }
-    }
+    ComicWindowEffects(window, keepOn, brightness, lastActive = { lastActive })
 
     // the bar hides itself
     LaunchedEffect(barsVisible, barsShownAt, panel, autoHide, aaMenu) {
