@@ -250,6 +250,11 @@ internal fun ComicPageMode(
                 })
             },
         ) { g ->
+            // the same one across recompositions, so a page that has not changed is skipped
+            val untilIdle = remember(pager) {
+                val wait: suspend () -> Unit = { snapshotFlow { pager.isScrollInProgress }.first { !it } }
+                wait
+            }
             val grp = groups[g]
             // order on screen: left-to-right, or right-to-left for Japanese manga
             val onScreen = if (rtl) grp.reversed() else grp
@@ -282,11 +287,14 @@ internal fun ComicPageMode(
                         else -> Alignment.CenterStart      // right page hugs the gutter
                     }
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = align) {
+                        val path = pkg.pages[pageIdx].path
                         PageImage(
-                            File(content, pkg.pages[pageIdx].path), pkg.pages[pageIdx], slotW, hPx, align,
-                            sharp = isCurrent && zoom > 1.3f,
+                            remember(content, path) { File(content, path) }, pkg.pages[pageIdx], slotW, hPx, align,
+                            // an image page is read just large enough for the screen: sharpen as soon as it is enlarged
+                            sharp = isCurrent && zoom > (if (isPdf) 1.3f else 1.05f),
                             // pages off screen are drawn only once the swipe has settled
-                            waitIdle = if (isCurrent) null else suspend { snapshotFlow { pager.isScrollInProgress }.first { !it }; Unit },
+                            waitIdle = if (isCurrent) null else untilIdle,
+                            shownW = if (onScreen.size == 1) wPx else slotW,
                         )
                     }
                 }

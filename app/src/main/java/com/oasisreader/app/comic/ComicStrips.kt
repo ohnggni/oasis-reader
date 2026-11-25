@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,16 +86,28 @@ internal fun toGpu(b: Bitmap): Bitmap =
     runCatching { b.copy(Bitmap.Config.HARDWARE, false) }.getOrNull()?.also { if (it !== b) b.recycle() } ?: b
 
 /**
+ * inSampleSize for a whole page of [w]x[h] shown with ContentScale.Fit in [boxW]x[boxH]: halved
+ * while it stays at least as large as it is shown (one side filling the box is enough for that).
+ */
+internal fun pageSample(w: Int, h: Int, boxW: Int, boxH: Int): Int {
+    if (boxW <= 0 || boxH <= 0) return 1
+    var sample = 1
+    while (w / (sample * 2) >= boxW || h / (sample * 2) >= boxH) sample *= 2
+    return sample
+}
+
+/**
  * One whole page, decoded to fit [boxW] x [boxH] pixels and shown with ContentScale.Fit.
+ * [shownW]: the width it really has on screen (a page alone in a spread gets both halves).
  * [sharp]: the page is zoomed in — draw it again at higher resolution (the plain one stays until then).
  * [waitIdle]: wait with the work until page turning has stopped (pages prepared off screen).
  */
 @Composable
 internal fun PageImage(
     file: File, page: ComicPage, boxW: Int, boxH: Int, align: Alignment,
-    sharp: Boolean = false, waitIdle: (suspend () -> Unit)? = null,
+    sharp: Boolean = false, waitIdle: (suspend () -> Unit)? = null, shownW: Int = boxW,
 ) {
-    val base = "${file.path}#page#$boxW#$boxH"
+    val base = "${file.path}#page#$boxW#$boxH#$shownW"
     val key = if (sharp) "$base#sharp" else base
     val bmp by produceState(StripCache.mem.get(key) ?: StripCache.mem.get(base), key) {
         StripCache.mem.get(key)?.let { value = it; return@produceState }
@@ -107,8 +120,7 @@ internal fun PageImage(
                     val fit = minOf(boxW.toFloat() / page.w, boxH.toFloat() / page.h) * (if (sharp) 2.5f else 1f)
                     PdfPages.render(pdfOf(file), PdfPages.indexOf(page.path), (page.w * fit).toInt())
                 } else {
-                    var sample = 1
-                    if (!sharp) while (page.w / (sample * 2) >= boxW && page.h / (sample * 2) >= boxH) sample *= 2
+                    val sample = if (sharp) 1 else pageSample(page.w, page.h, shownW, boxH)
                     BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
                 }?.let(::toGpu)
             }.getOrNull()
@@ -120,7 +132,7 @@ internal fun PageImage(
         CircularProgressIndicator(Modifier.padding(24.dp))
     } else {
         Image(
-            bitmap = b.asImageBitmap(),
+            bitmap = remember(b) { b.asImageBitmap() },
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
@@ -145,7 +157,7 @@ internal fun Strip(file: File, s: Slice, targetPx: Int) {
     ) {
         bmp?.let {
             Image(
-                bitmap = it.asImageBitmap(),
+                bitmap = remember(it) { it.asImageBitmap() },
                 contentDescription = null,
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),

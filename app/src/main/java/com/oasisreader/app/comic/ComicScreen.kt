@@ -498,10 +498,10 @@ private fun ComicViewer(
                                 })
                             },
                     ) {
-                        itemsIndexed(slices, key = { i, _ -> i }) { _, s ->
-                            Strip(File(content, s.path), s, targetPx)
+                        itemsIndexed(slices, key = { i, _ -> i }, contentType = { _, _ -> "strip" }) { _, s ->
+                            Strip(remember(content, s.path) { File(content, s.path) }, s, targetPx)
                         }
-                        item {
+                        item(contentType = "tail") {
                             Column(
                                 Modifier.fillMaxWidth().padding(vertical = 48.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
