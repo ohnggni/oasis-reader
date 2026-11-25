@@ -640,31 +640,29 @@ private fun ReaderBody(
                             readingChrome = readingChrome, onChrome = ::setChrome,
                             onSaveDefaults = ::saveAsDefaults, onReset = ::resetBookSettings,
                         )
-                        Panel.NAV -> {
-                            val finished = book?.finishedAt != null
-                            fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
-                            com.oasisreader.app.ui.PanelGrid(buildList {
-                                if (p != null) add(T("📑", "목차") { panel = Panel.NONE; tocOpen = true })
-                                if (p != null) add(T("🔍", "검색") { findOpen = true })
-                                if (p != null) add(T("🔊", if (al.active) "읽기 끝" else "소리 읽기") { if (al.active) al.stop() else requestAloud() })
-                                add(T("🔖", if (bookmarks.isEmpty()) "책갈피" else "책갈피 ${bookmarks.size}") { marksOpen = true })
-                                add(T("🖍️", "하이라이트") { panel = Panel.NONE; hlListOpen = true })
-                                add(T("📝", "내보내기") { panel = Panel.NONE; exportOpen = true })
-                                add(T(if (finished) "↩️" else "✅", if (finished) "읽음 취소" else "다 읽음") {
-                                    val at = if (finished) null else System.currentTimeMillis()
-                                    book = book?.copy(finishedAt = at)
-                                    scope.launch { db.books().setFinished(bookId, at) }
-                                })
-                                add(T("⏭️", "다음 권") {
-                                    panel = Panel.NONE
-                                    scope.launch { findAndOpenNext(context, book, nextVol, onOpenBook) }
-                                })
-                                if (canOpenOrigin(book)) add(T("📂", "있던 폴더") {
-                                    panel = Panel.NONE
-                                    book?.let(onOpenFolder)
-                                })
-                            })
-                        }
+                        Panel.NAV -> NavPanelBody(
+                            hasBook = p != null, aloud = al.active, bookmarkCount = bookmarks.size,
+                            finished = book?.finishedAt != null, canOrigin = canOpenOrigin(book),
+                            onToc = { panel = Panel.NONE; tocOpen = true },
+                            onSearch = { findOpen = true },
+                            onAloud = { if (al.active) al.stop() else requestAloud() },
+                            onMarks = { marksOpen = true },
+                            onHighlights = { panel = Panel.NONE; hlListOpen = true },
+                            onExport = { panel = Panel.NONE; exportOpen = true },
+                            onFinished = { finished ->
+                                val at = if (finished) null else System.currentTimeMillis()
+                                book = book?.copy(finishedAt = at)
+                                scope.launch { db.books().setFinished(bookId, at) }
+                            },
+                            onNext = {
+                                panel = Panel.NONE
+                                scope.launch { findAndOpenNext(context, book, nextVol, onOpenBook) }
+                            },
+                            onFolder = {
+                                panel = Panel.NONE
+                                book?.let(onOpenFolder)
+                            },
+                        )
                         else -> {}
                     }
             }

@@ -124,3 +124,24 @@ internal fun ColumnScope.PagePanelBody(
     ChromeSwitches(readingChrome, onChange = onChrome)
     com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, onSaveDefaults, onReset)
 }
+
+/** The ☰ panel: the grid of places to go and things to do with this book. */
+@Composable
+internal fun ColumnScope.NavPanelBody(
+    hasBook: Boolean, aloud: Boolean, bookmarkCount: Int, finished: Boolean, canOrigin: Boolean,
+    onToc: () -> Unit, onSearch: () -> Unit, onAloud: () -> Unit, onMarks: () -> Unit, onHighlights: () -> Unit,
+    onExport: () -> Unit, onFinished: (Boolean) -> Unit, onNext: () -> Unit, onFolder: () -> Unit,
+) {
+    fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
+    com.oasisreader.app.ui.PanelGrid(buildList {
+        if (hasBook) add(T("📑", "목차", onToc))
+        if (hasBook) add(T("🔍", "검색", onSearch))
+        if (hasBook) add(T("🔊", if (aloud) "읽기 끝" else "소리 읽기", onAloud))
+        add(T("🔖", if (bookmarkCount == 0) "책갈피" else "책갈피 $bookmarkCount", onMarks))
+        add(T("🖍️", "하이라이트", onHighlights))
+        add(T("📝", "내보내기", onExport))
+        add(T(if (finished) "↩️" else "✅", if (finished) "읽음 취소" else "다 읽음") { onFinished(finished) })
+        add(T("⏭️", "다음 권", onNext))
+        if (canOrigin) add(T("📂", "있던 폴더", onFolder))
+    })
+}
