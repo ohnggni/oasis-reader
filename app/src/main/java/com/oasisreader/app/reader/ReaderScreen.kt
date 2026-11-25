@@ -16,10 +16,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import com.oasisreader.app.ui.theme.isAppDark
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -1059,87 +1057,41 @@ private fun ReaderBody(
             // the panels' insides: ☰ under the top bar, Aa's three in the card at the bottom (90)
             val panelBody: @Composable ColumnScope.(Panel) -> Unit = { which ->
                     when (which) {
-                        Panel.SCREEN -> {
-                            BrightnessPanel(value = brightness, onChange = { brightness = it; prefs.brightness = it })
-                            ThemeRow(theme, onTheme)
-                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", null, keepOn, { keepOn = it; prefs.keepScreenOn = it }, Modifier.weight(1f))
-                                com.oasisreader.app.ui.PanelSwitch("바 자동 숨김", null, autoHide, {
-                                    autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
-                                }, Modifier.weight(1f))
-                            }
-                            // 🔊 볼륨 버튼으로 쪽 넘기기 (the same setting as in 설정, easier to find here)
-                            var volKeys by remember { mutableStateOf(com.oasisreader.app.ui.PageKeys.volumeKeys(context)) }
-                            com.oasisreader.app.ui.PanelSwitch("🔊 볼륨 버튼으로 쪽 넘기기", null, volKeys, { volKeys = it; com.oasisreader.app.ui.PageKeys.setVolumeKeys(context, it) })
-                        }
-                        Panel.TEXT -> {
-                            FontPanel(
-                                fonts = fonts,
-                                selectedId = fontId,
-                                busyId = fontBusy,
-                                progress = fontProgress,
-                                onPick = { f -> pickFont(f) },
-                                onAdd = {
-                                    fontFilePicker.launch(arrayOf("font/ttf", "font/otf", "font/woff", "font/woff2", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
-                                },
-                                onRemove = { f ->
-                                    fonts.removeCustom(f)
-                                    applyFont(FontManager.byId(null))
-                                    Toast.makeText(context, "「${f.label}」 글꼴을 삭제했습니다.", Toast.LENGTH_SHORT).show()
-                                },
-                            )
-                            SizePanel(
-                                weight = weight,
-                                onWeight = { w ->
-                                    weight = w; prefs.weight = w
-                                    webView?.evaluateJavascript("Reader.setWeight($w)", null)
-                                },
-                                value = fontPx,
-                                onChange = { v ->
-                                    if (v != fontPx) {
-                                        fontPx = v; prefs.fontPx = v
-                                        webView?.evaluateJavascript("Reader.setFont($v)", null)
-                                    }
-                                },
-                                lineHeight = lineHeight,
-                                onLineHeight = { lh ->
-                                    lineHeight = lh; prefs.lineHeight = lh
-                                    webView?.evaluateJavascript("Reader.setLineHeight(${lh / 10f})", null)
-                                },
-                            )
-                            com.oasisreader.app.ui.PanelSwitch("책 디자인 사용 (제목·문단 모양)", null, publisherStyle, {
-                                publisherStyle = it; prefs.publisherStyle = it; reloadHere()
-                            })
-                            com.oasisreader.app.ui.PanelSwitch("작은 소제목 키우기", null, liftHeads, {
-                                liftHeads = it; prefs.liftHeads = it; reloadHere()
-                            })
-                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
-                        }
-                        Panel.PAGE -> {
-                            com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "스크롤"), if (mode == ReaderMode.PAGE) 0 else 1) { i ->
-                                setMode(if (i == 0) ReaderMode.PAGE else ReaderMode.SCROLL)
-                            }
-                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.PanelChoice("두 쪽 보기", SPREAD_LABELS, spreadMode) { i ->
-                                spreadMode = i; prefs.spreadMode = i
-                            }
-                            if (mode == ReaderMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
-                                current = turnStyle, speed = turnSpeed,
-                                onPick = { st ->
-                                    turnStyle = st; prefs.turnStyle = st
-                                    webView?.evaluateJavascript("Reader.setTurn('${st.id}')", null)
-                                },
-                                onSpeed = { sp -> turnSpeed = sp; prefs.turnSpeed = sp },
-                            )
-                            MarginPanel(
-                                top = mTop, bottom = mBottom, left = mLeft, right = mRight,
-                                onChange = { t, b, l, r ->
-                                    mTop = t; mBottom = b; mLeft = l; mRight = r
-                                    prefs.marginTop = t; prefs.marginBottom = b; prefs.marginLeft = l; prefs.marginRight = r
-                                },
-                            )
-                            ChromeSwitches(readingChrome, onChange = ::setChrome)
-                            com.oasisreader.app.ui.BookSettingsRow(prefs.hasOwn, ::saveAsDefaults, ::resetBookSettings)
-                        }
+                        Panel.SCREEN -> ScreenPanelBody(
+                            brightness = brightness, onBrightness = { brightness = it; prefs.brightness = it },
+                            theme = theme, onTheme = onTheme,
+                            keepOn = keepOn, onKeepOn = { keepOn = it; prefs.keepScreenOn = it },
+                            autoHide = autoHide, onAutoHide = { autoHide = it; prefs.autoHideBars = it; barsShownAt = System.currentTimeMillis() },
+                        )
+                        Panel.TEXT -> TextPanelBody(
+                            prefs = prefs, fonts = fonts, webView = { webView },
+                            fontId = fontId, fontBusy = fontBusy, fontProgress = fontProgress,
+                            onPickFont = { f -> pickFont(f) },
+                            onAddFont = {
+                                fontFilePicker.launch(arrayOf("font/ttf", "font/otf", "font/woff", "font/woff2", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
+                            },
+                            onRemoveFont = { f ->
+                                fonts.removeCustom(f)
+                                applyFont(FontManager.byId(null))
+                                Toast.makeText(context, "「${f.label}」 글꼴을 삭제했습니다.", Toast.LENGTH_SHORT).show()
+                            },
+                            weight = weight, onWeight = { weight = it },
+                            fontPx = fontPx, onFontPx = { fontPx = it },
+                            lineHeight = lineHeight, onLineHeight = { lineHeight = it },
+                            publisherStyle = publisherStyle, onPublisherStyle = { publisherStyle = it },
+                            liftHeads = liftHeads, onLiftHeads = { liftHeads = it },
+                            onReload = ::reloadHere, onSaveDefaults = ::saveAsDefaults, onReset = ::resetBookSettings,
+                        )
+                        Panel.PAGE -> PagePanelBody(
+                            prefs = prefs, webView = { webView },
+                            mode = mode, onMode = { setMode(it) },
+                            spreadMode = spreadMode, onSpreadMode = { spreadMode = it },
+                            turnStyle = turnStyle, turnSpeed = turnSpeed, onTurnStyle = { turnStyle = it }, onTurnSpeed = { turnSpeed = it },
+                            mTop = mTop, mBottom = mBottom, mLeft = mLeft, mRight = mRight,
+                            onMargins = { t, bt, l, r -> mTop = t; mBottom = bt; mLeft = l; mRight = r },
+                            readingChrome = readingChrome, onChrome = ::setChrome,
+                            onSaveDefaults = ::saveAsDefaults, onReset = ::resetBookSettings,
+                        )
                         Panel.NAV -> {
                             val finished = book?.finishedAt != null
                             fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
