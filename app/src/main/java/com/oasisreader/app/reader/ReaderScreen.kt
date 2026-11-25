@@ -15,7 +15,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,18 +24,14 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsTopHeight
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -62,8 +57,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -97,7 +90,7 @@ internal const val SIDEWAYS_EXTRA_BOTTOM = 14   // a little more air above the p
 internal val CompactPad = PaddingValues(horizontal = 8.dp)
 
 /** Where to open: chapter + fraction, or an element id inside it. [token] forces a reload. */
-private data class Target(
+internal data class Target(
     val index: Int,
     val start: Float,
     val anchor: String? = null,
@@ -1185,32 +1178,7 @@ private fun ReaderBody(
                 panelBody = panelBody,
             )
 
-            // after following a link: the way back to where the reading was
-            jumpBack?.let { (from, pct) ->
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.inverseSurface,
-                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                    shadowElevation = 6.dp,
-                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-                        .padding(bottom = if (showBars) 104.dp else 44.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "↩️ 원래 보던 곳으로 · $pct%",
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.clickable { jumpBack = null; goChapter(from.index, from.start) }
-                                .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-                        )
-                        Text(
-                            "✕",
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.clickable { jumpBack = null }.padding(start = 6.dp, end = 14.dp, top = 10.dp, bottom = 10.dp)
-                                .semantics { contentDescription = "여기서 계속 읽기" },
-                        )
-                    }
-                }
-            }
+            ReaderJumpPill(jumpBack, showBars, onGo = { from -> goChapter(from.index, from.start) }, onClose = { jumpBack = null })
 
             // the end of the book: the next volume, one tap away
             nextVol?.let { n ->
@@ -1220,35 +1188,15 @@ private fun ReaderBody(
                 )
             }
 
-            // 91: the top-right corner puts a bookmark in / takes it out (where the ribbon shows)
-            if (state is LoadState.Ready && !showBars && panel == Panel.NONE) Box(
-                Modifier.align(Alignment.TopEnd).let { if (readingChrome.hideStatus) it else it.statusBarsPadding() }
-                    .size(56.dp)
-                    .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { toggleBookmark() }
-                    .semantics { contentDescription = if (hereMark != null) "책갈피 빼기" else "책갈피 꽂기" },
+            ReaderBookmarkCorner(
+                ready = state is LoadState.Ready, showBars = showBars, panelNone = panel == Panel.NONE, marked = hereMark != null,
+                readingChrome = readingChrome, sidePad = sidePad, onToggle = { toggleBookmark() },
             )
 
-            // this page is bookmarked: a small ribbon in the top corner
-            if (hereMark != null && state is LoadState.Ready && !showBars) BookmarkGlyph(
-                filled = true, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), width = 11.dp,
-                modifier = Modifier.align(Alignment.TopEnd).let { if (readingChrome.hideStatus) it else it.statusBarsPadding() }.padding(end = 18.dp + sidePad),
+            ReaderPageLabel(
+                readingChrome = readingChrome, pageCovered = pageCovered, ready = state is LoadState.Ready, turnShown = turnShot != null,
+                mode = mode, pageLabel = pageLabel, overall = overall, paper = paper, chrome = chrome,
             )
-
-            // page indicator — book mode: "3 / 34 · 12%", scroll mode: "12%"
-            if (readingChrome.pageNum && !pageCovered && (state is LoadState.Ready || turnShot != null)) {
-                val pct = "${(overall * 100).roundToInt()}%"
-                val label = if (mode == ReaderMode.PAGE && pageLabel.isNotEmpty()) "$pageLabel  ·  $pct" else pct
-                if (mode == ReaderMode.SCROLL) {
-                    // the text runs under the label: give it a solid strip of page colour
-                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(30.dp).background(paper))
-                }
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = chrome.copy(alpha = 0.6f),
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
-                )
-            }
 
             // reading aloud: the small player above the page number (and above the slider when shown)
             if (aloud && state is LoadState.Ready) ReadAloudBar(
