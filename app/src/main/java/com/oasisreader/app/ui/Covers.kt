@@ -21,7 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,7 +77,13 @@ fun BookCover(file: File?, title: String, modifier: Modifier = Modifier) {
             if (got != null) value = got
         }
     }
-    CoverFrame(cover?.bmp, title, modifier.onSizeChanged { shownAt.value = it })
+    // a layout step (not onSizeChanged): it runs again for sure when a list gives this place to another book
+    val measured = modifier.layout { measurable, constraints ->
+        val p = measurable.measure(constraints)
+        shownAt.value = IntSize(p.width, p.height)
+        layout(p.width, p.height) { p.place(0, 0) }
+    }
+    CoverFrame(cover?.bmp, title, measured)
 }
 
 /** Cover that has to be fetched (OPDS thumbnail). */
