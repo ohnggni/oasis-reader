@@ -1046,6 +1046,53 @@
     }
   });
 
+  /* 102: a mouse. The WebView gives a mouse no touch events, only pointer/mouse ones, so a click
+     is judged here with the same zones as a finger tap (edges 30% turn, middle or top strip bring
+     the bars). A drag selects text (no page turn). Fingers keep the touch path above. */
+  var mx = 0, my = 0, mdown = false;
+  document.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    mdown = true; mx = e.clientX; my = e.clientY;
+  }, true);
+  document.addEventListener('pointerup', function (e) {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || !mdown) return;
+    mdown = false;
+    var target = e.target;
+    if (popOpen()) {
+      if (!pop.contains(target) && !bar.contains(target)) closePop();
+      return;
+    }
+    if (target.closest && (target.closest('#hlbar') || target.closest('#hlstrip') || target.closest('#chapnav'))) return;
+    if (Math.abs(e.clientX - mx) > 6 || Math.abs(e.clientY - my) > 6) return;   /* dragged: selecting text */
+    if (currentSelection()) return;
+    if (my < Math.max(padTop, 44)) { bridge.tap(); return; }
+    var mark = target.closest && target.closest('mark.hl');
+    if (mark) { bridge.tapHighlight(mark.getAttribute('data-hl')); return; }
+    if (target.closest && target.closest('a')) return;
+    turnY = Math.max(0, Math.min(1, my / window.innerHeight));
+    var x = e.clientX / W();
+    if (paged && x < 0.3) window.Reader.prev();
+    else if (paged && x > 0.7) window.Reader.next();
+    else bridge.tap();
+  });
+
+  /* 102: the mouse wheel — book view turns one page per wheel move (a trackpad's long fling
+     counts once: it must rest 250ms before the next turn); scroll view scrolls. Inside the note
+     popup the popup scrolls by itself. */
+  var wheelLast = 0;
+  document.addEventListener('wheel', function (e) {
+    if (popOpen() && pop.contains(e.target)) return;
+    var d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    var unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1;
+    e.preventDefault();
+    if (!paged) { window.scrollBy(0, e.deltaY * unit); return; }
+    var now = Date.now(), idle = now - wheelLast;
+    wheelLast = now;
+    if (idle < 250 || Math.abs(d) < 1) return;
+    turnY = 0.5;
+    if (d > 0) window.Reader.next(); else window.Reader.prev();
+  }, { passive: false });
+
   var scrollTimer = null;
   window.addEventListener('scroll', function () {
     if (paged) return;

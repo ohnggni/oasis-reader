@@ -9,8 +9,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-/** 3.0: CSS/JS moved to resources/reader — the page must be exactly what the old raw string built. */
+/**
+ * 3.0: CSS/JS moved to resources/reader — the page must be exactly what the old raw string built
+ * (apart from the mouse block added right after the split, 102). Delete this test and
+ * LegacyReaderHtml the next time page.js changes for another reason.
+ */
 class ReaderHtmlSplitTest {
+
+    private val mouse102 = Regex("(?s)  /\\* 102: a mouse\\..*?\\}, \\{ passive: false \\}\\);\n\n")
+
+    @Test fun mouseBlockIsThereOnce() {
+        val html = ReaderHtml.build(plainDoc, config(false), null, false, ReaderTheme.PAPER)
+        assertEquals(1, mouse102.findAll(html).count())
+    }
 
     private fun config(paged: Boolean, head: String = "", hl: List<PageHighlight> = emptyList()) = ReaderConfig(
         paged = paged, fontPx = 18, start = 0.25f, padTop = 72, padBottom = 40,
@@ -29,7 +40,7 @@ class ReaderHtmlSplitTest {
 
     private fun same(doc: ChapterDoc, cfg: ReaderConfig, font: String?, pub: Boolean, theme: ReaderTheme) {
         val old = LegacyReaderHtml.build(doc, cfg, font, pub, theme)
-        val new = ReaderHtml.build(doc, cfg, font, pub, theme)
+        val new = ReaderHtml.build(doc, cfg, font, pub, theme).replace(mouse102, "")
         assertEquals(old, new)
     }
 
