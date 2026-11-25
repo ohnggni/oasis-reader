@@ -23,11 +23,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import com.oasisreader.app.ui.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -901,47 +898,27 @@ private fun ReaderBody(
         }
     }
 
-    if (tocOpen && p != null) {
-        TocDialog(
-            pkg = p,
-            currentIndex = curIndex,
-            current = section,
-            onPick = { item ->
-                tocOpen = false
-                val idx = p.spineIndexOf(item.path)
-                if (idx >= 0) goChapter(idx, 0f, item.fragment)
-            },
-            onDismiss = { tocOpen = false },
-        )
-    }
-
-    if (hlListOpen) {
-        BookHighlightsDialog(
-            bookId = bookId,
-            db = db,
-            onPick = { h ->
-                hlListOpen = false
-                target = Target(h.spineIndex, 0f, focus = h.id)
-            },
-            onDismiss = { hlListOpen = false },
-        )
-    }
-
-    viewerFile?.let { f -> ImageViewer(file = f, onClose = { viewerFile = null }) }
-
-    deleteTarget?.let { id ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("하이라이트 삭제") },
-            text = { Text("이 하이라이트를 지우시겠습니까?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    deleteTarget = null
-                    webView?.evaluateJavascript("Reader.removeHighlight('${id.replace("'", "")}')", null)
-                    scope.launch { db.highlights().delete(id) }
-                }) { Text("삭제") }
-            },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("취소") } },
-        )
-    }
+    ReaderTailDialogs(
+        pkg = p, curIndex = curIndex, section = section,
+        tocOpen = tocOpen,
+        onTocPick = { item ->
+            tocOpen = false
+            val idx = p?.spineIndexOf(item.path) ?: -1
+            if (idx >= 0) goChapter(idx, 0f, item.fragment)
+        },
+        onTocDismiss = { tocOpen = false },
+        hlListOpen = hlListOpen, bookId = bookId, db = db,
+        onHlPick = { h ->
+            hlListOpen = false
+            target = Target(h.spineIndex, 0f, focus = h.id)
+        },
+        onHlDismiss = { hlListOpen = false },
+        viewerFile = viewerFile, onViewerClose = { viewerFile = null },
+        deleteTarget = deleteTarget, onDeleteDismiss = { deleteTarget = null },
+        onDeleteConfirm = { id ->
+            deleteTarget = null
+            webView?.evaluateJavascript("Reader.removeHighlight('${id.replace("'", "")}')", null)
+            scope.launch { db.highlights().delete(id) }
+        },
+    )
 }
