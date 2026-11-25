@@ -76,7 +76,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.oasisreader.app.reader.readingInsets
-import com.oasisreader.app.reader.saveChrome
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -798,73 +797,43 @@ private fun ComicViewer(
         // the panels' insides: ☰ under the top bar, Aa's three in the card at the bottom (98)
         val comicPanelBody: @Composable androidx.compose.foundation.layout.ColumnScope.(com.oasisreader.app.ui.ReadPanel) -> Unit = { which ->
             when (which) {
-                com.oasisreader.app.ui.ReadPanel.SCREEN -> {
-                    com.oasisreader.app.reader.BrightnessPanel(brightness) { brightness = it; readerPrefs.brightness = it }
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        com.oasisreader.app.ui.PanelSwitch("화면 켜짐 유지", null, keepOn, { keepOn = it; readerPrefs.keepScreenOn = it }, Modifier.weight(1f))
-                        com.oasisreader.app.ui.PanelSwitch("바 자동 숨김", null, autoHide, {
-                            autoHide = it; readerPrefs.autoHideBars = it; barsShownAt = System.currentTimeMillis()
-                        }, Modifier.weight(1f))
-                    }
-                    // 🔊 볼륨 버튼으로 쪽 넘기기 (the same setting as in 설정, easier to find here)
-                    var volKeys by remember { mutableStateOf(com.oasisreader.app.ui.PageKeys.volumeKeys(context)) }
-                    com.oasisreader.app.ui.PanelSwitch("🔊 볼륨 버튼으로 쪽 넘기기", null, volKeys, { volKeys = it; com.oasisreader.app.ui.PageKeys.setVolumeKeys(context, it) })
-                    // 이 책만 (책별 설정, 기본값은 읽기 기본값)
-                    com.oasisreader.app.reader.ChromeSwitches(readingChrome, comic = true) { c ->
-                        readingChrome = c
-                        readerPrefs.saveChrome(c)
-                    }
-                }
-                com.oasisreader.app.ui.ReadPanel.TEXT -> {
-                    com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "세로 스크롤 (웹툰)"), if (mode == ComicMode.PAGE) 0 else 1) { i ->
-                        mode = if (i == 0) ComicMode.PAGE else ComicMode.SCROLL
-                        prefs.edit().putString(modeKey, mode.name).apply()
-                    }
-                    if (mode == ComicMode.PAGE) {
-                        com.oasisreader.app.ui.PanelChoice("방향", listOf("왼쪽 → 오른쪽", "오른쪽 → 왼쪽 (일본 만화)"), if (rtl) 1 else 0) { i ->
-                            rtl = i == 1; prefs.edit().putBoolean("rtl", rtl).apply()
-                        }
-                        com.oasisreader.app.ui.PanelChoice("맞쪽", listOf("첫 장은 혼자", "첫 장도 짝 지어"), if (coverAlone) 0 else 1) { i ->
-                            coverAlone = i == 0; prefs.edit().putBoolean("cover_alone", coverAlone).apply()
-                        }
-                    } else {
-                        com.oasisreader.app.ui.PanelChoice("폭", listOf("화면 너비에 맞추기", "가운데 좁게"), if (narrow) 1 else 0) { i ->
-                            narrow = i == 1; prefs.edit().putBoolean("narrow", narrow).apply()
-                        }
-                    }
-                }
-                com.oasisreader.app.ui.ReadPanel.PAGE -> {
-                    if (mode == ComicMode.PAGE) com.oasisreader.app.ui.TurnStylePicker(
-                        current = turnStyle, speed = turnSpeed,
-                        onPick = { st -> turnStyle = st; readerPrefs.turnStyle = st },
-                        onSpeed = { sp -> turnSpeed = sp; readerPrefs.turnSpeed = sp },
-                    ) else Text(
-                        "세로 스크롤에서는 넘김 효과가 없습니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-                com.oasisreader.app.ui.ReadPanel.NAV -> {
-                    fun T(e: String, l: String, f: () -> Unit) = com.oasisreader.app.ui.PanelTile(e, l, f)
-                    com.oasisreader.app.ui.PanelGrid(buildList {
-                        add(T("🔖", if (bookmarks.isEmpty()) "책갈피" else "책갈피 ${bookmarks.size}") { marksOpen = true })
-                        add(T("⏮️", "처음부터") { panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = 0; curFrac = 0f; viewKey++ })
-                        add(T(if (finished) "↩️" else "✅", if (finished) "읽음 취소" else "다 읽음") {
-                            finished = !finished
-                            val at = if (finished) System.currentTimeMillis() else null
-                            scope.launch { db.books().setFinished(book.id, at) }
-                        })
-                        add(T("⏭️", "다음 권") {
-                            panel = com.oasisreader.app.ui.ReadPanel.NONE
-                            scope.launch { com.oasisreader.app.reader.findAndOpenNext(context, book, nextVol, onOpenBook) }
-                        })
-                        if (com.oasisreader.app.reader.canOpenOrigin(book)) add(T("📂", "있던 폴더") {
-                            panel = com.oasisreader.app.ui.ReadPanel.NONE
-                            onOpenFolder(book)
-                        })
-                    })
-                }
+                com.oasisreader.app.ui.ReadPanel.SCREEN -> ComicScreenPanel(
+                    readerPrefs = readerPrefs,
+                    brightness = brightness, onBrightness = { brightness = it },
+                    keepOn = keepOn, onKeepOn = { keepOn = it },
+                    autoHide = autoHide, onAutoHide = { autoHide = it; barsShownAt = System.currentTimeMillis() },
+                    readingChrome = readingChrome, onChrome = { readingChrome = it },
+                )
+                com.oasisreader.app.ui.ReadPanel.TEXT -> ComicViewPanel(
+                    prefs = prefs, modeKey = modeKey,
+                    mode = mode, onMode = { mode = it },
+                    rtl = rtl, onRtl = { rtl = it },
+                    coverAlone = coverAlone, onCoverAlone = { coverAlone = it },
+                    narrow = narrow, onNarrow = { narrow = it },
+                )
+                com.oasisreader.app.ui.ReadPanel.PAGE -> ComicTurnPanel(
+                    readerPrefs = readerPrefs, paged = mode == ComicMode.PAGE,
+                    turnStyle = turnStyle, onTurnStyle = { turnStyle = it },
+                    turnSpeed = turnSpeed, onTurnSpeed = { turnSpeed = it },
+                )
+                com.oasisreader.app.ui.ReadPanel.NAV -> ComicNavPanel(
+                    bookmarkCount = bookmarks.size, finished = finished, canOrigin = com.oasisreader.app.reader.canOpenOrigin(book),
+                    onMarks = { marksOpen = true },
+                    onRestart = { panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = 0; curFrac = 0f; viewKey++ },
+                    onFinished = {
+                        finished = !finished
+                        val at = if (finished) System.currentTimeMillis() else null
+                        scope.launch { db.books().setFinished(book.id, at) }
+                    },
+                    onNext = {
+                        panel = com.oasisreader.app.ui.ReadPanel.NONE
+                        scope.launch { com.oasisreader.app.reader.findAndOpenNext(context, book, nextVol, onOpenBook) }
+                    },
+                    onFolder = {
+                        panel = com.oasisreader.app.ui.ReadPanel.NONE
+                        onOpenFolder(book)
+                    },
+                )
                 else -> {}
             }
         }
