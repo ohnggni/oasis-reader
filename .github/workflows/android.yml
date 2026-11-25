@@ -49,7 +49,7 @@ jobs:
           OASIS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
-          gradle --no-daemon testDebugUnitTest assembleRelease -PversionCode=${{ github.run_number }} 2>&1 | tee "$RUNNER_TEMP/build.log" || {
+          gradle --no-daemon testDebugUnitTest :tts-core:test assembleRelease -PversionCode=${{ github.run_number }} 2>&1 | tee "$RUNNER_TEMP/build.log" || {
             # surface Kotlin compile errors as annotations (readable without the raw log)
             grep -E '^e: ' "$RUNNER_TEMP/build.log" | head -20 | sed 's/^e: /::error::/' || true
             grep -A3 'What went wrong' "$RUNNER_TEMP/build.log" | head -8 | sed 's/^/::error::/' || true
