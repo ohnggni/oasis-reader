@@ -8,6 +8,7 @@ import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.ReadingTimeEntity
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import androidx.lifecycle.LifecycleOwner
@@ -80,5 +81,30 @@ internal fun ReaderWindowEffects(window: android.view.Window?, keepOn: Boolean, 
                 }
             }
         }
+    }
+}
+
+/**
+ * The place is written at most every 1.5 s: each write also wakes every screen that watches
+ * the 서재, and pages can turn much faster than that. The last place is written on leaving
+ * (in the app's own scope, so it finishes though the screen is gone) and when the app goes
+ * to the background.
+ */
+internal class PlaceSaver(private val db: AppDatabase, private val bookId: String) {
+    private val pendingPlace = arrayOfNulls<Triple<Int, Float, Float>>(1)
+    private val placeJob = arrayOfNulls<kotlinx.coroutines.Job>(1)
+
+    fun flush() {
+        val place = pendingPlace[0] ?: return
+        pendingPlace[0] = null
+        com.oasisreader.app.ui.ShelfActions.scope.launch {
+            db.books().savePosition(bookId, place.first, place.second, place.third, System.currentTimeMillis())
+        }
+    }
+
+    /** Remember the place; it is written within 1.5 s. */
+    fun note(index: Int, fraction: Float, overall: Float, scope: kotlinx.coroutines.CoroutineScope) {
+        pendingPlace[0] = Triple(index, fraction, overall)
+        if (placeJob[0]?.isActive != true) placeJob[0] = scope.launch { kotlinx.coroutines.delay(1_500); flush() }
     }
 }

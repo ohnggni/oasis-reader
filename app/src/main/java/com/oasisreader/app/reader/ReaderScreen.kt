@@ -347,19 +347,11 @@ private fun ReaderBody(
     // the 서재, and pages can turn much faster than that. The last place is written on leaving
     // (in the app's own scope, so it finishes though this screen is gone) and when the app goes
     // to the background.
-    val pendingPlace = remember { arrayOfNulls<Triple<Int, Float, Float>>(1) }
-    val placeJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
-    fun flushPlace() {
-        val place = pendingPlace[0] ?: return
-        pendingPlace[0] = null
-        com.oasisreader.app.ui.ShelfActions.scope.launch {
-            db.books().savePosition(bookId, place.first, place.second, place.third, System.currentTimeMillis())
-        }
-    }
+    val places = remember { PlaceSaver(db, bookId) }
     DisposableEffect(lifecycleOwner) {
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) flushPlace() }
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) places.flush() }
         lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs); flushPlace() }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs); places.flush() }
     }
 
     fun savePosition(fraction: Float, end: Boolean) {
@@ -368,8 +360,7 @@ private fun ReaderBody(
         val idx = curIndex
         atBookEnd = end && idx == p.spine.size - 1
         val overall = p.overall(idx, fraction)
-        pendingPlace[0] = Triple(idx, fraction, overall)
-        if (placeJob[0]?.isActive != true) placeJob[0] = scope.launch { delay(1_500); flushPlace() }
+        places.note(idx, fraction, overall, scope)
         scope.launch {
             if (end && idx == p.spine.size - 1 && book?.finishedAt == null) {
                 val now = System.currentTimeMillis()
