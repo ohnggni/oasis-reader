@@ -1,0 +1,28 @@
+:root {
+  --fs: 18px; --lh: 1.8; --font: serif; --pad-top: 72px; --pad-bottom: 40px;
+  --bg: #f6efe1; --fg: #2b2620; --muted: #7a6f60; --accent: #2f5d50; --rule: #e3d8c3;
+  color-scheme: light;
+}
+html.dark { --bg: #1b2420; --fg: #d6ddd6; --muted: #8f9c94; --accent: #9cc8b4; --rule: #2e3a34; color-scheme: dark; }
+body {
+  word-break: normal;          /* Hangul may break between syllables */
+  overflow-wrap: anywhere;     /* long URLs/latin never overflow */
+  line-break: strict;          /* no closing punctuation at line start */
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+/* defaults with zero id-specificity (:where), so the book's own CSS can override them */
+#content { text-align: justify; }
+:where(#content) :where(h1, h2, h3, h4) { line-height: 1.4; break-after: avoid; }
+:where(#content) h1 { font-size: 1.5em; margin: 0.6em 0 0.9em; }
+:where(#content) h2 { font-size: 1.3em; margin: 0.8em 0 0.7em; }
+:where(#content) h3 { font-size: 1.15em; margin: 0.8em 0 0.5em; }
+:where(#content) h4 { font-size: 1.05em; }
+/* h5 · h6: the web view's own 0.83em / 0.67em made sub-headings smaller than the text (86) */
+:where(#content) :where(h5, h6) { font-size: 1em; line-height: 1.4; break-after: avoid; }
+:where(html.plain #content) p { margin: 0 0 0.85em; }
+:where(html.plain #content) :where(h1, h2, h3, h4) { text-align: left; }
+:where(#content) :where(img, svg) { display: block; max-width: 100%; height: auto; margin: 0.6em auto; }
+#content img, #content svg { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+:where(#content) table { max-width: 100%; border-collapse: collapse; }
+:where(#content) pre { white-space: pre-wrap; }
