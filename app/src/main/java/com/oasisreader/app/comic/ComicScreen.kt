@@ -19,10 +19,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -47,16 +44,9 @@ import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import com.oasisreader.app.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -85,7 +75,6 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import com.oasisreader.app.reader.barTopInset
 import com.oasisreader.app.reader.readingInsets
 import com.oasisreader.app.reader.saveChrome
 import androidx.compose.ui.text.style.TextAlign
@@ -880,99 +869,22 @@ private fun ComicViewer(
             }
         }
 
-        // 98: Aa's card open → the bars go, the page shows the change
-        val aaSet = setOf(com.oasisreader.app.ui.ReadPanel.SCREEN, com.oasisreader.app.ui.ReadPanel.TEXT, com.oasisreader.app.ui.ReadPanel.PAGE)
-        AnimatedVisibility(
-            visible = barsVisible && panel !in aaSet,
-            enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
-            modifier = Modifier.barTopInset(readingChrome, cut),
-        ) {
-            Surface(color = barColor, contentColor = chrome, border = com.oasisreader.app.ui.theme.einkBorder()) {
-                Column {
-                    Row(Modifier.fillMaxWidth().height(60.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
-                        Text(
-                            book.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        // 98: Aa (화면 · 보기 · 넘김 → the card at the bottom) · ☰ — like the book screen (90)
-                        val on = MaterialTheme.colorScheme.primary
-                        Box {
-                            IconButton(onClick = { aaMenu = true }) {
-                                Text("Aa", fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = if (panel in aaSet) on else chrome)
-                            }
-                            com.oasisreader.app.ui.OgMenu(expanded = aaMenu, onDismissRequest = { aaMenu = false }) {
-                                listOf(Triple(com.oasisreader.app.ui.ReadPanel.SCREEN, "☀️", "화면"), Triple(com.oasisreader.app.ui.ReadPanel.TEXT, "▣", "보기"), Triple(com.oasisreader.app.ui.ReadPanel.PAGE, "⇆", "넘김")).forEach { (pp, e, l) ->
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text(l) },
-                                        leadingIcon = { EmojiText(e, fontSize = 16.sp) },
-                                        onClick = { aaMenu = false; panel = pp },
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(onClick = { panel = panel.toggle(com.oasisreader.app.ui.ReadPanel.NAV) }, modifier = Modifier.padding(end = 6.dp)) {
-                            EmojiText("☰", fontSize = 20.sp, color = if (panel == com.oasisreader.app.ui.ReadPanel.NAV) on else chrome)
-                        }
-                    }
-                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                    AnimatedVisibility(
-                        visible = panel == com.oasisreader.app.ui.ReadPanel.NAV,
-                        enter = com.oasisreader.app.ui.theme.calm(androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically()),
-                        exit = com.oasisreader.app.ui.theme.calm(androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()),
-                    ) {
-                        Column(
-                            Modifier.fillMaxWidth()
-                                .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.42f).dp)
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            comicPanelBody(panel)
-                        }
-                    }
-                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                }
-            }
-        }
+        ComicTopBar(
+            barsVisible = barsVisible, panel = panel, aaMenu = aaMenu, readingChrome = readingChrome, cut = cut,
+            barColor = barColor, chrome = chrome, title = book.title,
+            onBack = onBack, onAaMenu = { aaMenu = it }, onPanel = { panel = it },
+            panelBody = comicPanelBody,
+        )
 
         // 98: Aa's panels in a card at the bottom, no dimming; tabs move between the three
-        if (panel in aaSet) lastAa[0] = panel
-        AnimatedVisibility(
-            visible = panel in aaSet,
-            enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
+        if (panel in COMIC_AA_PANELS) lastAa[0] = panel
+        ComicAaCard(
+            visible = panel in COMIC_AA_PANELS, which = lastAa[0], barColor = barColor, chrome = chrome,
             modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            val which = lastAa[0]
-            Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-                color = barColor.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.94f), contentColor = chrome,
-                border = com.oasisreader.app.ui.theme.einkBorder(), shadowElevation = 6.dp,
-                modifier = Modifier.navigationBarsPadding().padding(10.dp).fillMaxWidth(),
-            ) {
-                Column(
-                    Modifier.heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        listOf(Triple(com.oasisreader.app.ui.ReadPanel.SCREEN, "☀️", "화면"), Triple(com.oasisreader.app.ui.ReadPanel.TEXT, "▣", "보기"), Triple(com.oasisreader.app.ui.ReadPanel.PAGE, "⇆", "넘김")).forEach { (pp, e, l) ->
-                            com.oasisreader.app.ui.OgChip(
-                                selected = which == pp, onClick = { panel = pp },
-                                label = { EmojiText("$e $l", fontSize = 14.sp) },
-                                modifier = Modifier.padding(end = 6.dp),
-                            )
-                        }
-                        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { panel = com.oasisreader.app.ui.ReadPanel.NONE; barsVisible = true; barsShownAt = System.currentTimeMillis() }) { Text("✕", color = chrome) }
-                    }
-                    Column(Modifier.padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { comicPanelBody(which) }
-                }
-            }
-        }
+            onPanel = { panel = it },
+            onClose = { panel = com.oasisreader.app.ui.ReadPanel.NONE; barsVisible = true; barsShownAt = System.currentTimeMillis() },
+            panelBody = comicPanelBody,
+        )
 
         // 98: the top-right corner puts a bookmark in / takes it out, as in the book screen (91)
         if (!barsVisible && panel == com.oasisreader.app.ui.ReadPanel.NONE) Box(
