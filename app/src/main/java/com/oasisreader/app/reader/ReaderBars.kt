@@ -38,6 +38,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /** The compact overlay bar: back, title, 🎧, Aa's small menu and ☰. It only ever covers the top margin, never text. */
 @Composable
@@ -110,6 +114,48 @@ internal fun ReaderTopBar(
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 90: Aa's panels (화면 · 글자 · 쪽) in a card at the bottom (at the top while the bottom margin is set, 97). */
+@Composable
+internal fun ReaderAaCard(
+    visible: Boolean, which: Panel, cardTop: Boolean, barColor: Color, chrome: Color, modifier: Modifier,
+    onPanel: (Panel) -> Unit, onClose: () -> Unit,
+    panelBody: @Composable ColumnScope.(Panel) -> Unit,
+) {
+        AnimatedVisibility(
+        visible = visible,
+        enter = com.oasisreader.app.ui.theme.calm(fadeIn()),
+        exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
+        modifier = modifier,
+    ) {
+            Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = barColor.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.94f), contentColor = chrome,
+            border = com.oasisreader.app.ui.theme.einkBorder(), shadowElevation = 6.dp,
+            modifier = (if (cardTop) Modifier.statusBarsPadding() else Modifier.navigationBarsPadding()).padding(10.dp).fillMaxWidth(),
+        ) {
+            Column(
+                Modifier.heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    listOf(Triple(Panel.SCREEN, "☀️", "화면"), Triple(Panel.TEXT, "가", "글자"), Triple(Panel.PAGE, "▤", "쪽")).forEach { (pp, e, l) ->
+                        com.oasisreader.app.ui.OgChip(
+                            selected = which == pp, onClick = { onPanel(pp) },
+                            label = { EmojiText("$e $l", fontSize = 14.sp) },
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onClose) { Text("✕", color = chrome) }
+                }
+                Column(Modifier.padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { panelBody(which) }
             }
         }
     }

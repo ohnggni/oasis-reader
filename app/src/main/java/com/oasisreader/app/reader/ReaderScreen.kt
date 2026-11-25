@@ -1,6 +1,5 @@
 package com.oasisreader.app.reader
 
-import com.oasisreader.app.ui.EmojiText
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
@@ -16,20 +15,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.oasisreader.app.ui.theme.isAppDark
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,12 +32,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsTopHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import com.oasisreader.app.ui.Text
@@ -67,7 +59,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
@@ -1292,40 +1283,13 @@ private fun ReaderBody(
             if (panel in AA_PANELS) lastAa[0] = panel
             // 97: setting the bottom margin, the card moves to the top (out of the way of what changes)
             val cardTop = lastAa[0] == Panel.PAGE && MarginEdit.side == 1
-            AnimatedVisibility(
-                visible = panel in AA_PANELS,
-                enter = com.oasisreader.app.ui.theme.calm(fadeIn()),
-                exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
+            ReaderAaCard(
+                visible = panel in AA_PANELS, which = lastAa[0], cardTop = cardTop, barColor = barColor, chrome = chrome,
                 modifier = Modifier.align(if (cardTop) Alignment.TopCenter else Alignment.BottomCenter),
-            ) {
-                val which = lastAa[0]
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = barColor.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.94f), contentColor = chrome,
-                    border = com.oasisreader.app.ui.theme.einkBorder(), shadowElevation = 6.dp,
-                    modifier = (if (cardTop) Modifier.statusBarsPadding() else Modifier.navigationBarsPadding()).padding(10.dp).fillMaxWidth(),
-                ) {
-                    Column(
-                        Modifier.heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            listOf(Triple(Panel.SCREEN, "☀️", "화면"), Triple(Panel.TEXT, "가", "글자"), Triple(Panel.PAGE, "▤", "쪽")).forEach { (pp, e, l) ->
-                                com.oasisreader.app.ui.OgChip(
-                                    selected = which == pp, onClick = { panel = pp },
-                                    label = { EmojiText("$e $l", fontSize = 14.sp) },
-                                    modifier = Modifier.padding(end = 6.dp),
-                                )
-                            }
-                            Spacer(Modifier.weight(1f))
-                            IconButton(onClick = { panel = Panel.NONE; barsVisible = true; barsShownAt = System.currentTimeMillis() }) { Text("✕", color = chrome) }
-                        }
-                        Column(Modifier.padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { panelBody(which) }
-                    }
-                }
-            }
+                onPanel = { panel = it },
+                onClose = { panel = Panel.NONE; barsVisible = true; barsShownAt = System.currentTimeMillis() },
+                panelBody = panelBody,
+            )
         }
     }
 
