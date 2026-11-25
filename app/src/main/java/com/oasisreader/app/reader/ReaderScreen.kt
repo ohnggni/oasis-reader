@@ -5,8 +5,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
 import android.content.Intent
 import android.net.Uri
-import android.os.Handler
-import android.os.Looper
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -21,11 +19,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,9 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
@@ -161,20 +155,10 @@ private fun ReaderBody(
     var hlListOpen by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var viewerFile by remember { mutableStateOf<File?>(null) }
-    var turnStyle by remember { mutableStateOf(prefs.turnStyle) }
+    val pt = remember { PageTurnState(prefs) }
     // E-INK mode: pages change at once, whatever turn is chosen
-    val effTurn = if (com.oasisreader.app.ui.theme.ThemeMode.eink) com.oasisreader.app.ui.TurnStyle.NONE else turnStyle
-    var turnShot by remember { mutableStateOf<com.oasisreader.app.ui.TurnShot?>(null) }
-    var turnPicker by remember { mutableStateOf(false) }
-    var turnSpeed by remember { mutableStateOf(prefs.turnSpeed) }
-    var turnHold by remember { mutableStateOf(false) }   // chapter change: old page waits on top until the new one is ready
-    var dragShot by remember { mutableStateOf<com.oasisreader.app.ui.TurnShot?>(null) }   // curl under the finger
-    var dragCssW by remember { mutableFloatStateOf(0f) }
-    // the picture is taken asynchronously: finger moves / release that arrive before it are kept here
-    var dragFinger by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
-    var dragRelease by remember { mutableStateOf<Boolean?>(null) }
-    var dragForward by remember { mutableStateOf(true) }
-    LaunchedEffect(turnHold) { if (turnHold) { delay(2500); turnHold = false } }
+    val effTurn = if (com.oasisreader.app.ui.theme.ThemeMode.eink) com.oasisreader.app.ui.TurnStyle.NONE else pt.turnStyle
+    LaunchedEffect(pt.turnHold) { if (pt.turnHold) { delay(2500); pt.turnHold = false } }
     var mTop by remember { mutableIntStateOf(prefs.marginTop) }
     var mBottom by remember { mutableIntStateOf(prefs.marginBottom) }
     var mLeft by remember { mutableIntStateOf(prefs.marginLeft) }
@@ -632,7 +616,7 @@ private fun ReaderBody(
         readingChrome = ReadingChrome.of(prefs)
         fontPx = prefs.fontPx; lineHeight = prefs.lineHeight; mode = prefs.mode
         weight = prefs.weight; fontId = prefs.fontId; publisherStyle = prefs.publisherStyle; liftHeads = prefs.liftHeads
-        turnStyle = prefs.turnStyle; turnSpeed = prefs.turnSpeed
+        pt.turnStyle = prefs.turnStyle; pt.turnSpeed = prefs.turnSpeed
         mTop = prefs.marginTop; mBottom = prefs.marginBottom; mLeft = prefs.marginLeft; mRight = prefs.marginRight
         onTheme(prefs.theme)
         prefs.resetBook()   // onTheme wrote the theme back for this book
@@ -784,41 +768,15 @@ private fun ReaderBody(
                 openError != null -> Failure(openError!!, onRetry = null, onBack = onBack)
                 s is LoadState.Failed -> Failure(s.message, onRetry = { reloadHere() }, onBack = onBack)
                 else -> {
-                    /**
-                     * Picture of the page now on screen as the turn overlay, then [then] moves the
-                     * text underneath. Copies the screen's pixels (WebView.draw() can render at
-                     * another scale); draw() is only the fallback.
-                     */
                     val densityF = androidx.compose.ui.platform.LocalDensity.current.density
-                    fun captureTurn(forward: Boolean, tapY: Float, interactive: Boolean = false, then: () -> Unit) {
-                        val wv = webView
-                        if (wv == null || wv.width <= 0) { then(); return }
-                        val bmp = android.graphics.Bitmap.createBitmap(wv.width, wv.height, android.graphics.Bitmap.Config.ARGB_8888)
-                        fun show() {
-                            // the page number is drawn live on top of the turn: blank it out of the
-                            // picture so it does not show twice (the running head is part of the page)
-                            val cv = android.graphics.Canvas(bmp)
-                            val pnt = android.graphics.Paint().apply { color = paper.toArgb() }
-                            val w = bmp.width.toFloat(); val h = bmp.height.toFloat()
-                            cv.drawRect(w * 0.2f, h - 34 * densityF, w * 0.8f, h, pnt)
-                            val shot = com.oasisreader.app.ui.TurnShot(bmp.asImageBitmap(), forward, effTurn, tapY, turnSpeed, interactive)
-                            if (interactive) {
-                                shot.finger = dragFinger
-                                val early = dragRelease
-                                if (early != null) shot.release = early else dragShot = shot
-                            }
-                            turnShot = shot
-                            then()
+                    fun captureTurn(forward: Boolean, tapY: Float, interactive: Boolean = false, then: () -> Unit) =
+                        pt.capture(webView, context, densityF, paper, effTurn, forward, tapY, interactive, then)
+                    fun commitTurn() {
+                        scope.launch {
+                            androidx.compose.runtime.withFrameNanos { }
+                            androidx.compose.runtime.withFrameNanos { }
+                            webView?.evaluateJavascript("Reader.commitTurn()", null)
                         }
-                        fun drawFallback() { val c = android.graphics.Canvas(bmp); c.drawColor(paper.toArgb()); wv.draw(c) }
-                        val win = context.findActivity()?.window
-                        val loc = IntArray(2).also { wv.getLocationInWindow(it) }
-                        if (win == null) { drawFallback(); show(); return }
-                        android.view.PixelCopy.request(
-                            win, android.graphics.Rect(loc[0], loc[1], loc[0] + wv.width, loc[1] + wv.height), bmp,
-                            { result -> if (result != android.view.PixelCopy.SUCCESS) drawFallback(); show() },
-                            android.os.Handler(android.os.Looper.getMainLooper()),
-                        )
                     }
                     ReaderWebView(
                         store = store,
@@ -827,11 +785,11 @@ private fun ReaderBody(
                         onCreated = { webView = it },
                         onPage = { cur, total ->
                             pageLabel = "$cur / $total"; pageTotal = total; lastActive = System.currentTimeMillis()
-                            if (turnHold && state is LoadState.Ready) scope.launch {
+                            if (pt.turnHold && state is LoadState.Ready) scope.launch {
                                 // the new chapter has laid out: let it paint, then turn
                                 androidx.compose.runtime.withFrameNanos { }
                                 androidx.compose.runtime.withFrameNanos { }
-                                turnHold = false
+                                pt.turnHold = false
                             }
                         },
                         onProgress = { f, end ->
@@ -860,9 +818,9 @@ private fun ReaderBody(
                             fun go() { if (dir > 0) goChapter(curIndex + 1, 0f) else goChapter(curIndex - 1, 1f) }
                             val p = pkg
                             val exists = p != null && (curIndex + dir) in p.spine.indices
-                            if (exists && (turnStyle == com.oasisreader.app.ui.TurnStyle.CURL || turnStyle == com.oasisreader.app.ui.TurnStyle.COVER)) {
+                            if (exists && (pt.turnStyle == com.oasisreader.app.ui.TurnStyle.CURL || pt.turnStyle == com.oasisreader.app.ui.TurnStyle.COVER)) {
                                 // next chapter: the old page waits on top while it loads, then turns away
-                                captureTurn(dir > 0, tapY) { turnHold = true; go() }
+                                captureTurn(dir > 0, tapY) { pt.turnHold = true; go() }
                             } else go()
                         },
                         onLink = { url -> openLink(url) },
@@ -876,58 +834,23 @@ private fun ReaderBody(
                             if (android.os.Build.VERSION.SDK_INT < 33) android.widget.Toast.makeText(context, "복사했습니다", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onDrag = { phase, x, y, extra ->
-                            // a curl dragged with the finger: x, y in page CSS px (scaled to the view)
-                            val wv = webView
-                            val k = if (wv != null && dragCssW > 0f) wv.width / dragCssW else densityF
-                            when (phase) {
-                                0 -> {   // start: extra = direction, y = start height (0..1), x = page width (css)
-                                    dragCssW = x
-                                    val forward = extra > 0
-                                    dragShot = null; dragFinger = null; dragRelease = null; dragForward = forward
-                                    captureTurn(forward, y.coerceIn(0f, 1f), interactive = true) {
-                                        scope.launch {
-                                            androidx.compose.runtime.withFrameNanos { }
-                                            androidx.compose.runtime.withFrameNanos { }
-                                            webView?.evaluateJavascript("Reader.commitTurn()", null)
-                                        }
-                                    }
-                                }
-                                1 -> {
-                                    val p = androidx.compose.ui.geometry.Offset(x * k, y * k)
-                                    dragFinger = p
-                                    dragShot?.finger = p
-                                }
-                                2 -> {   // end: x = horizontal distance moved (css), extra = speed (css px / ms)
-                                    val moved = if (dragForward) -x else x
-                                    val fling = if (dragForward) extra < -0.45f else extra > 0.45f
-                                    val done = fling || moved > dragCssW * 0.25f
-                                    val s = dragShot
-                                    if (s != null) s.release = done else dragRelease = done
-                                    dragShot = null
-                                }
-                            }
+                            pt.drag(phase, x, y, extra, webView, densityF, { fwd, ty, then -> captureTurn(fwd, ty, interactive = true, then) }, ::commitTurn)
                             lastActive = System.currentTimeMillis()
                         },
                         onTurn = { forward, tapY ->
                             lastActive = System.currentTimeMillis()
-                            captureTurn(forward, tapY) {
-                                scope.launch {
-                                    androidx.compose.runtime.withFrameNanos { }
-                                    androidx.compose.runtime.withFrameNanos { }
-                                    webView?.evaluateJavascript("Reader.commitTurn()", null)
-                                }
-                            }
+                            captureTurn(forward, tapY) { commitTurn() }
                         },
                         sidePad = sidePad,
                     )
-                    if (turnPicker) com.oasisreader.app.ui.TurnStyleDialog(
-                        current = turnStyle, speed = turnSpeed,
+                    if (pt.turnPicker) com.oasisreader.app.ui.TurnStyleDialog(
+                        current = pt.turnStyle, speed = pt.turnSpeed,
                         onPick = { st ->
-                            turnStyle = st; prefs.turnStyle = st
+                            pt.turnStyle = st; prefs.turnStyle = st
                             webView?.evaluateJavascript("Reader.setTurn('${st.id}')", null)
                         },
-                        onSpeed = { sp -> turnSpeed = sp; prefs.turnSpeed = sp },
-                        onDismiss = { turnPicker = false },
+                        onSpeed = { sp -> pt.turnSpeed = sp; prefs.turnSpeed = sp },
+                        onDismiss = { pt.turnPicker = false },
                     )
                     if (s !is LoadState.Ready) {
                         Box(Modifier.fillMaxSize().background(paper), contentAlignment = Alignment.Center) {
@@ -935,30 +858,9 @@ private fun ReaderBody(
                         }
                     }
                     com.oasisreader.app.ui.TurnOverlay(
-                        shot = turnShot, paper = paper,
-                        started = !turnHold,
-                        onDone = { done, ok ->
-                            if (ok) { if (turnShot === done) turnShot = null }
-                            else scope.launch {
-                                // let go early: the old page lies flat again on top; put it back underneath, then lift the picture.
-                                // The WebView draws on its own thread: wait until it has really drawn the old page again
-                                // (a fixed few frames was sometimes too early and the next page flashed), then fade the picture out.
-                                val wv = webView
-                                if (wv != null) kotlinx.coroutines.withTimeoutOrNull(600) {
-                                    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { c ->
-                                        wv.evaluateJavascript("Reader.jumpBy(${if (done.forward) -1 else 1})") {
-                                            wv.postVisualStateCallback(System.nanoTime(), object : WebView.VisualStateCallback() {
-                                                override fun onComplete(requestId: Long) { if (c.isActive) c.resumeWith(Result.success(Unit)) }
-                                            })
-                                        }
-                                    }
-                                }
-                                androidx.compose.runtime.withFrameNanos { }
-                                if (com.oasisreader.app.ui.theme.ThemeMode.eink) overlayAlpha.snapTo(0f) else overlayAlpha.animateTo(0f, androidx.compose.animation.core.tween(140))
-                                if (turnShot === done) turnShot = null
-                                overlayAlpha.snapTo(1f)
-                            }
-                        },
+                        shot = pt.turnShot, paper = paper,
+                        started = !pt.turnHold,
+                        onDone = { done, ok -> pt.overlayDone(done, ok, scope, { webView }, overlayAlpha) },
                         modifier = Modifier.fillMaxSize().padding(horizontal = sidePad).graphicsLayer { alpha = overlayAlpha.value },
                     )
                 }
@@ -1033,7 +935,7 @@ private fun ReaderBody(
                             prefs = prefs, webView = { webView },
                             mode = mode, onMode = { setMode(it) },
                             spreadMode = spreadMode, onSpreadMode = { spreadMode = it },
-                            turnStyle = turnStyle, turnSpeed = turnSpeed, onTurnStyle = { turnStyle = it }, onTurnSpeed = { turnSpeed = it },
+                            turnStyle = pt.turnStyle, turnSpeed = pt.turnSpeed, onTurnStyle = { pt.turnStyle = it }, onTurnSpeed = { pt.turnSpeed = it },
                             mTop = mTop, mBottom = mBottom, mLeft = mLeft, mRight = mRight,
                             onMargins = { t, bt, l, r -> mTop = t; mBottom = bt; mLeft = l; mRight = r },
                             readingChrome = readingChrome, onChrome = ::setChrome,
@@ -1093,7 +995,7 @@ private fun ReaderBody(
             )
 
             ReaderPageLabel(
-                readingChrome = readingChrome, pageCovered = pageCovered, ready = state is LoadState.Ready, turnShown = turnShot != null,
+                readingChrome = readingChrome, pageCovered = pageCovered, ready = state is LoadState.Ready, turnShown = pt.turnShot != null,
                 mode = mode, pageLabel = pageLabel, overall = overall, paper = paper, chrome = chrome,
             )
 
