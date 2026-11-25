@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * The small floating player shown while reading aloud (82, 2.8): see-through, folded to ⠿ ⏯ at
@@ -78,7 +79,10 @@ fun ReadAloudBar(
     var open by remember { mutableStateOf(true) }
     var touch by remember { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(open, touch, menuOpen) { if (open && !menuOpen) { delay(3500); open = false } }
+    // each touch starts the wait again; touch is read here, not in composition (a drag touches every frame)
+    LaunchedEffect(open, menuOpen) {
+        if (open && !menuOpen) androidx.compose.runtime.snapshotFlow { touch }.collectLatest { delay(3500); open = false }
+    }
     // kept on screen: anchored bottom-left, so x goes right (≥ 0) and y goes up (≤ 0)
     val conf = androidx.compose.ui.platform.LocalConfiguration.current
     val density = androidx.compose.ui.platform.LocalDensity.current
