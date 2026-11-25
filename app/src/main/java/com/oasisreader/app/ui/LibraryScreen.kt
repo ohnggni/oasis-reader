@@ -33,7 +33,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import com.oasisreader.app.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -53,7 +52,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.oasisreader.app.audio.AudioLibraryLink
 import com.oasisreader.app.data.BookStore
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.data.db.CollectionEntity
@@ -633,34 +631,11 @@ fun LibraryScreen(
         }
 
         // 선택 모드: what to do with the chosen books (the same as 📦 보관함 관리)
-        if (selecting) Surface(tonalElevation = 3.dp) {
-            Row(
-                Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
-            ) {
-                fun done(msg: String? = null) { selected = emptySet(); msg?.let { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show() } }
-                val nonAudio = chosen.filter { it.format != AudioLibraryLink.FORMAT }
-                MiniChip("🗑️ 서재에서 지우기", onClick = { bulkDelete = true })
-                if (chosen.any { it.sourceUrl != null || it.format == AudioLibraryLink.FORMAT }) MiniChip("☁️ 폰에서 지우기", onClick = { bulkRemove = true })
-                MiniChip("📚 컬렉션에 넣기", onClick = { bulkCol = true })
-                if (nonAudio.any { !it.pinned }) MiniChip("📌 보관", onClick = {
-                    val list = chosen
-                    scope.launch { ShelfActions.setPinned(app, list, true); done("📌 보관했습니다") }
-                })
-                if (nonAudio.any { it.pinned && it.sourceUrl != null }) MiniChip("🕒 임시로", onClick = {
-                    val list = chosen
-                    scope.launch { ShelfActions.setPinned(app, list, false); done("🕒 임시로 두었습니다") }
-                })
-                if (chosen.any { it.finishedAt == null }) MiniChip("✔️ 다 읽음", onClick = {
-                    val list = chosen
-                    scope.launch { ShelfActions.setFinished(app, list, true); done() }
-                })
-                if (chosen.any { it.finishedAt != null }) MiniChip("↩️ 안 읽음으로", onClick = {
-                    val list = chosen
-                    scope.launch { ShelfActions.setFinished(app, list, false); done() }
-                })
-            }
-        }
+        if (selecting) SelectionActions(
+            chosen, ctx, app, scope,
+            onBulkDelete = { bulkDelete = true }, onBulkRemove = { bulkRemove = true }, onBulkCol = { bulkCol = true },
+            onClear = { selected = emptySet() },
+        )
     }
 
     infoFor?.let { b -> BookInfoDialog(b, store) { infoFor = null } }

@@ -29,6 +29,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Surface
 
 /** ⋮ menu of a book: what can be done with it. */
 @Composable
@@ -190,4 +195,40 @@ internal fun BulkRemoveFilesDialog(chosen: List<BookEntity>, app: android.conten
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
+}
+
+/** 선택 모드: what to do with the chosen books (the same as 📦 보관함 관리). */
+@Composable
+internal fun SelectionActions(
+    chosen: List<BookEntity>, ctx: android.content.Context, app: android.content.Context, scope: kotlinx.coroutines.CoroutineScope,
+    onBulkDelete: () -> Unit, onBulkRemove: () -> Unit, onBulkCol: () -> Unit, onClear: () -> Unit,
+) {
+    Surface(tonalElevation = 3.dp) {
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(MiniChipGap),
+        ) {
+            fun done(msg: String? = null) { onClear(); msg?.let { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show() } }
+            val nonAudio = chosen.filter { it.format != AudioLibraryLink.FORMAT }
+            MiniChip("🗑️ 서재에서 지우기", onClick = onBulkDelete)
+            if (chosen.any { it.sourceUrl != null || it.format == AudioLibraryLink.FORMAT }) MiniChip("☁️ 폰에서 지우기", onClick = onBulkRemove)
+            MiniChip("📚 컬렉션에 넣기", onClick = onBulkCol)
+            if (nonAudio.any { !it.pinned }) MiniChip("📌 보관", onClick = {
+                val list = chosen
+                scope.launch { ShelfActions.setPinned(app, list, true); done("📌 보관했습니다") }
+            })
+            if (nonAudio.any { it.pinned && it.sourceUrl != null }) MiniChip("🕒 임시로", onClick = {
+                val list = chosen
+                scope.launch { ShelfActions.setPinned(app, list, false); done("🕒 임시로 두었습니다") }
+            })
+            if (chosen.any { it.finishedAt == null }) MiniChip("✔️ 다 읽음", onClick = {
+                val list = chosen
+                scope.launch { ShelfActions.setFinished(app, list, true); done() }
+            })
+            if (chosen.any { it.finishedAt != null }) MiniChip("↩️ 안 읽음으로", onClick = {
+                val list = chosen
+                scope.launch { ShelfActions.setFinished(app, list, false); done() }
+            })
+        }
+    }
 }
