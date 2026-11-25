@@ -431,47 +431,15 @@ private fun ReaderBody(
     val hereMark = bookmarks.firstOrNull {
         bookmarkHere(it, curIndex, curFraction, if (mode == ReaderMode.PAGE) pageTotal else null)
     }
-    fun toggleBookmark() {
-        val m = hereMark
-        if (m != null) {
-            scope.launch { db.bookmarks().delete(m.id) }
-            Toast.makeText(context, "책갈피를 지웠습니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val idx = curIndex; val f = curFraction
-        fun save(snippet: String) {
-            scope.launch {
-                db.bookmarks().insert(com.oasisreader.app.data.db.BookmarkEntity(
-                    id = System.currentTimeMillis().toString(36) + (Math.random() * 1e6).toLong().toString(36),
-                    bookId = bookId, spineIndex = idx, fraction = f, snippet = snippet, createdAt = System.currentTimeMillis(),
-                ))
-            }
-            Toast.makeText(context, "책갈피를 저장했습니다.", Toast.LENGTH_SHORT).show()
-        }
-        val wv = webView
-        if (wv == null) save("") else wv.evaluateJavascript("window.Reader && Reader.pageText()") { r ->
-            save(runCatching { org.json.JSONTokener(r).nextValue() as? String }.getOrNull().orEmpty())
-        }
-    }
-    if (findOpen) pkg?.let { pp ->
-        FindDialog(
-            state = findState, store = store, bookId = bookId, pkg = pp,
-            onPick = { h, q -> findOpen = false; panel = Panel.NONE; target = Target(h.spineIndex, h.fraction, find = q, findNth = h.nth) },
-            onDismiss = { findOpen = false },
-        )
-    }
-    if (marksOpen) BookmarksDialog(
-        list = bookmarks,
-        where = { b ->
-            val pp = pkg
-            if (pp == null) "" else listOfNotNull(
-                chapterTitleFor(pp, b.spineIndex).ifBlank { null },
-                "${(pp.overall(b.spineIndex, b.fraction) * 100).roundToInt()}%",
-            ).joinToString(" · ")
-        },
-        onPick = { b -> marksOpen = false; panel = Panel.NONE; goChapter(b.spineIndex, b.fraction) },
-        onDelete = { b -> scope.launch { db.bookmarks().delete(b.id) } },
-        onDismiss = { marksOpen = false },
+    fun toggleBookmark() = toggleBookmarkHere(hereMark, bookId, curIndex, curFraction, db, scope, context, webView)
+    ReaderSearchMarkDialogs(
+        findOpen = findOpen, findState = findState, store = store, bookId = bookId, pkg = pkg,
+        onFindPick = { h, q -> findOpen = false; panel = Panel.NONE; target = Target(h.spineIndex, h.fraction, find = q, findNth = h.nth) },
+        onFindDismiss = { findOpen = false },
+        marksOpen = marksOpen, bookmarks = bookmarks,
+        onMarkPick = { b -> marksOpen = false; panel = Panel.NONE; goChapter(b.spineIndex, b.fraction) },
+        onMarkDelete = { b -> scope.launch { db.bookmarks().delete(b.id) } },
+        onMarksDismiss = { marksOpen = false },
     )
 
     var lookupText by remember { mutableStateOf<String?>(null) }
@@ -484,32 +452,11 @@ private fun ReaderBody(
     // the page picture fades out (instead of vanishing) when a curl is let go and the page stays
     val overlayAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
     var remote by remember { mutableStateOf<com.oasisreader.app.data.KoSync.Remote?>(null) }
-    com.oasisreader.app.ui.ProgressSync(
-        bookId = bookId,
-        document = book?.kosyncDoc,
-        lastReadAt = book?.lastReadAt,
-        ready = state is LoadState.Ready && pkg != null,
-        positionKey = curIndex to curFraction,
-        place = { "/body/DocFragment[${curIndex + 1}]/body" to (pkg?.overall(curIndex, curFraction) ?: 0f) },
-        differs = { r ->
-            val pp = pkg
-            val t = pp?.let { remoteTarget(it, r) }
-            pp != null && t != null &&
-                (t.first != curIndex || kotlin.math.abs(pp.overall(t.first, t.second) - pp.overall(curIndex, curFraction)) > 0.005f)
-        },
-        onRemote = { remote = it },
+    ReaderRemoteSync(
+        bookId = bookId, document = book?.kosyncDoc, lastReadAt = book?.lastReadAt, ready = state is LoadState.Ready && pkg != null,
+        curIndex = curIndex, curFraction = curFraction, pkg = pkg,
+        remote = remote, onRemote = { remote = it }, onGo = { i, f -> goChapter(i, f) },
     )
-    remote?.let { r ->
-        val pct = r.percentage?.let { "${(it * 100).roundToInt()}%" } ?: "다른 위치"
-        com.oasisreader.app.ui.RemoteProgressDialog(
-            where = "${com.oasisreader.app.ui.remoteDeviceLabel(r)}에서 ${pct}까지 읽었습니다.",
-            onGo = {
-                remote = null
-                pkg?.let { pp -> remoteTarget(pp, r)?.let { (i, f) -> goChapter(i, f) } }
-            },
-            onStay = { remote = null },
-        )
-    }
 
     // page-turner remotes / keyboards: the same turn as a tap on the page edge
     com.oasisreader.app.ui.PageTurnKeys(enabled = state is LoadState.Ready) { dir, _ ->
