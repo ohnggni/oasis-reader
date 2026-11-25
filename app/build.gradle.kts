@@ -87,6 +87,15 @@ android {
     }
 }
 
+// Compose compiler reports, only on demand: ./og-build.sh -PcomposeReports
+// (written to app/build/compose_compiler)
+if (project.hasProperty("composeReports")) {
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler")
+        metricsDestination = layout.buildDirectory.dir("compose_compiler")
+    }
+}
+
 dependencies {
     // 소리 내 읽기 logic with no Android in it (3.0)
     implementation(project(":tts-core"))
