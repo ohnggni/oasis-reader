@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "OasisReader"
 include(":app")
+include(":tts-core")

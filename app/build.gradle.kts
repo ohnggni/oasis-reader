@@ -88,6 +88,8 @@ android {
 }
 
 dependencies {
+    // 소리 내 읽기 logic with no Android in it (3.0)
+    implementation(project(":tts-core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
