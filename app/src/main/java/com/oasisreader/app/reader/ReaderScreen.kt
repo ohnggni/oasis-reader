@@ -247,49 +247,19 @@ private fun ReaderBody(
         val p = pkg ?: return@LaunchedEffect
         state = LoadState.Loading
         state = try {
-            val item = p.spine[t.index]
-            val doc = withContext(Dispatchers.IO) { ChapterLoader.load(store, bookId, item.path) }
-            val hls = db.highlights().forChapter(bookId, t.index).map {
-                PageHighlight(it.id, it.text, it.color, it.anchor)
+            val ready = buildChapterPage(store, db, fonts, prefs, bookId, p, t, fontHref = ::fontHref) {
+                PageInputs(
+                    paged = mode == ReaderMode.PAGE, fontPx = fontPx, lineHeight = lineHeight,
+                    padTop = padTop, padBottom = padBottom, padLeft = padLeft, padRight = padRight,
+                    turn = effTurn, spread = spread, weight = weight,
+                    headShow = readingChrome.head && !readingChrome.hideStatus, liftHeads = liftHeads,
+                    publisherStyle = publisherStyle, theme = rTheme, bookTitle = book?.title.orEmpty(),
+                )
             }
-            val font = prefs.font.takeIf { fonts.isReady(it) } ?: FontManager.byId(null)
-            val html = ReaderHtml.build(
-                doc = doc,
-                config = ReaderConfig(
-                    paged = mode == ReaderMode.PAGE,
-                    fontPx = fontPx,
-                    lineHeight = lineHeight / 10f,
-                    start = t.start,
-                    anchor = t.anchor,
-                    padTop = padTop,
-                    padBottom = padBottom,
-                    padLeft = padLeft,
-                    padRight = padRight,
-                    turn = effTurn.id,
-                    fontFamily = font.cssStack(),
-                    highlights = hls,
-                    focus = t.focus,
-                    find = t.find,
-                    findNth = t.findNth,
-                    animate = effTurn != com.oasisreader.app.ui.TurnStyle.NONE,
-                    spread = spread,
-                    weight = weight,
-                    colors = ReaderHtml.COLORS,
-                    docUrl = doc.url,
-                    head = chapterTitleFor(p, t.index).ifBlank { book?.title.orEmpty() },
-                    headShow = readingChrome.head && !readingChrome.hideStatus,
-                    hasPrev = t.index > 0,
-                    hasNext = t.index < p.spine.size - 1,
-                    liftHeads = liftHeads,
-                ),
-                fontCssHref = fontHref(font),
-                publisherStyle = publisherStyle,
-                theme = rTheme,
-            )
             curIndex = t.index
             pageLabel = ""
             pageCovered = false
-            LoadState.Ready(html, doc.url, t.token)
+            ready
         } catch (e: Exception) {
             LoadState.Failed("이 장을 여는 중 문제가 생겼습니다: ${e.message}")
         }
