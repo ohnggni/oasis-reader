@@ -62,15 +62,20 @@ fun EmojiText(
         return
     }
     val tint = color.takeOrElse { style.color.takeOrElse { LocalContentColor.current } }
-    val body = buildAnnotatedString {
-        appendInlineContent("og", text.substring(0, lead.second))
-        append(text.substring(lead.second))
+    // kept: a new string or map makes the text be laid out again on every recomposition
+    val body = remember(text, lead.second) {
+        buildAnnotatedString {
+            appendInlineContent("og", text.substring(0, lead.second))
+            append(text.substring(lead.second))
+        }
     }
-    val inline = mapOf(
-        "og" to InlineTextContent(Placeholder(1.25.em, 1.25.em, PlaceholderVerticalAlign.TextCenter)) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.fillMaxSize())
-        },
-    )
+    val inline = remember(icon, tint) {
+        mapOf(
+            "og" to InlineTextContent(Placeholder(1.25.em, 1.25.em, PlaceholderVerticalAlign.TextCenter)) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.fillMaxSize())
+            },
+        )
+    }
     M3Text(
         body, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration,
         textAlign, lineHeight, overflow, softWrap, maxLines, minLines, inlineContent = inline, onTextLayout = onTextLayout ?: {}, style = style,
