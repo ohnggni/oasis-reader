@@ -47,7 +47,13 @@ data class EpubPackage(
     /** chars before spine index i */
     fun charsBefore(i: Int): Long = sums[i.coerceIn(0, spine.size)]
 
-    fun spineIndexOf(path: String): Int = spine.indexOfFirst { it.path == path }
+    // path → its first place in the spine, looked up once: naming a chapter asks for every 목차
+    // entry, on every frame while the seek bar is dragged
+    private val places: Map<String, Int> by lazy {
+        HashMap<String, Int>(spine.size * 2).also { m -> for (i in spine.indices.reversed()) m[spine[i].path] = i }
+    }
+
+    fun spineIndexOf(path: String): Int = places[path] ?: -1
 
     /** Overall reading fraction for (chapter, fraction inside the chapter). */
     fun overall(index: Int, fraction: Float): Float {
