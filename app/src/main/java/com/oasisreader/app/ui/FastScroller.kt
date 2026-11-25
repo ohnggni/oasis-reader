@@ -73,9 +73,12 @@ fun LazyListState.scrollTarget() = ScrollTarget(
 @Composable
 fun BoxScope.FastScroller(target: ScrollTarget, label: (Int) -> String? = { null }, bottomPadding: androidx.compose.ui.unit.Dp = 16.dp) {
     val scope = rememberCoroutineScope()
-    val total by remember(target) { derivedStateOf { target.total() } }
-    val visible by remember(target) { derivedStateOf { target.visible().coerceAtLeast(1) } }
-    val first by remember(target) { derivedStateOf { target.first() } }
+    // the place in the list changes all through a scroll: composition only hears the yes/no answers,
+    // the thumb reads the place itself while it is laid out
+    val past by remember(target) { derivedStateOf { target.first() > target.visible().coerceAtLeast(1) } }
+    val long by remember(target) { derivedStateOf { target.total() > target.visible().coerceAtLeast(1) * 3 } }
+    fun maxFirst() = (target.total() - target.visible().coerceAtLeast(1)).coerceAtLeast(1)
+    fun indexAt(f: Float) = (f * maxFirst()).roundToInt().coerceIn(0, (target.total() - 1).coerceAtLeast(0))
     val scrolling by remember(target) { derivedStateOf { target.scrolling() } }
     var dragging by remember { mutableStateOf(false) }
     var dragFrac by remember { mutableFloatStateOf(0f) }
@@ -83,11 +86,10 @@ fun BoxScope.FastScroller(target: ScrollTarget, label: (Int) -> String? = { null
     LaunchedEffect(scrolling, dragging) {
         if (scrolling || dragging) shown = true else { delay(1500); shown = false }
     }
-    val long = total > visible * 3
 
     // ⬆️ 맨 위로
     AnimatedVisibility(
-        visible = first > visible, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
+        visible = past, enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = bottomPadding),
     ) {
         SmallFloatingActionButton(onClick = { scope.launch { target.scrollTo(0) } }) { Text("⬆️") }
@@ -98,15 +100,13 @@ fun BoxScope.FastScroller(target: ScrollTarget, label: (Int) -> String? = { null
         val density = LocalDensity.current
         val thumbH = 44.dp
         val trackPx = with(density) { (maxHeight - thumbH).toPx() }.coerceAtLeast(1f)
-        val maxFirst = (total - visible).coerceAtLeast(1)
-        val frac = if (dragging) dragFrac else (first.toFloat() / maxFirst).coerceIn(0f, 1f)
         fun jump(f: Float) {
             dragFrac = f.coerceIn(0f, 1f)
-            val idx = (dragFrac * maxFirst).roundToInt().coerceIn(0, (total - 1).coerceAtLeast(0))
+            val idx = indexAt(dragFrac)
             scope.launch { target.scrollTo(idx) }
         }
         Box(
-            Modifier.align(Alignment.TopEnd).fillMaxHeight().width(28.dp).pointerInput(target, total, visible, trackPx) {
+            Modifier.align(Alignment.TopEnd).fillMaxHeight().width(28.dp).pointerInput(target, trackPx) {
                 detectVerticalDragGestures(
                     onDragStart = { o -> dragging = true; jump((o.y - thumbH.toPx() / 2) / trackPx) },
                     onDragEnd = { dragging = false },
@@ -116,13 +116,17 @@ fun BoxScope.FastScroller(target: ScrollTarget, label: (Int) -> String? = { null
             },
         ) {
             if (shown || dragging) Box(
-                Modifier.align(Alignment.TopEnd).offset { IntOffset(0, (frac * trackPx).roundToInt()) }
+                Modifier.align(Alignment.TopEnd)
+                    .offset {
+                        val frac = if (dragging) dragFrac else (target.first().toFloat() / maxFirst()).coerceIn(0f, 1f)
+                        IntOffset(0, (frac * trackPx).roundToInt())
+                    }
                     .padding(end = 3.dp).size(width = 6.dp, height = thumbH)
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = if (dragging) 0.9f else 0.55f), RoundedCornerShape(3.dp)),
             )
         }
         if (dragging) {
-            val idx = (dragFrac * maxFirst).roundToInt().coerceIn(0, (total - 1).coerceAtLeast(0))
+            val idx by remember(target) { derivedStateOf { indexAt(dragFrac) } }
             label(idx)?.let { text ->
                 Surface(
                     shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer, tonalElevation = 4.dp,
