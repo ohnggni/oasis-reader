@@ -38,7 +38,7 @@ object ReadAloudText {
             // blocks: a line each
             .replace(Regex("(?i)<br\\s*/?>|</?(?:p|div|li|h[1-6]|blockquote|dd|dt|td|th|tr|figcaption|caption|pre|section|article|aside|header|footer|table)\\b[^>]*>"), "\n")
             .replace(Regex("<[^>]+>"), "")
-        val text = BookSearch.decode(body)
+        val text = HtmlEntities.decode(body)
         val out = ArrayList<String>()
         for (block in text.split('\n')) split(block, out)
         return out
@@ -70,10 +70,10 @@ object ReadAloudText {
 
     /** A heading's inside as one line ending with [HEAD], or two (number line, title) when it starts with a number line. */
     private fun heading(inner: String): String {
-        val lines = inner.split(BR).filter { BookSearch.decode(it.replace(Regex("<[^>]+>"), "")).isNotBlank() }
+        val lines = inner.split(BR).filter { HtmlEntities.decode(it.replace(Regex("<[^>]+>"), "")).isNotBlank() }
         if (lines.isEmpty()) return inner
         val plain = lines.map { it.replace(Regex("<[^>]+>"), "") }
-        val first = BookSearch.decode(plain[0])
+        val first = HtmlEntities.decode(plain[0])
         // 89: "4장 목표에 미칠 때" on one line also gets its number apart
         fun lead(t: String) = splitLead(t).joinToString("\n") { it + HEAD }
         return if (plain.size > 1 && isLabel(first)) plain[0] + HEAD + "\n" + lead(plain.drop(1).joinToString(" "))

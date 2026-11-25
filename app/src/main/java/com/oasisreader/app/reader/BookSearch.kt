@@ -28,19 +28,11 @@ object BookSearch {
     /** The page script's text: body text nodes, tags dropped (not turned into spaces), entities decoded. */
     fun chapterText(html: String): String {
         val body = Regex("(?is)<body\\b[^>]*>(.*)</body>").find(html)?.groupValues?.get(1) ?: html
-        return decode(
+        return HtmlEntities.decode(
             body.replace(Regex("(?is)<script\\b.*?</script>|<style\\b.*?</style>|<!--.*?-->"), "")
                 .replace(Regex("<[^>]+>"), ""),
         )
     }
-
-    internal fun decode(s: String): String = s
-        .replace(Regex("&#(x?)([0-9a-fA-F]+);")) { m ->
-            val code = m.groupValues[2].toIntOrNull(if (m.groupValues[1].isNotEmpty()) 16 else 10)
-            code?.let { String(Character.toChars(it)) } ?: m.value
-        }
-        .replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
-        .replace("&apos;", "'").replace("&hellip;", "…").replace("&middot;", "·").replace("&amp;", "&")
 
     /** Same as the page script's collapse(): whitespace runs become one space, leading whitespace dropped. */
     fun collapse(s: String): String {
