@@ -3,7 +3,6 @@ package com.oasisreader.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +26,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -37,14 +35,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import com.oasisreader.app.ui.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -61,9 +57,7 @@ import com.oasisreader.app.audio.AudioLibraryLink
 import com.oasisreader.app.data.BookStore
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.data.db.CollectionEntity
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /**
@@ -708,153 +702,20 @@ fun LibraryScreen(
         ShelfActions.scope.launch { ShelfActions.addToCollection(app, c.id, ids) }
         android.widget.Toast.makeText(ctx, "📚 ${c.name}에 넣었습니다", android.widget.Toast.LENGTH_SHORT).show()
     }
-    if (bulkRemove) {
-        val list = chosen
-        val can by produceState<List<BookEntity>?>(null, list) {
-            value = withContext(Dispatchers.IO) { list.filter { ShelfActions.canRemoveFiles(app, it) } }
-        }
-        AlertDialog(
-            onDismissRequest = { bulkRemove = false },
-            title = { EmojiText("☁️ 폰에서 지우기") },
-            text = {
-                val n = can?.size
-                Text(
-                    if (n == null) "세는 중…"
-                    else "${n}권의 파일을 폰에서 지웁니다. 서재·읽은 위치·하이라이트는 남고, 열면 서버에서 다시 받습니다." +
-                        if (list.size > n) "\n직접 넣은 책이나 이미 폰에 없는 책 ${list.size - n}권은 그대로 둡니다." else "",
-                )
-            },
-            confirmButton = {
-                TextButton(enabled = !can.isNullOrEmpty(), onClick = {
-                    bulkRemove = false
-                    val go = can.orEmpty()
-                    selected = emptySet()
-                    ShelfActions.scope.launch { ShelfActions.removeFiles(app, go) }
-                }) { Text("지우기", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { bulkRemove = false }) { Text("취소") } },
-        )
-    }
+    if (bulkRemove) BulkRemoveFilesDialog(chosen, app, onDismiss = { bulkRemove = false }, onClear = { selected = emptySet() })
 
     menuFor?.let { b ->
-        AlertDialog(
-            onDismissRequest = { menuFor = null },
-            title = { Text(b.title) },
-            text = {
-                Column {
-                    Text(
-                        (if (b.format == AudioLibraryLink.FORMAT)
-                            listOfNotNull(b.author, if (b.pinned && b.fileBytes > 0) "🎧 폰에 받음 · %.1f MB".format(b.fileBytes / 1048576.0) else "🎧 스트리밍 (폰에 없음)")
-                        else listOfNotNull(b.author, "%.1f MB".format(b.fileBytes / 1048576.0), b.sourceUrl?.let { "서버에서 받음" }))
-                            .joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    // 82: straight into reading aloud (books that are text: EPUB · TXT)
-                    if (b.format == com.oasisreader.app.data.BookStore.FORMAT_EPUB || b.format == com.oasisreader.app.data.BookStore.FORMAT_TXT)
-                        TextButton(onClick = { menuFor = null; com.oasisreader.app.reader.ReadAloudStart.pending = b.id; onOpen(b) }) { EmojiText("🔊 소리 내 읽기로 열기") }
-                    TextButton(onClick = { menuFor = null; infoFor = b }) { Text("ℹ️ 책 정보") }
-                    TextButton(onClick = { menuFor = null; onReview(b) }) { EmojiText("📝 독후감") }
-                    TextButton(onClick = { menuFor = null; pickColFor = b }) {
-                        val n = links.count { it.bookId == b.id }
-                        EmojiText("📚 컬렉션에 넣기" + if (n > 0) " (${n}곳에 있음)" else "")
-                    }
-                    onSourceFolder?.takeIf { com.oasisreader.app.reader.canOpenOrigin(b) }?.let { open -> TextButton(onClick = { menuFor = null; open(b) }) { EmojiText("📂 있던 폴더 열기") } }
-                    TextButton(onClick = { menuFor = null; renaming = b }) { Text("✏️ 제목 바꾸기") }
-                    val isAudio = b.format == AudioLibraryLink.FORMAT
-                    if (isAudio) {
-                        // 오프라인: copy the tracks to the phone, or go back to streaming
-                        val ad = com.oasisreader.app.audio.AudioDownloads
-                        val dl = ad.progress[b.id]
-                        val err = ad.errors[b.id]
-                        fun startDl() {
-                            menuFor = null
-                            askNotif()
-                            ad.enqueue(ctx, b)
-                            com.oasisreader.app.ui.Notice.show(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
-                        }
-                        err?.let { EmojiText("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
-                        val paused = remember(b.id, ad.version) { ad.isPaused(ctx, b.id) }
-                        when {
-                            dl != null || paused -> Row {
-                                if (paused) TextButton(onClick = { ad.resume(ctx, b.id) }) { EmojiText("▶️ 이어 받기") }
-                                else TextButton(onClick = { ad.pause(ctx, b.id) }) { EmojiText("⏸️ 일시정지 ${((dl ?: 0f) * 100).roundToInt()}%") }
-                                TextButton(onClick = { ad.cancel(ctx, b.id) }) { EmojiText("✖️ 받기 취소") }
-                            }
-                            b.pinned && b.fileBytes > 0 -> {}
-                            b.fileBytes > 0 -> TextButton(onClick = { startDl() }) { EmojiText("⬇️ 나머지 트랙도 받기") }
-                            else -> TextButton(onClick = { startDl() }) { EmojiText("⬇️ 폰에 받기 (오프라인으로 듣기)") }
-                        }
-                        if (b.fileBytes > 0) TextButton(onClick = {
-                            menuFor = null
-                            scope.launch { ad.remove(ctx, b) }
-                        }) { EmojiText("☁️ 폰에서 지우고 스트리밍으로 듣기") }
-                    } else TextButton(onClick = { menuFor = null; exportFor = b }) { EmojiText("📝 하이라이트 내보내기") }
-                    if (b.sourceUrl != null && !isAudio) TextButton(onClick = { menuFor = null; onPin(b, !b.pinned) }) {
-                        Text(if (b.pinned) "☁️ 임시로 두기" else "📌 서재에 보관")
-                    }
-                    TextButton(onClick = { menuFor = null; selected = selected + b.id }) { EmojiText("☑️ 여러 권 고르기") }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { menuFor = null; confirmDelete = b }) {
-                    EmojiText("🗑️ 서재에서 지우기", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = { TextButton(onClick = { menuFor = null }) { Text("닫기") } },
+        BookMenuDialog(
+            b, links, ctx, askNotif, scope, onOpen, onReview, onSourceFolder, onPin,
+            onDismiss = { menuFor = null },
+            onInfo = { infoFor = b }, onPickCol = { pickColFor = b }, onRename = { renaming = b },
+            onExport = { exportFor = b }, onSelect = { selected = selected + b.id }, onDelete = { confirmDelete = b },
         )
     }
 
-    renaming?.let { b ->
-        var text by remember(b.id) { mutableStateOf(b.title) }
-        AlertDialog(
-            onDismissRequest = { renaming = null },
-            title = { Text("제목 바꾸기") },
-            text = {
-                OutlinedTextField(
-                    value = text, onValueChange = { text = it }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = {
-                TextButton(enabled = text.isNotBlank(), onClick = { renaming = null; onRename(b, text.trim()) }) { Text("저장") }
-            },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("취소") } },
-        )
-    }
+    renaming?.let { b -> RenameBookDialog(b, onDismiss = { renaming = null }) { title -> onRename(b, title) } }
 
-    confirmDelete?.let { b ->
-        // highlights can outlive the book (하이라이트 화면 › 🗑️ 지운 책), kept unless unticked
-        val hlCount by produceState(0, b.id) {
-            value = com.oasisreader.app.data.db.AppDatabase.get(ctx).highlights().countFor(b.id)
-        }
-        var keepHl by remember(b.id) { mutableStateOf(true) }
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            title = { Text("서재에서 지우시겠습니까?") },
-            text = {
-                Column {
-                    Text(
-                        "「${b.title}」 파일이 이 폰에서 지워집니다. 독서 시간 통계는 남습니다." +
-                            if (hlCount > 0 && !keepHl) " 하이라이트 ${hlCount}개도 지워집니다." else "",
-                    )
-                    if (hlCount > 0) Row(
-                        Modifier.fillMaxWidth().clickable { keepHl = !keepHl }.padding(top = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.Checkbox(checked = keepHl, onCheckedChange = { keepHl = it })
-                        EmojiText("🖍️ 하이라이트·메모 ${hlCount}개는 남기기", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { confirmDelete = null; onDelete(b, hlCount > 0 && keepHl) }) {
-                    Text("지우기", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("취소") } },
-        )
-    }
+    confirmDelete?.let { b -> DeleteBookDialog(b, ctx, onDismiss = { confirmDelete = null }, onDelete = onDelete) }
 }
 
 /**
