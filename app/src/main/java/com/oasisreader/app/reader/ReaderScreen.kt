@@ -65,17 +65,14 @@ import com.oasisreader.app.data.FontOption
 import com.oasisreader.app.data.db.AppDatabase
 import com.oasisreader.app.data.db.BookEntity
 import com.oasisreader.app.data.db.HighlightEntity
-import com.oasisreader.app.data.db.ReadingTimeEntity
 import com.oasisreader.app.epub.EpubPackage
 import com.oasisreader.app.epub.TocItem
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.time.LocalDate
 import kotlin.math.roundToInt
 
 internal const val ASSET_HOST = BookStore.ASSET_HOST
@@ -219,62 +216,12 @@ private fun ReaderBody(
     //    reader has turned/scrolled/tapped within the last 3 minutes ──
     var lastActive by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(bookId) {
-        var pending = 0L
-        suspend fun flush() {
-            if (pending <= 0) return
-            val add = pending; pending = 0
-            val day = LocalDate.now().toString()
-            val dao = db.readingTime()
-            val cur = dao.get(day, bookId)?.seconds ?: 0L
-            dao.upsert(ReadingTimeEntity(day, bookId, cur + add))
-        }
-        try {
-            while (true) {
-                delay(5_000)
-                val front = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-                val active = System.currentTimeMillis() - lastActive < 180_000
-                if (front && active && state is LoadState.Ready) pending += 5
-                if (pending >= 30) flush()
-            }
-        } finally {
-            withContext(NonCancellable) { flush() }
-        }
-    }
+    ReadingTimeTracker(bookId, db, lifecycleOwner, lastActive = { lastActive }, ready = { state is LoadState.Ready })
 
     // brightness only for this screen; back to the system level when leaving the reader
     val window = remember(context) { context.findActivity()?.window }
 
-    // keep the screen on while reading; released after 10 minutes without any reading activity
-    LaunchedEffect(keepOn, window) {
-        val w = window ?: return@LaunchedEffect
-        val flag = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        if (!keepOn) { w.clearFlags(flag); return@LaunchedEffect }
-        try {
-            while (true) {
-                if (System.currentTimeMillis() - lastActive < 600_000) w.addFlags(flag) else w.clearFlags(flag)
-                delay(15_000)
-            }
-        } finally {
-            w.clearFlags(flag)
-        }
-    }
-    LaunchedEffect(brightness) {
-        window?.let { w ->
-            w.attributes = w.attributes.apply {
-                screenBrightness = if (brightness < 0f) android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else brightness
-            }
-        }
-    }
-    DisposableEffect(Unit) {
-        onDispose {
-            window?.let { w ->
-                w.attributes = w.attributes.apply {
-                    screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                }
-            }
-        }
-    }
+    ReaderWindowEffects(window, keepOn, brightness, lastActive = { lastActive })
 
     // facing pages only when the inner screen is open with the hinge vertical (book posture);
     // rotated (hinge horizontal) or the cover screen -> one page
