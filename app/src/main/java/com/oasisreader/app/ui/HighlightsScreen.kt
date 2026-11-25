@@ -166,19 +166,19 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
                 if (isAudio) {
                     // an audiobook: its 🔖 책갈피, in the same shape as a book's highlights
                     val ms = markMap[bookId].orEmpty()
-                    item(key = "ah_$bookId") {
+                    item(key = "ah_$bookId", contentType = "audioHead") {
                         com.oasisreader.app.audio.AudioMarkHeader(
                             titleOf(bookId), titles.containsKey(bookId), ms.size,
                             onCopyAll = { copy(context, titleOf(bookId) + "\n\n" + ms.joinToString("\n") { com.oasisreader.app.audio.AudioMarks.line(it) }) },
                             onDeleteAll = { deleteMarks = bookId },
                         )
                     }
-                    items(ms, key = { "am_" + it.id }) { m -> com.oasisreader.app.audio.AudioMarkRow(m, fmt.format(Date(m.createdAt))) { pickedMark = m } }
+                    items(ms, key = { "am_" + it.id }, contentType = { "audioMark" }) { m -> com.oasisreader.app.audio.AudioMarkRow(m, fmt.format(Date(m.createdAt))) { pickedMark = m } }
                     return@forEach
                 }
                 val list = groupMap[bookId].orEmpty()
                 val onShelf = titles.containsKey(bookId)
-                item(key = "h_$bookId") {
+                item(key = "h_$bookId", contentType = "head") {
                     var menu by remember { mutableStateOf(false) }
                     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -211,7 +211,7 @@ fun HighlightsScreen(onBack: () -> Unit, onOpen: (HighlightEntity) -> Unit, onPl
                         }
                     }
                 }
-                items(list, key = { it.id }) { h ->
+                items(list, key = { it.id }, contentType = { "highlight" }) { h ->
                     Row(
                         Modifier
                             .fillMaxWidth()

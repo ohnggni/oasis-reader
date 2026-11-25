@@ -542,7 +542,7 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(if (tileDp < 100) 16.dp else 20.dp),
                     modifier = Modifier.fillMaxSize().let { if (selecting) it else it.navigationBarsPadding() },
                 ) {
-                    items(entries, key = { it.key }) { e ->
+                    items(entries, key = { it.key }, contentType = { it.javaClass }) { e ->
                         when (e) {
                             is ShelfEntry.Book -> GridBook(
                                 e.b, store, onClick = { clickBook(e.b) }, onLongClick = { toggle(listOf(e.b.id)) },
@@ -580,7 +580,7 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxSize().let { if (selecting) it else it.navigationBarsPadding() },
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
-                    items(entries, key = { it.key }) { e ->
+                    items(entries, key = { it.key }, contentType = { it.javaClass }) { e ->
                         when (e) {
                             is ShelfEntry.Book -> {
                                 ListBook(

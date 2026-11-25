@@ -182,7 +182,7 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 groups.forEach { (name, list) ->
-                    if (name.isNotEmpty()) item(key = "g_$name") {
+                    if (name.isNotEmpty()) item(key = "g_$name", contentType = "group") {
                         val open = name !in closed
                         val all = list.all { it.book.id in selected }
                         Row(
@@ -198,7 +198,7 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                             Text(if (open) "🔼" else "🔽")
                         }
                     }
-                    if (name.isEmpty() || name !in closed) items(list, key = { "b_${name}_${it.book.id}" }) { st ->
+                    if (name.isEmpty() || name !in closed) items(list, key = { "b_${name}_${it.book.id}" }, contentType = { "book" }) { st ->
                         StoredRow(st, st.book.id in selected) { on -> selected = if (on) selected + st.book.id else selected - st.book.id }
                     }
                 }

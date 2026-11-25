@@ -244,7 +244,7 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
             if (direct.isNotEmpty()) item {
                 Text("⚡ 바로 읽기", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             }
-            items(direct.entries.toList(), key = { "direct_" + it.key }) { (key, title) ->
+            items(direct.entries.toList(), key = { "direct_" + it.key }, contentType = { "direct" }) { (key, title) ->
                 val f = dlProgress[key]
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -270,7 +270,7 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                     MiniChip("🗑️ 모두 지우기", onClick = { confirmClear = jobs })
                 }
             }
-            items(jobs, key = { "job_" + it.key }) { job ->
+            items(jobs, key = { "job_" + it.key }, contentType = { "job" }) { job ->
                 BookJobRow(
                     job, dlProgress[job.key], selecting = selecting, picked = job.key in picked,
                     onToggle = { if (job.key in picked) picked.remove(job.key) else picked.add(job.key) },
@@ -286,7 +286,7 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                     modifier = Modifier.padding(24.dp),
                 )
             }
-            items(books, key = { it.first.id }) { (row, st) ->
+            items(books, key = { it.first.id }, contentType = { "audio" }) { (row, st) ->
                 BookCard(row, st, onAll = { askNotif(); AudioDownloads.enqueue(context, row) }, onRemove = { scope.launch { AudioDownloads.remove(context, row) } })
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             }
