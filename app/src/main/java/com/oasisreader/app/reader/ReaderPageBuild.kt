@@ -65,3 +65,20 @@ internal suspend fun buildChapterPage(
     )
     return LoadState.Ready(html, doc.url, t.token)
 }
+
+/** Where to open: chapter + fraction, or an element id inside it. [token] forces a reload. */
+internal data class Target(
+    val index: Int,
+    val start: Float,
+    val anchor: String? = null,
+    val focus: String? = null,
+    val find: String? = null,
+    val findNth: Int = 0,
+    val token: Long = System.nanoTime(),
+)
+
+internal sealed interface LoadState {
+    data object Loading : LoadState
+    data class Ready(val html: String, val baseUrl: String, val token: Long) : LoadState
+    data class Failed(val message: String) : LoadState
+}

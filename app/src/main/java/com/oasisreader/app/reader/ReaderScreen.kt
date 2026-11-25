@@ -1,8 +1,5 @@
 package com.oasisreader.app.reader
 
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.ui.input.pointer.pointerInput
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -71,23 +68,6 @@ internal const val RUNNING_HEAD_DP = 30
 internal const val SIDEWAYS_PAD_DP = 24
 internal const val SIDEWAYS_EXTRA_BOTTOM = 14   // a little more air above the page label
 internal val CompactPad = PaddingValues(horizontal = 8.dp)
-
-/** Where to open: chapter + fraction, or an element id inside it. [token] forces a reload. */
-internal data class Target(
-    val index: Int,
-    val start: Float,
-    val anchor: String? = null,
-    val focus: String? = null,
-    val find: String? = null,
-    val findNth: Int = 0,
-    val token: Long = System.nanoTime(),
-)
-
-internal sealed interface LoadState {
-    data object Loading : LoadState
-    data class Ready(val html: String, val baseUrl: String, val token: Long) : LoadState
-    data class Failed(val message: String) : LoadState
-}
 
 /** The reader in its page colours: menus and panels take the theme's light or dark look. */
 @Composable
@@ -498,16 +478,7 @@ private fun ReaderBody(
                     onFetch = {
                         val url = book?.sourceUrl ?: return@MissingFiles
                         refetching = true
-                        scope.launch {
-                            try {
-                                com.oasisreader.app.data.Downloads.receiveMissing(app, bookId, url)
-                                openAttempt++
-                            } catch (e: Exception) {
-                                com.oasisreader.app.ui.Notice.show(context, "다시 받기 실패: ${e.message}")
-                            } finally {
-                                refetching = false
-                            }
-                        }
+                        fetchMissingBook(scope, app, context, bookId, url, onRetry = { openAttempt++ }, onEnd = { refetching = false })
                     },
                     onBack = onBack,
                 )
@@ -573,12 +544,7 @@ private fun ReaderBody(
                         onJump = { rememberJump() },
                         onReady = { al.onReady { requestAloud() } },   // a chapter opened while reading aloud
                         onCover = { on -> pageCovered = on },
-                        onCopy = { t ->
-                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("text", t))
-                            // Android 13+ shows its own copied notice
-                            if (android.os.Build.VERSION.SDK_INT < 33) android.widget.Toast.makeText(context, "복사했습니다", android.widget.Toast.LENGTH_SHORT).show()
-                        },
+                        onCopy = { t -> copyToClipboard(context, t) },
                         onDrag = { phase, x, y, extra ->
                             pt.drag(phase, x, y, extra, webView, densityF, { fwd, ty, then -> captureTurn(fwd, ty, interactive = true, then) }, ::commitTurn)
                             lastActive = System.currentTimeMillis()
@@ -614,14 +580,7 @@ private fun ReaderBody(
 
             // a settings panel is open: a tap (or swipe) on the page only closes it — the page stays
             if (panel != Panel.NONE) Box(
-                Modifier.fillMaxSize().pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false).consume()
-                        do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
-                        panel = Panel.NONE
-                        barsShownAt = System.currentTimeMillis()
-                    }
-                },
+                Modifier.fillMaxSize().swallowTouch { panel = Panel.NONE; barsShownAt = System.currentTimeMillis() },
             )
 
             // where the status bar was: clock (left) and battery (right) on the chapter-title line
@@ -636,13 +595,7 @@ private fun ReaderBody(
 
             // with the bars up, a tap or swipe on the page only puts them away (no page turn)
             if (panel == Panel.NONE && barsVisible && state is LoadState.Ready) Box(
-                Modifier.fillMaxSize().pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false).consume()
-                        do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
-                        barsVisible = false
-                    }
-                },
+                Modifier.fillMaxSize().swallowTouch { barsVisible = false },
             )
 
             // the running head (chapter title) is drawn inside the page, so it turns with it
