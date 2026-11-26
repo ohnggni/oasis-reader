@@ -1,5 +1,6 @@
 package com.oasisreader.app.reader
 
+import androidx.compose.foundation.background
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -60,6 +61,23 @@ data class ReadingChrome(
 /** Top line: its padding from the top edge (the same as the page number's from the bottom) and height. */
 val STATUS_LINE_TOP = 10.dp
 val STATUS_LINE_HEIGHT = 18.dp
+
+/** The least top padding of a scrolling page with a line over it: the line and its fade (dp). */
+const val TOP_LINE_ROOM = 38
+
+/** Page colour behind the status line, fading out under it: for text that scrolls below. */
+@Composable
+fun StatusLineBacking(paper: Color) {
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth()) {
+        androidx.compose.foundation.layout.Box(
+            Modifier.fillMaxWidth().height(STATUS_LINE_TOP + STATUS_LINE_HEIGHT + 2.dp).background(paper),
+        )
+        androidx.compose.foundation.layout.Box(
+            Modifier.fillMaxWidth().height(7.dp)
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(paper, paper.copy(alpha = 0f)))),
+        )
+    }
+}
 
 /**
  * Where the camera hole is at the top, in dp: [top] = how far down the page must start

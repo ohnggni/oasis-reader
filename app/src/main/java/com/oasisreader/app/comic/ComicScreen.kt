@@ -377,7 +377,7 @@ private fun ComicViewer(
     ComicReadingTime(book.id, db, lifecycleOwner, lastActive = { lastActive })
 
     // keep the screen on while reading (released after 10 minutes idle)
-    com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
+    com.oasisreader.app.ui.FullScreenBack(!barsVisible && panel == com.oasisreader.app.ui.ReadPanel.NONE)
     com.oasisreader.app.reader.ImmersiveBars(readingChrome, appBarsUp = barsVisible)
     val window = remember(context) {
         var c: android.content.Context? = context
@@ -395,11 +395,9 @@ private fun ComicViewer(
         barsVisible = false
     }
     fun toggleBars() { barsVisible = !barsVisible; if (barsVisible) barsShownAt = System.currentTimeMillis() }
-    // 104: read full screen, back brings the bars instead of leaving; an open panel closes first.
-    // With the bars up (and no panel) the screen's own handler above leaves the book.
-    BackHandler(enabled = panel != com.oasisreader.app.ui.ReadPanel.NONE || !barsVisible) {
-        if (panel != com.oasisreader.app.ui.ReadPanel.NONE) panel = com.oasisreader.app.ui.ReadPanel.NONE
-        else barsVisible = true
+    // with the bars up: an open panel closes first, else the screen's own handler above leaves
+    BackHandler(enabled = panel != com.oasisreader.app.ui.ReadPanel.NONE) {
+        panel = com.oasisreader.app.ui.ReadPanel.NONE
         barsShownAt = System.currentTimeMillis()
     }
 
@@ -410,9 +408,10 @@ private fun ComicViewer(
     val labelState = remember { mutableStateOf("") }
     var label by labelState
 
-    // with a bar hidden: a band at the bottom for the page number, so it does not sit on the picture
-    // (not in the webtoon scroll, which runs under it as before), and the clock/battery line on top
-    val pageBand = readingChrome.pageNum && (readingChrome.hideStatus || readingChrome.hideNav) && mode == ComicMode.PAGE
+    // a band at the bottom for the page number, so it does not sit on the picture — always in the
+    // webtoon scroll (nothing lies over what scrolls), in page view when a bar is hidden — and the
+    // clock/battery line on top
+    val pageBand = readingChrome.pageNum && (mode == ComicMode.SCROLL || readingChrome.hideStatus || readingChrome.hideNav)
     val topLine = if (readingChrome.statusLine) com.oasisreader.app.reader.STATUS_LINE_TOP + com.oasisreader.app.reader.STATUS_LINE_HEIGHT + 4.dp else 0.dp
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(

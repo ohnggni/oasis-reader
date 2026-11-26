@@ -58,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.semantics
@@ -130,10 +131,12 @@ fun ReadAloudBar(
                     Modifier.height(34.dp).padding(horizontal = 4.dp).clickable { open = true; touch++ },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) { open = true; touch++ }
-                    BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기", tap { ra.toggle() })
+                    // faint: the folded bar must not stand out over the text
+                    val faint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (eink) 1f else 0.5f)
+                    DragGrip(faint) { open = true; touch++ }
+                    BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기", faint, onClick = tap { ra.toggle() })
                     Spacer(Modifier.width(8.dp))   // ✕ apart: easy to hit by mistake
-                    BarButton("✕", "소리 내 읽기 끝내기", onClose)
+                    BarButton("✕", "소리 내 읽기 끝내기", faint, onClick = onClose)
                 }
             }
         }
@@ -179,12 +182,15 @@ fun ReadAloudBar(
                             ) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelMedium) }
                             OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) { RateSlider(ra) }
                         }
-                        Box(Modifier.align(Alignment.CenterVertically)) { SleepButton(ra) { sleepMenu = it } }
-                        Box(Modifier.align(Alignment.CenterVertically)) { BarButton("🎙", "목소리", tap(onVoice)) }
-                        Box(Modifier.align(Alignment.CenterVertically)) { ScrollViewButton(ra) { touch++ } }
+                        // 🌙 🎙 📜: three slots of one size, quiet like the text beside them
+                        Row(Modifier.align(Alignment.CenterVertically), verticalAlignment = Alignment.CenterVertically) {
+                            SleepButton(ra) { sleepMenu = it }
+                            BarButton("🎙", "목소리", quietIcon(), width = SMALL_SLOT, onClick = tap(onVoice))
+                            ScrollViewButton(ra) { touch++ }
+                        }
                     }
                 }
-                BarButton("⏮", "이전 문장", tap { ra.skip(-1) })
+                BarButton("⏮", "이전 문장", onClick = tap { ra.skip(-1) })
                 // the main button, big and filled
                 Surface(
                     shape = androidx.compose.foundation.shape.CircleShape,
@@ -197,8 +203,8 @@ fun ReadAloudBar(
                         EmojiText(if (ra.playing) "⏸" else "▶", fontSize = 20.sp, color = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
-                BarButton("⏭", "다음 문장", tap { ra.skip(1) })
-                BarButton("✕", "소리 내 읽기 끝내기", onClose)
+                BarButton("⏭", "다음 문장", onClick = tap { ra.skip(1) })
+                BarButton("✕", "소리 내 읽기 끝내기", onClick = onClose)
             }
         }
     }
@@ -239,15 +245,15 @@ private fun SleepButton(ra: ReadAloud, onOpenChange: (Boolean) -> Unit = {}) {
     LaunchedEffect(ra.sleepAt) { while (ra.sleepAt > 0) { now = System.currentTimeMillis(); delay(20_000) } }
     val left = if (ra.sleepAt > 0) ((ra.sleepAt - now + 59_999) / 60_000).toInt().coerceAtLeast(1) else 0
     Box {
-        TextButton(
-            onClick = { open = true },
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            modifier = Modifier.height(32.dp).widthIn(min = 40.dp).semantics { contentDescription = "수면 타이머" },
+        Box(
+            Modifier.height(32.dp).widthIn(min = SMALL_SLOT).clip(RoundedCornerShape(16.dp))
+                .clickable { open = true }.semantics { contentDescription = "수면 타이머" },
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
+            EmojiText(
                 when { left > 0 -> "🌙${left}분"; ra.sleepAtChapterEnd -> "🌙장"; else -> "🌙" },
-                style = MaterialTheme.typography.labelLarge,
-                color = if (left > 0 || ra.sleepAtChapterEnd) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                color = if (left > 0 || ra.sleepAtChapterEnd) MaterialTheme.colorScheme.primary else quietIcon(),
             )
         }
         OgMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -261,30 +267,39 @@ private fun SleepButton(ra: ReadAloud, onOpenChange: (Boolean) -> Unit = {}) {
     }
 }
 
-/** 소리 내 읽기 동안 스크롤 보기 (106): one switch for every book, filled when on. */
+/** The card's small buttons: one width, a colour that does not shine. */
+private val SMALL_SLOT = 36.dp
+
+@Composable
+private fun quietIcon() = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (com.oasisreader.app.ui.theme.ThemeMode.eink) 1f else 0.75f)
+
+/** 소리 내 읽기 동안 스크롤 보기 (106): one switch for every book; on = the accent colour on a faint round. */
 @Composable
 private fun ScrollViewButton(ra: ReadAloud, onTouch: () -> Unit) {
     val on = ra.scrollView && !ra.viewPicked
     val colors = MaterialTheme.colorScheme
     Box(
-        Modifier.size(32.dp)
-            .clip(androidx.compose.foundation.shape.CircleShape)
+        Modifier.size(width = SMALL_SLOT, height = 32.dp)
+            .clip(RoundedCornerShape(16.dp))
             .then(
-                if (on) Modifier.background(colors.primaryContainer).border(1.dp, colors.primary, androidx.compose.foundation.shape.CircleShape)
-                else Modifier,
+                if (!on) Modifier
+                else if (com.oasisreader.app.ui.theme.ThemeMode.eink) Modifier.border(1.dp, colors.primary, RoundedCornerShape(16.dp))
+                else Modifier.background(colors.primary.copy(alpha = 0.16f)),
             )
             .toggleable(value = on, role = androidx.compose.ui.semantics.Role.Switch) { onTouch(); ra.changeScrollView(it) }
             .semantics { contentDescription = "소리 내 읽기 동안 스크롤 보기" },
         contentAlignment = Alignment.Center,
     ) {
-        EmojiText("📜", fontSize = 16.sp, color = if (on) colors.onPrimaryContainer else colors.onSurface)
+        EmojiText("📜", fontSize = 16.sp, color = if (on) colors.primary else quietIcon())
     }
 }
 
 @Composable
-private fun BarButton(glyph: String, label: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(width = 38.dp, height = 32.dp).semantics { contentDescription = label }) {
-        com.oasisreader.app.ui.EmojiText(glyph, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+private fun BarButton(
+    glyph: String, label: String, color: Color = Color.Unspecified, width: androidx.compose.ui.unit.Dp = 38.dp, onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(width = width, height = 32.dp).semantics { contentDescription = label }) {
+        com.oasisreader.app.ui.EmojiText(glyph, fontSize = 16.sp, color = color.takeOrElse { MaterialTheme.colorScheme.onSurface })
     }
 }
 

@@ -759,7 +759,12 @@
          under it (or under its fade) is out of view too */
       var head = document.getElementById('rhead').offsetHeight;
       var top = Math.max(padTop, head ? head + 8 : 0);
-      if (r.top < top || r.bottom > window.innerHeight - padBottom - 24) {
+      var bottom = window.innerHeight - padBottom - 24;
+      /* the last sentence on the screen — it runs off the bottom, or the next one would — goes up
+         as it starts, so that what is read is always followed by what comes next */
+      var end = ttsRect(i, true), next = ttsRect(i + 1, false);
+      var last = end.bottom > bottom || (next !== null && next.bottom > bottom);
+      if (r.top < top || (last && r.top > top + 48)) {
         window.scrollTo({ top: Math.max(0, window.scrollY + r.top - top - 40), behavior: 'smooth' });
       }
     }
@@ -769,7 +774,8 @@
   var ttsNow = -1, ttsAt = null;   /* the sentence marked; its range stays after reading ends */
   function headHeight() { return document.getElementById('rhead').offsetHeight; }
   /* on this screen or after it / on this screen */
-  function fromScreen(r) { return paged ? r.left >= 0 : r.top >= headHeight() - 2; }   /* scroll: clear of the head */
+  /* scroll: clear of the top line (the page's own, or the app's status line, as tall) */
+  function fromScreen(r) { return paged ? r.left >= 0 : r.top >= Math.max(headHeight(), 30) - 2; }
   function onScreen(r) {
     return fromScreen(r) && (paged ? r.left < W() - 1 : r.top < window.innerHeight - padBottom);
   }
@@ -832,17 +838,13 @@
       html.classList.toggle('dark', !!d); dark = !!d;
     },
     commitTurn: function () { commitTurn(); },
-    /* 104: back closes what is open on the page — a selection, the note popup, a highlight's kept
-       start, in that order; false = there was nothing */
+    /* 104: back, full screen, closes only what lies on the page — a selection, else the note popup
+       (a highlight's kept start stays: pages are being turned to find its end) */
     back: function () {
       if (currentSelection() || noteSelection()) {
         window.getSelection().removeAllRanges(); bar.style.display = 'none';
         if (hlStart) refreshStrip();
-        return true;
-      }
-      if (popOpen()) { closePop(); return true; }
-      if (hlStart) { clearStart(); return true; }
-      return false;
+      } else if (popOpen()) closePop();
     },
     setWeight: function (w) { html.setAttribute('data-w', String(w || 0)); },
     setSpread: function (on) { if (spread === !!on) return; var f = fraction(); spread = !!on; layout(f); },

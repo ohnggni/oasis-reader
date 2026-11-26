@@ -194,7 +194,10 @@ private fun ReaderBody(
     val sidePad = if (sideways) SIDEWAYS_PAD_DP.dp else 0.dp
     // status bar hidden and nothing on the top line / no page number: the text takes that room
     val topFree = readingChrome.hideStatus && !readingChrome.statusLine
-    val padTop = ((if (topFree) 26 else BAR_DP + 10) + mTop).coerceAtLeast(16)
+    // scroll view: the text runs under the top line (the page's own, or the status line the app
+    // draws), which is solid — the page starts below it even with the smallest top margin
+    val underTopLine = shownMode == ReaderMode.SCROLL && (readingChrome.statusLine || (readingChrome.head && !readingChrome.hideStatus))
+    val padTop = ((if (topFree) 26 else BAR_DP + 10) + mTop).coerceAtLeast(if (underTopLine) TOP_LINE_ROOM else 16)
     val bottomBase = if (readingChrome.pageNum) 34 else 16
     val padBottom = ((if (sideways) bottomBase + SIDEWAYS_EXTRA_BOTTOM else bottomBase) + mBottom).coerceAtLeast(12)
     val padLeft = (24 + mLeft).coerceAtLeast(6)
@@ -440,21 +443,11 @@ private fun ReaderBody(
         webView?.evaluateJavascript(if (dir > 0) "Reader.next()" else "Reader.prev()", null)
     }
 
-    // 104: read full screen (bars away), back does not leave the book — it brings the bars; with
-    // them up it leaves. What is open closes first: a panel, then the page's selection or note popup.
+    // with the bars up: a panel closes first, else back leaves (full screen: [FullScreenBack], below)
     BackHandler {
-        fun barsThenLeave() {
-            if (barsVisible) onBack() else { barsVisible = true; barsShownAt = System.currentTimeMillis() }
-        }
-        val wv = webView
         when {
             panel != Panel.NONE -> panel = Panel.NONE
-            // no page to read (not opened, files missing, failed): leave as before
-            pkg == null || missing || openError != null || state is LoadState.Failed -> onBack()
-            wv == null || state !is LoadState.Ready -> barsThenLeave()
-            else -> wv.evaluateJavascript("window.Reader && Reader.back ? Reader.back() : false") { closed ->
-                if (closed != "true") barsThenLeave()
-            }
+            else -> onBack()
         }
     }
 
@@ -590,6 +583,10 @@ private fun ReaderBody(
                 Modifier.fillMaxSize().swallowTouch { panel = Panel.NONE; barsShownAt = System.currentTimeMillis() },
             )
 
+            // scroll view: a solid strip of page colour behind that line, fading out below it, so the
+            // text never shows through the title and the clock (like the strip under the page number)
+            if (shownMode == ReaderMode.SCROLL && readingChrome.statusLine && state is LoadState.Ready) StatusLineBacking(paper)
+
             // where the status bar was: clock (left) and battery (right) on the chapter-title line
             // (it appears only once the bar has gone, not under it while it fades)
             AnimatedVisibility(
@@ -606,7 +603,10 @@ private fun ReaderBody(
             )
 
             // the running head (chapter title) is drawn inside the page, so it turns with it
-            com.oasisreader.app.ui.NoEdgeBackGesture(active = !barsVisible)
+            // 104: reading full screen (a chapter loading counts; a book that cannot be shown does not)
+            com.oasisreader.app.ui.FullScreenBack(
+                !barsVisible && panel == Panel.NONE && pkg != null && !missing && openError == null && state !is LoadState.Failed,
+            ) { webView?.evaluateJavascript("window.Reader && Reader.back && Reader.back()", null) }
             ImmersiveBars(readingChrome, appBarsUp = barsVisible && panel !in AA_PANELS)
 
             // the panels' insides: ☰ under the top bar, Aa's three in the card at the bottom (90)

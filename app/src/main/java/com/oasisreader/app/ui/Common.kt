@@ -203,8 +203,7 @@ internal fun edgeBand(height: Int, max: Int): Pair<Int, Int> {
  * While [active] (reading full screen), the system back gesture is switched off on both screen
  * edges so a page-turn swipe from the edge is not taken as "back". Android allows this on at
  * most 200dp of each edge, so it covers the lower part of the screen, in the thumb's reach
- * ([edgeBand]). Elsewhere on the edges back still comes, and the reading screens answer it by
- * showing their bars instead of leaving.
+ * ([edgeBand]). Elsewhere on the edges back still comes: [FullScreenBack] lets it do nothing.
  */
 @Composable
 fun NoEdgeBackGesture(active: Boolean) {
@@ -228,4 +227,16 @@ fun NoEdgeBackGesture(active: Boolean) {
             view.systemGestureExclusionRects = emptyList()
         }
     }
+}
+
+/**
+ * The one rule of every reading screen — books, comics, PDF (104): read full screen ([fullScreen],
+ * bars away) back does nothing, gesture or key; with the bars up it works as usual. [closeFirst]:
+ * what back may still close on the page itself (a selection, a note popup).
+ * Put it after the screen's own back handler, so that it comes first.
+ */
+@Composable
+fun FullScreenBack(fullScreen: Boolean, closeFirst: () -> Unit = {}) {
+    NoEdgeBackGesture(active = fullScreen)
+    androidx.activity.compose.BackHandler(enabled = fullScreen) { closeFirst() }
 }
