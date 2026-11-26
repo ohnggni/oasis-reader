@@ -7,12 +7,21 @@ import android.widget.Toast
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
 
-/** A touch that only ends a panel or the bars (no page turn): everything under it is swallowed, [onEnd] runs when the finger is up. */
+/**
+ * A layer over the page that takes a tap or swipe for itself and answers it with [onEnd] when the
+ * finger lifts — but not one the system took away for its back gesture: that touch ends already
+ * consumed (cancelled), and answering it would put the bars away before back arrives (104).
+ */
 internal fun Modifier.swallowTouch(onEnd: () -> Unit): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false).consume()
-        do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
-        onEnd()
+        var taken: Boolean
+        do {
+            val e = awaitPointerEvent()
+            taken = e.changes.any { it.isConsumed }
+            e.changes.forEach { it.consume() }
+        } while (e.changes.any { it.pressed })
+        if (!taken) onEnd()
     }
 }
 

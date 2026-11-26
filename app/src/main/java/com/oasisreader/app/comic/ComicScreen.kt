@@ -66,6 +66,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.oasisreader.app.reader.readingInsets
+import com.oasisreader.app.reader.swallowTouch
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -555,23 +556,13 @@ private fun ComicViewer(
 
         // with the bars up (no panel), a tap or swipe on the page only puts them away — no page turn
         if (panel == com.oasisreader.app.ui.ReadPanel.NONE && barsVisible) Box(
-            Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false).consume()
-                    do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
-                    barsVisible = false
-                }
-            },
+            Modifier.fillMaxSize().swallowTouch { barsVisible = false },
         )
         // a settings panel is open: a tap (or swipe) on the page only closes it — the page stays
         if (panel != com.oasisreader.app.ui.ReadPanel.NONE) Box(
-            Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false).consume()
-                    do { val e = awaitPointerEvent(); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
-                    panel = com.oasisreader.app.ui.ReadPanel.NONE
-                    barsShownAt = System.currentTimeMillis()
-                }
+            Modifier.fillMaxSize().swallowTouch {
+                panel = com.oasisreader.app.ui.ReadPanel.NONE
+                barsShownAt = System.currentTimeMillis()
             },
         )
         if (barsVisible && !readingChrome.hideStatus) {
