@@ -99,6 +99,8 @@ if (project.hasProperty("composeReports")) {
 dependencies {
     // 소리 내 읽기 logic with no Android in it (3.0)
     implementation(project(":tts-core"))
+    // EPUB · 텍본 파일 (3.0)
+    implementation(project(":epub"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
