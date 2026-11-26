@@ -1,9 +1,9 @@
 :root {
   --fs: 18px; --lh: 1.8; --font: serif; --pad-top: 72px; --pad-bottom: 40px;
-  --bg: #f6efe1; --fg: #2b2620; --muted: #7a6f60; --accent: #2f5d50; --rule: #e3d8c3;
+  --bg: #f6efe1; --fg: #2b2620; --muted: #7a6f60; --head: rgba(122, 111, 96, .8); --accent: #2f5d50; --rule: #e3d8c3;
   color-scheme: light;
 }
-html.dark { --bg: #1b2420; --fg: #d6ddd6; --muted: #8f9c94; --accent: #9cc8b4; --rule: #2e3a34; color-scheme: dark; }
+html.dark { --bg: #1b2420; --fg: #d6ddd6; --muted: #8f9c94; --head: rgba(143, 156, 148, .8); --accent: #9cc8b4; --rule: #2e3a34; color-scheme: dark; }
 body {
   word-break: normal;          /* Hangul may break between syllables */
   overflow-wrap: anywhere;     /* long URLs/latin never overflow */

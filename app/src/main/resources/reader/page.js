@@ -754,8 +754,14 @@
         if (pendingTurn !== null) commitTurn();
         go(p, document.visibilityState !== 'hidden' && Math.abs(p - page) === 1);
       }
-    } else if (r.top < padTop || r.bottom > window.innerHeight - padBottom - 24) {
-      window.scrollTo({ top: Math.max(0, window.scrollY + r.top - padTop - 40), behavior: 'smooth' });
+    } else {
+      /* 105: the running head covers the top of the screen — with a small top margin a sentence
+         under it (or under its fade) is out of view too */
+      var head = document.getElementById('rhead').offsetHeight;
+      var top = Math.max(padTop, head ? head + 8 : 0);
+      if (r.top < top || r.bottom > window.innerHeight - padBottom - 24) {
+        window.scrollTo({ top: Math.max(0, window.scrollY + r.top - top - 40), behavior: 'smooth' });
+      }
     }
   }
 

@@ -61,13 +61,16 @@ object ReaderHtml {
 
     private fun hex(c: Long) = "#%06x".format(c and 0xFFFFFF)
 
+    /** The running head's letters: the muted colour, a little see-through (the line itself is solid, 105). */
+    private fun headColor(c: Long) = "rgba(${c shr 16 and 0xFF},${c shr 8 and 0xFF},${c and 0xFF},.8)"
+
     /** CSS variables for a page theme (inline on <html>, so they win over the defaults). */
     fun themeVars(t: ReaderTheme) =
-        "--bg:${hex(t.bg)};--fg:${hex(t.fg)};--muted:${hex(t.muted)};--accent:${hex(t.accent)};--rule:${hex(t.rule)}"
+        "--bg:${hex(t.bg)};--fg:${hex(t.fg)};--muted:${hex(t.muted)};--head:${headColor(t.muted)};--accent:${hex(t.accent)};--rule:${hex(t.rule)}"
 
     /** Same as a JS object literal for Reader.setTheme. */
     fun themeJson(t: ReaderTheme) =
-        "{'--bg':'${hex(t.bg)}','--fg':'${hex(t.fg)}','--muted':'${hex(t.muted)}','--accent':'${hex(t.accent)}','--rule':'${hex(t.rule)}'}"
+        "{'--bg':'${hex(t.bg)}','--fg':'${hex(t.fg)}','--muted':'${hex(t.muted)}','--head':'${headColor(t.muted)}','--accent':'${hex(t.accent)}','--rule':'${hex(t.rule)}'}"
 
     private fun esc(s: String?): String = (s ?: "")
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")

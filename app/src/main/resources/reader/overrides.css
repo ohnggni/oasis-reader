@@ -64,9 +64,15 @@ html.paged #content iframe, html.paged #content video, html.paged #content embed
 /* running head: part of the page (it turns with it); the app's bar covers it when shown */
 #rhead {
   position: fixed; z-index: 5; top: 0; left: 0; right: 0; height: 30px; line-height: 30px;
-  padding: 0 48px; box-sizing: border-box; background: var(--bg); color: var(--muted);
+  padding: 0 48px; box-sizing: border-box; background: var(--bg); color: var(--head);
   font: 11px/30px sans-serif; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  opacity: .8; pointer-events: none;
+  pointer-events: none;
+}
+/* scroll view (105): the text goes under the line, so the page colour fades out just below it
+   (fixed, so the line's own overflow:hidden does not cut it off; hidden with the line) */
+html:not(.paged) #rhead::after {
+  content: ''; position: fixed; left: 0; right: 0; top: 30px; height: 7px;
+  background: linear-gradient(to bottom, var(--bg), transparent);
 }
 
 /* highlight palette shown over a text selection */
