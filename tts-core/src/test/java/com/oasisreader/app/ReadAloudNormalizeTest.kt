@@ -154,4 +154,29 @@ class ReadAloudNormalizeTest {
         assertEquals("신화학자 조지프 캠벨은 ‘타트 트밤 아시’라는", ReadAloudNormalize.apply("신화학자 조지프 캠벨Joseph Campbell은 ‘타트 트밤 아시Tat tvam asi’라는"))
         assertEquals("마테를링크의 『파랑새』", ReadAloudNormalize.apply("마테를링크Maeterlinck의 『파랑새』"))
     }
+
+    @Test fun longDashes() {
+        // 107: — ― between words is a comma's pause, spaced or not, doubled or not
+        assertEquals("말했다, 그러나", apply("말했다—그러나"))
+        assertEquals("말했다, 그러나", apply("말했다 — 그러나"))
+        assertEquals("말했다, 그러나", apply("말했다— 그러나"))
+        assertEquals("말했다, 그러나", apply("말했다 —그러나"))
+        assertEquals("그것은, 바로 사랑", apply("그것은——바로 사랑"))
+        assertEquals("그것은, 바로 사랑", apply("그것은 ―― 바로 사랑"))
+        assertEquals("그것은, 바로 사랑", apply("그것은 — — 바로 사랑"))
+        assertEquals("하나, 둘, 셋이다", apply("하나―둘—셋이다"))
+        assertEquals("‘나’, 그리고 (너), “우리”", apply("‘나’—그리고 (너)—“우리”"))
+        assertEquals("소쉬르, 그는", apply("소쉬르Saussure—그는"))
+        assertEquals("삼년, 그 뒤", apply("3년—그 뒤"))
+        // not between words: left to the engine
+        assertEquals("— 그러나", apply("— 그러나"))
+        assertEquals("그러나—", apply("그러나—"))
+        assertEquals("그래, —그러나", apply("그래, —그러나"))
+        // the en dash is for ranges; other languages are kept
+        assertEquals("서울–부산 구간", apply("서울–부산 구간"))
+        assertEquals("wait—what", apply("wait—what"))
+        // off with the same switch, and next to a dictionary word
+        assertEquals("말했다—그러나", ReadAloudNormalize.speak("말했다—그러나", emptyList(), false))
+        assertEquals("지피티, 그리고", ReadAloudNormalize.speak("GPT—그리고", listOf("GPT" to "지피티"), true))
+    }
 }

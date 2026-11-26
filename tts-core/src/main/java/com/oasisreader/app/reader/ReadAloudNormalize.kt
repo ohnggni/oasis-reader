@@ -258,13 +258,22 @@ object ReadAloudNormalize {
     private val GLOSS_HANJA = Regex("(?<=[가-힣])[$HANJA]+")
     /** 언어·언어학·문학: a list — a comma's pause. Numbers (3·1 운동) are left to the number rules. */
     private val MID_DOT = Regex("(?<=[가-힣A-Za-z)’'\"])\\s?[·・ㆍ]\\s?(?=[가-힣A-Za-z(‘'\"])")
+    /**
+     * 말했다—그러나 · 그것은 —— 바로: a long dash (— ―, one or several) between words — a comma's
+     * pause. The en dash (–, number ranges) is not one of them. A dictionary word (private use
+     * letter while the rules run) counts as a word.
+     */
+    private val LONG_DASH = Regex(
+        "(?<=[\\p{L}\\p{N}\\p{Co})\\]）’”'\"」』〉》%…])\\s*[—―](?:\\s*[—―])*\\s*(?=[\\p{L}\\p{N}\\p{Co}(\\[（‘“'\"「『〈《…])",
+    )
     /** 주어+목적어: read 플러스 (numbers: 더하기, in the number rules). */
     private val PLUS = Regex("(?<=[가-힣A-Za-z’'\"])\\s?\\+\\s?(?=[가-힣A-Za-z‘'\"])")
 
     /**
      * A gloss is said once: a Latin or Hanja word right after a Korean one, in brackets or not,
      * only explains it (소쉬르Saussure는 → 소쉬르는, 공空 → 공, 인문학(人文學) → 인문학).
-     * Words joined by · are a list (a comma's pause), by + are read 플러스.
+     * Words joined by · are a list (a comma's pause), by + are read 플러스; a long dash between
+     * words is a comma's pause too (107).
      */
     fun joins(sentence: String): String {
         var s = sentence
@@ -272,6 +281,7 @@ object ReadAloudNormalize {
         s = GLOSS_LATIN.replace(s, "")
         s = GLOSS_HANJA.replace(s, "")
         s = MID_DOT.replace(s, ", ")
+        s = LONG_DASH.replace(s, ", ")
         s = PLUS.replace(s, " 플러스 ")
         return s
     }
