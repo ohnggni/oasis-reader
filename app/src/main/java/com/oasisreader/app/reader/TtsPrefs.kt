@@ -20,7 +20,7 @@ object TtsPrefs {
     const val NORMALIZE = "normalize"
     const val CHAPTER_CUE = "chapter_cue"
     const val RESUME_ALOUD = "resume_aloud"
-    const val HIDDEN_ENGINES = "hidden_engines"
+    const val HIDDEN_ENGINES = "hidden_engines"   // 2.10 중간에만 쓰던 키 — 지금은 읽지 않음, 폰에 남은 값 때문에 이름만 둠
     /** Where the floating bar was left. */
     const val BAR_X = "bar_x"
     const val BAR_Y = "bar_y"

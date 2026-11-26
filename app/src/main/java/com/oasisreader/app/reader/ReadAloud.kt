@@ -429,13 +429,6 @@ class ReadAloud(context: Context) {
         runCatching { tts.stop() }
     }
 
-    /** Engines left out of the voice dialog (88, "azure" for Azure). */
-    fun hiddenEngines(): Set<String> = prefs.getStringSet(TtsPrefs.HIDDEN_ENGINES, emptySet()).orEmpty()
-    fun setHidden(pkg: String, hide: Boolean) {
-        val now = hiddenEngines().toMutableSet().apply { if (hide) add(pkg) else remove(pkg) }
-        prefs.edit().putStringSet(TtsPrefs.HIDDEN_ENGINES, now).apply()
-    }
-
     fun setVoice(v: Voice?) {
         prefs.edit().apply { if (v == null) remove(voiceKey()) else putString(voiceKey(), v.name) }.apply()
         applyVoice(tts)

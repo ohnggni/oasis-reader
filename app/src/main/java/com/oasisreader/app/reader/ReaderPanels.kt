@@ -59,43 +59,6 @@ internal const val SIDEWAYS_PAD_DP = 24
 internal const val SIDEWAYS_EXTRA_BOTTOM = 14   // a little more air above the page label
 internal val CompactPad = PaddingValues(horizontal = 8.dp)
 
-/** Rounded "button" container for the reader bar: lighter than the bar, hairline border. */
-@Composable
-internal fun PillGroup(fill: Color, content: @Composable RowScope.() -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = fill,
-        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 1.dp,
-    ) {
-        Row(Modifier.height(32.dp), verticalAlignment = Alignment.CenterVertically, content = content)
-    }
-}
-
-@Composable
-internal fun PillSegment(
-    enabled: Boolean = true,
-    selected: Boolean = false,
-    onClick: () -> Unit,
-    content: @Composable RowScope.() -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxHeight()
-            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 11.dp)
-            .alpha(if (enabled) 1f else 0.35f),
-        verticalAlignment = Alignment.CenterVertically,
-        content = content,
-    )
-}
-
-@Composable
-internal fun PillDivider() {
-    Box(Modifier.width(0.75.dp).height(18.dp).background(MaterialTheme.colorScheme.outlineVariant))
-}
-
 /** Fold is open and turned sideways: the hinge runs horizontally. */
 @Composable
 internal fun rememberSideways(): Boolean {

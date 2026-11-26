@@ -445,19 +445,6 @@ private fun PickRow(title: String, options: List<String>, selected: Int, onPick:
     }
 }
 
-/** A source's heading in the voice dialog; ✓ on the one in use. */
-@Composable
-internal fun VoiceSection(title: String, inUse: Boolean) {
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            title, style = MaterialTheme.typography.labelLarge,
-            color = if (inUse) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-        )
-        if (inUse) Text("사용 중", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-    }
-}
-
 /** One voice: ▶ sample · name · 여성/남성 · ☁ · ✔️ when chosen. The row picks it. */
 @Composable
 internal fun VoiceRow(name: String, gender: Int?, cloud: Boolean, selected: Boolean, onPlay: () -> Unit, onPick: () -> Unit) {
