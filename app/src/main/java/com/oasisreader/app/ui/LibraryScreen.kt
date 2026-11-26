@@ -1,5 +1,7 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.seriesKeyOf
+import com.oasisreader.app.data.ShelfKind
 import com.oasisreader.app.data.ShelfCollections
 import com.oasisreader.app.data.ShelfSearch
 import androidx.activity.compose.BackHandler
@@ -667,23 +669,6 @@ fun LibraryScreen(
     renaming?.let { b -> RenameBookDialog(b, onDismiss = { renaming = null }) { title -> onRename(b, title) } }
 
     confirmDelete?.let { b -> DeleteBookDialog(b, ctx, onDismiss = { confirmDelete = null }, onDelete = onDelete) }
-}
-
-/**
- * Which series a book belongs to, for 🔗 시리즈별로 묶기: the server series or folder it came from
- * (since 1.2), else its title without the volume number; per kind, so a novel and a comic of the same
- * name stay apart. Null: not part of a series.
- */
-internal fun seriesKeyOf(b: BookEntity): String? {
-    val kind = ShelfKind.of(b).name
-    com.oasisreader.app.data.BookOrigin.decode(b.origin)?.let { o ->
-        when (o.type) {
-            com.oasisreader.app.data.BookOrigin.META -> o.series?.let { return "$kind|m|${o.server}|${o.library}|$it" }
-            com.oasisreader.app.data.BookOrigin.OPDS -> o.urls.lastOrNull()?.let { return "$kind|o|${o.server}|$it" }
-            com.oasisreader.app.data.BookOrigin.FOLDER -> o.folder?.takeIf { it.isNotBlank() }?.let { return "$kind|f|${o.tree}|$it" }
-        }
-    }
-    return ShelfSearch.seriesStem(b.title)?.let { "$kind|t|" + ShelfSearch.normalize(it) }
 }
 
 /** The group's name: the common title without volume numbers, or the first title. */

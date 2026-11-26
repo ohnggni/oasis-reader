@@ -24,7 +24,7 @@ object SettingsGroup {
             db.collections().all().firstOrNull { it.id in mine }?.let { return "gc" + hex(it.id) }
         }
         val b = db.books().get(bookId) ?: return null
-        val key = com.oasisreader.app.ui.seriesKeyOf(b) ?: return null
+        val key = seriesKeyOf(b) ?: return null
         val undone = app.getSharedPreferences("library", Context.MODE_PRIVATE).getStringSet("ungrouped_series", emptySet()).orEmpty()
         if (key in undone) return null
         return "gs" + hex(key)

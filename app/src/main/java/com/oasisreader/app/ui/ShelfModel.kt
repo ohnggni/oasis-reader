@@ -1,5 +1,6 @@
 package com.oasisreader.app.ui
 
+import com.oasisreader.app.data.ShelfKind
 import com.oasisreader.app.data.ShelfSearch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -16,26 +17,6 @@ enum class ShelfFilter(val label: String) {
         READING -> b.finishedAt == null && b.lastReadAt != null
         UNREAD -> b.finishedAt == null && b.lastReadAt == null
         DONE -> b.finishedAt != null
-    }
-}
-
-/** What a 서재 book is: shown first in its text line, one tab each, sorted by 종류. */
-enum class ShelfKind(val emoji: String, val label: String) {
-    BOOK("📖", "책"), COMIC("🖼️", "만화"), PDF("📄", "PDF"), AUDIO("🎧", "오디오북");
-
-    companion object {
-        fun of(b: BookEntity) = when (b.format) {
-            BookStore.FORMAT_COMIC -> COMIC
-            BookStore.FORMAT_PDF -> PDF
-            AudioLibraryLink.FORMAT -> AUDIO
-            else -> BOOK
-        }
-
-        /** The user's order for 종류 sorting and the tabs (prefs "kind_order", names joined by commas). */
-        fun order(saved: String?): List<ShelfKind> {
-            val named = saved?.split(',')?.mapNotNull { n -> entries.firstOrNull { it.name == n } }.orEmpty()
-            return (named + entries).distinct()
-        }
     }
 }
 
