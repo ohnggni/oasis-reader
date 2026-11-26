@@ -440,10 +440,21 @@ private fun ReaderBody(
         webView?.evaluateJavascript(if (dir > 0) "Reader.next()" else "Reader.prev()", null)
     }
 
+    // 104: read full screen (bars away), back does not leave the book — it brings the bars; with
+    // them up it leaves. What is open closes first: a panel, then the page's selection or note popup.
     BackHandler {
+        fun barsThenLeave() {
+            if (barsVisible) onBack() else { barsVisible = true; barsShownAt = System.currentTimeMillis() }
+        }
+        val wv = webView
         when {
             panel != Panel.NONE -> panel = Panel.NONE
-            else -> onBack()
+            // no page to read (not opened, files missing, failed): leave as before
+            pkg == null || missing || openError != null || state is LoadState.Failed -> onBack()
+            wv == null || state !is LoadState.Ready -> barsThenLeave()
+            else -> wv.evaluateJavascript("window.Reader && Reader.back ? Reader.back() : false") { closed ->
+                if (closed != "true") barsThenLeave()
+            }
         }
     }
 

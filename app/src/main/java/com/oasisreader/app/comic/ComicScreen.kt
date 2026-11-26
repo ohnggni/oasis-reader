@@ -378,6 +378,13 @@ private fun ComicViewer(
         barsVisible = false
     }
     fun toggleBars() { barsVisible = !barsVisible; if (barsVisible) barsShownAt = System.currentTimeMillis() }
+    // 104: read full screen, back brings the bars instead of leaving; an open panel closes first.
+    // With the bars up (and no panel) the screen's own handler above leaves the book.
+    BackHandler(enabled = panel != com.oasisreader.app.ui.ReadPanel.NONE || !barsVisible) {
+        if (panel != com.oasisreader.app.ui.ReadPanel.NONE) panel = com.oasisreader.app.ui.ReadPanel.NONE
+        else barsVisible = true
+        barsShownAt = System.currentTimeMillis()
+    }
 
     val dark = isAppDark()
     val barColor = com.oasisreader.app.ui.theme.barColorFor(dark)

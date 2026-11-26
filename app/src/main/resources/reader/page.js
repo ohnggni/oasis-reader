@@ -832,6 +832,18 @@
       html.classList.toggle('dark', !!d); dark = !!d;
     },
     commitTurn: function () { commitTurn(); },
+    /* 104: back closes what is open on the page — a selection, the note popup, a highlight's kept
+       start, in that order; false = there was nothing */
+    back: function () {
+      if (currentSelection() || noteSelection()) {
+        window.getSelection().removeAllRanges(); bar.style.display = 'none';
+        if (hlStart) refreshStrip();
+        return true;
+      }
+      if (popOpen()) { closePop(); return true; }
+      if (hlStart) { clearStart(); return true; }
+      return false;
+    },
     setWeight: function (w) { html.setAttribute('data-w', String(w || 0)); },
     setSpread: function (on) { if (spread === !!on) return; var f = fraction(); spread = !!on; layout(f); },
     setFontFamily: function (stack, href) {
