@@ -208,11 +208,11 @@ object BookQueue {
             val stop = { isStopped || all(app).firstOrNull { it.key == job.key }?.state != State.WAITING }
             val (fileName, complete) = if (server.isRemote) {
                 // a file server (WebDAV · SFTP · SMB · FTP): href is remote://<server>/<path>
-                val path = com.oasisreader.app.remote.Remote.parseUrl(job.href)?.second ?: throw HttpException(0, "주소가 잘못되었습니다")
+                val path = RemoteAddress.parseUrl(job.href)?.second ?: throw HttpException(0, "주소가 잘못되었습니다")
                 val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     com.oasisreader.app.remote.Remote.open(app, server).use { it.download(path, part, progress, stop) }
                 }
-                com.oasisreader.app.remote.Remote.nameOf(path) to ok
+                RemoteAddress.nameOf(path) to ok
             } else OpdsClient(server).downloadResume(job.href, part, progress, stop)
             if (!complete) { Downloads.setProgress(job.key, null); return }
             val generic = !job.meta && OpdsClient.isGenericTitle(job.title)

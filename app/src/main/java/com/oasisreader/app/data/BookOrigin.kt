@@ -143,14 +143,14 @@ object NextVolumes {
             BookOrigin.REMOTE -> {
                 val server = ServerSettings(app).get(o.server) ?: return null
                 val dir = o.folder ?: return null
-                val mine = com.oasisreader.app.remote.Remote.parseUrl(book.sourceUrl ?: return null)?.second ?: return null
+                val mine = RemoteAddress.parseUrl(book.sourceUrl ?: return null)?.second ?: return null
                 val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     com.oasisreader.app.remote.Remote.list(app, server, dir)
                 }.filter { it.isBook }.sortedWith { a, b -> ShelfSearch.naturalCompare(a.name, b.name) }
                 val i = list.indexOfFirst { it.path == mine }
                 if (i < 0) return null
                 val f = list.getOrNull(i + step) ?: return null
-                val url = com.oasisreader.app.remote.Remote.url(server.id, f.path)
+                val url = RemoteAddress.url(server.id, f.path)
                 db.books().findBySource(url, url)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(f.name.substringBeforeLast('.')) { c, done ->
                     Downloads.startRemote(c, server, f.path, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin)

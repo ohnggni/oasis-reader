@@ -3,6 +3,7 @@ package com.oasisreader.app.remote
 import android.content.Context
 import com.oasisreader.app.data.Server
 import com.oasisreader.app.data.OpdsClient
+import com.oasisreader.app.data.RemoteAddress
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -75,11 +76,11 @@ data class Addr(val scheme: String, val host: String, val port: Int, val path: S
 }
 
 object Remote {
-    const val WEBDAV = "webdav"
-    const val SFTP = "sftp"
-    const val SMB = "smb"
-    const val FTP = "ftp"
-    const val FTPS = "ftps"
+    const val WEBDAV = RemoteAddress.WEBDAV
+    const val SFTP = RemoteAddress.SFTP
+    const val SMB = RemoteAddress.SMB
+    const val FTP = RemoteAddress.FTP
+    const val FTPS = RemoteAddress.FTPS
     val ALL = listOf(WEBDAV, SFTP, SMB, FTPS, FTP)
 
     private val BOOK_EXT = setOf("epub", "txt", "pdf", "cbz", "zip")
@@ -89,9 +90,7 @@ object Remote {
     val AUDIO_EXT = setOf("mp3", "m4a", "m4b", "aac", "ogg", "oga", "opus", "flac", "wav")
     fun isAudioName(name: String) = !name.startsWith("._") && name.substringAfterLast('.', "").lowercase() in AUDIO_EXT
 
-    fun label(proto: String) = when (proto) {
-        WEBDAV -> "WebDAV"; SFTP -> "SFTP"; SMB -> "SMB"; FTP -> "FTP"; FTPS -> "FTPS"; else -> proto
-    }
+    fun label(proto: String) = RemoteAddress.label(proto)
 
     /** Address examples for the settings screen. */
     fun example(proto: String) = when (proto) {
@@ -102,28 +101,14 @@ object Remote {
         else -> "ftp://192.168.0.10:21/books"
     }
 
-    /** "/a/b/" → "/a/b", "" → "/" (backslashes become slashes). */
-    fun norm(p: String): String {
-        val parts = p.replace('\\', '/').split('/').filter { it.isNotEmpty() && it != "." }
-        return "/" + parts.joinToString("/")
-    }
-
+    // paths and remote:// links: data.RemoteAddress
+    fun norm(p: String): String = RemoteAddress.norm(p)
     fun parent(p: String): String = norm(p).substringBeforeLast('/', "").ifEmpty { "/" }
     fun child(dir: String, name: String): String = norm("$dir/$name")
-    fun nameOf(p: String): String = norm(p).substringAfterLast('/')
-
-    // A received book keeps "remote://<server id>/<path>" as its source (re-download, 다음 권).
-    private const val PREFIX = "remote://"
-    fun url(serverId: String, path: String) = PREFIX + serverId + norm(path)
-    fun isUrl(u: String?) = u?.startsWith(PREFIX) == true
-    /** remote://<id>/<path> → (id, path). */
-    fun parseUrl(u: String): Pair<String, String>? {
-        if (!isUrl(u)) return null
-        val rest = u.removePrefix(PREFIX)
-        val slash = rest.indexOf('/')
-        if (slash <= 0) return null
-        return rest.substring(0, slash) to norm(rest.substring(slash))
-    }
+    fun nameOf(p: String): String = RemoteAddress.nameOf(p)
+    fun url(serverId: String, path: String) = RemoteAddress.url(serverId, path)
+    fun isUrl(u: String?) = RemoteAddress.isUrl(u)
+    fun parseUrl(u: String): Pair<String, String>? = RemoteAddress.parseUrl(u)
 
     fun open(context: Context, server: Server): RemoteFs = when (server.proto) {
         WEBDAV -> WebDavFs(server)

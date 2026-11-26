@@ -155,8 +155,8 @@ object Downloads {
         pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null,
         origin: String? = null,
     ) {
-        val url = com.oasisreader.app.remote.Remote.url(server.id, path)
-        val title = com.oasisreader.app.remote.Remote.nameOf(path).substringBeforeLast('.')
+        val url = RemoteAddress.url(server.id, path)
+        val title = RemoteAddress.nameOf(path).substringBeforeLast('.')
         if (pinned && onDone == null) {
             BookQueue.enqueue(context, BookQueue.Job(url, server.id, url, title, collectionId = collectionId, origin = origin))
             return
@@ -193,7 +193,7 @@ object Downloads {
      * bookoasis link, or a file server's remote://….
      */
     suspend fun fetch(app: Context, url: String, dest: File, onProgress: (Long, Long) -> Unit = { _, _ -> }) {
-        val remote = com.oasisreader.app.remote.Remote.parseUrl(url)
+        val remote = RemoteAddress.parseUrl(url)
         if (remote != null) {
             val server = ServerSettings(app).get(remote.first) ?: throw HttpException(0, "서버 설정이 지워졌습니다")
             dest.delete()

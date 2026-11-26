@@ -82,7 +82,7 @@ class ServerSettings(context: Context) {
      * Several catalogs on one host (bookoasis general/adult): pick by the db in /opds/download/<db>/<id>.
      */
     fun forUrl(url: String): Server? {
-        com.oasisreader.app.remote.Remote.parseUrl(url)?.let { (id, _) -> return get(id) }
+        RemoteAddress.parseUrl(url)?.let { (id, _) -> return get(id) }
         val host = url.toHttpUrlOrNull()?.host ?: return null
         val same = all().filter { it.host == host && !it.isAudiobook && !it.isRemote }
         if (same.size <= 1) return same.firstOrNull()
@@ -94,7 +94,7 @@ class ServerSettings(context: Context) {
     fun save(s: Server): Server {
         val id = s.id.ifBlank { "s" + java.lang.Long.toString(System.currentTimeMillis(), 36) }
         val item = StoredServer(
-            id, s.name.trim().ifBlank { if (s.isRemote) com.oasisreader.app.remote.Remote.label(s.proto) else s.host ?: "OPDS" }, s.url.trim().trimEnd('/'), s.username.trim(),
+            id, s.name.trim().ifBlank { if (s.isRemote) RemoteAddress.label(s.proto) else s.host ?: "OPDS" }, s.url.trim().trimEnd('/'), s.username.trim(),
             if (s.isRemote) "" else s.metaUrl.trim().trimEnd('/'), s.metaDb, s.proto.ifEmpty { null },
         )
         val list = stored().toMutableList()
