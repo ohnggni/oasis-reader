@@ -190,20 +190,9 @@ fun CompactSearchField(
 }
 
 /**
- * The part of each side edge (top, bottom in px) where the back gesture is switched off: 55–85%
- * of the height — where the thumb turns pages — and at most [max] tall, centred there (104).
- */
-internal fun edgeBand(height: Int, max: Int): Pair<Int, Int> {
-    val band = (height * 3 / 10).coerceAtMost(max)
-    val top = (height * 7 / 10 - band / 2).coerceIn(0, height - band)
-    return top to top + band
-}
-
-/**
  * While [active] (reading full screen), the system back gesture is switched off on both screen
  * edges so a page-turn swipe from the edge is not taken as "back". Android allows this on at
- * most 200dp of each edge, so it covers the lower part of the screen, in the thumb's reach
- * ([edgeBand]). Elsewhere on the edges back still comes: [FullScreenBack] lets it do nothing.
+ * most 200dp of each edge, so it covers the middle band of the screen.
  */
 @Composable
 fun NoEdgeBackGesture(active: Boolean) {
@@ -212,11 +201,12 @@ fun NoEdgeBackGesture(active: Boolean) {
     androidx.compose.runtime.DisposableEffect(active, view) {
         fun apply() {
             if (!active || view.height <= 0) { view.systemGestureExclusionRects = emptyList(); return }
-            val (top, bottom) = edgeBand(view.height, with(density) { 200.dp.roundToPx() })
+            val band = with(density) { 200.dp.roundToPx() }.coerceAtMost(view.height)
             val edge = with(density) { 48.dp.roundToPx() }
+            val top = (view.height - band) / 2
             view.systemGestureExclusionRects = listOf(
-                android.graphics.Rect(0, top, edge, bottom),
-                android.graphics.Rect(view.width - edge, top, view.width, bottom),
+                android.graphics.Rect(0, top, edge, top + band),
+                android.graphics.Rect(view.width - edge, top, view.width, top + band),
             )
         }
         apply()
