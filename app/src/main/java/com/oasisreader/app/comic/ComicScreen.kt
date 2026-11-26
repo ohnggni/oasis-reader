@@ -224,6 +224,13 @@ private fun ComicViewer(
     }
     var rtl by remember { mutableStateOf(prefs.getBoolean("rtl", false)) }
     var coverAlone by remember { mutableStateOf(prefs.getBoolean("cover_alone", true)) }
+    // 108: 두 쪽 스캔 나누기 — kept like 보기: the group's choice, else this book's own; off at first
+    val splitKey = "split_" + (group ?: book.id)
+    var split by remember {
+        mutableStateOf(if (prefs.contains(splitKey)) prefs.getBoolean(splitKey, false) else prefs.getBoolean("split_${book.id}", false))
+    }
+    // screen pages ↔ image numbers: what is shown counts screen pages, what is saved image numbers
+    val map = remember(pkg, split, split && rtl) { PageMap(pkg.pages, split, rtl) }
     var narrow by remember { mutableStateOf(prefs.getBoolean("narrow", false)) }
     var keepOn by remember { mutableStateOf(readerPrefs.keepScreenOn) }
     // same brightness setting as the book reader; only while this screen is open
@@ -275,7 +282,14 @@ private fun ComicViewer(
     var curFrac by curFracState
     val lastPageShownState = remember { mutableIntStateOf(curPage) }   // last page on screen (spreads)
     var lastPageShown by lastPageShownState
+    // the last screen page on screen (the same number as lastPageShown unless scans are split)
+    val lastViewShownState = remember { mutableIntStateOf(map.viewAt(curPage, curFrac)) }
+    var lastViewShown by lastViewShownState
     var viewKey by remember { mutableIntStateOf(0) }                // bump to rebuild the view at curPage
+    /** Open image [page] at [fraction] of it (its first screen page at 0). */
+    fun jumpTo(page: Int, fraction: Float = 0f) {
+        curPage = page; curFrac = fraction; lastPageShown = page; lastViewShown = map.viewAt(page, fraction); viewKey++
+    }
 
     var barsVisible by remember { mutableStateOf(true) }
     var barsShownAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -283,11 +297,14 @@ private fun ComicViewer(
     val lastActiveState = remember { mutableLongStateOf(System.currentTimeMillis()) }
     var lastActive by lastActiveState
 
-    val progress = if (pageCount <= 1) 1f else ((lastPageShown + 1).toFloat() / pageCount).coerceIn(0f, 1f)
+    // the last image read to its end: in page view a split scan counts once its second half shows
+    val mapNow = androidx.compose.runtime.rememberUpdatedState(map)
+    fun readThrough() = if (mode == ComicMode.PAGE) mapNow.value.readThrough(lastViewShown) else lastPageShown
+    val progress = if (pageCount <= 1) 1f else ((readThrough() + 1).toFloat() / pageCount).coerceIn(0f, 1f)
 
     // save (debounced) whenever the position changes
     LaunchedEffect(Unit) {
-        snapshotFlow { Triple(curPage, curFrac, lastPageShown) }.collectLatest { (pg, fr, last) ->
+        snapshotFlow { Triple(curPage, curFrac, readThrough()) }.collectLatest { (pg, fr, last) ->
             lastActive = System.currentTimeMillis()
             delay(400)
             val prog = if (pageCount <= 1) 1f else ((last + 1).toFloat() / pageCount).coerceIn(0f, 1f)
@@ -322,9 +339,10 @@ private fun ComicViewer(
         }
     }
     if (marksOpen) com.oasisreader.app.reader.BookmarksDialog(
-        list = bookmarks,
-        where = { b -> "${b.spineIndex + 1} / $pageCount" },
-        onPick = { b -> marksOpen = false; panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = b.spineIndex; curFrac = 0f; lastPageShown = b.spineIndex; viewKey++ },
+        // shown by screen page numbers; the entries themselves keep image numbers
+        list = if (!split) bookmarks else bookmarks.map { it.copy(snippet = "${map.viewAt(it.spineIndex) + 1}쪽") },
+        where = { b -> "${map.viewAt(b.spineIndex) + 1} / ${map.count}" },
+        onPick = { b -> marksOpen = false; panel = com.oasisreader.app.ui.ReadPanel.NONE; jumpTo(b.spineIndex) },
         onDelete = { b -> scope.launch { db.bookmarks().delete(b.id) } },
         onDismiss = { marksOpen = false },
     )
@@ -345,10 +363,10 @@ private fun ComicViewer(
     remote?.let { r ->
         val page = remotePage(r)
         com.oasisreader.app.ui.RemoteProgressDialog(
-            where = "${com.oasisreader.app.ui.remoteDeviceLabel(r)}에서 ${page?.plus(1) ?: "?"}쪽까지 읽었습니다 (전체 ${pageCount}쪽).",
+            where = "${com.oasisreader.app.ui.remoteDeviceLabel(r)}에서 ${page?.let { map.viewAt(it) + 1 } ?: "?"}쪽까지 읽었습니다 (전체 ${map.count}쪽).",
             onGo = {
                 remote = null
-                if (page != null) { curPage = page; curFrac = 0f; lastPageShown = page; viewKey++ }
+                if (page != null) jumpTo(page)
             },
             onStay = { remote = null },
         )
@@ -407,23 +425,24 @@ private fun ComicViewer(
             val spread = maxWidth > maxHeight * 1.05f
             if (mode == ComicMode.PAGE) {
                 ComicPageMode(
-                    pkg = pkg, content = content, isPdf = isPdf, spread = spread, wPx = wPx, hPx = hPx, density = density,
+                    pkg = pkg, map = map, content = content, isPdf = isPdf, spread = spread, wPx = wPx, hPx = hPx, density = density,
                     rtl = rtl, coverAlone = coverAlone, viewKey = viewKey, effTurn = effTurn, scope = scope,
                     readerPrefs = readerPrefs, overlayAlpha = overlayAlpha, turnPicker = turnPicker,
                     curPageState = curPageState, curFracState = curFracState, lastPageShownState = lastPageShownState,
+                    lastViewShownState = lastViewShownState,
                     labelState = labelState, panelState = panelState, turnShotState = turnShotState,
                     turnStyleState = turnStyleState, turnSpeedState = turnSpeedState, lastActiveState = lastActiveState,
                     askPrevious = ::askPrevious, toggleBars = ::toggleBars,
                     onTurnPickerDismiss = { turnPicker = false },
                 )
             } else {
-                val slices = remember(pkg) { slicesOf(pkg) }
+                val slices = remember(map) { slicesOf(map.screen) }
                 val firstSliceOf = remember(slices) {
                     IntArray(pageCount).also { arr ->
                         arr.fill(-1); slices.forEachIndexed { i, s -> if (arr[s.page] < 0) arr[s.page] = i }
                     }
                 }
-                key(viewKey) {
+                key(viewKey, map) {
                     val startSlice = remember {
                         val first = firstSliceOf.getOrElse(curPage) { 0 }.coerceAtLeast(0)
                         val count = slices.count { it.page == curPage }.coerceAtLeast(1)
@@ -439,9 +458,11 @@ private fun ComicViewer(
                                 curFrac = ((fi - firstSliceOf[s0.page]).toFloat() / count).coerceIn(0f, 1f)
                                 val tail = (li ?: 0) >= slices.size
                                 if (tail) tailSeen = true
-                                lastPageShown = if (!listState.canScrollForward || tail) pageCount - 1
-                                                else slices.getOrNull(li ?: fi)?.page ?: s0.page
-                                label = "${s0.page + 1} / $pageCount"
+                                val atEnd = !listState.canScrollForward || tail
+                                val lastSlice = slices.getOrNull(li ?: fi)
+                                lastPageShown = if (atEnd) pageCount - 1 else lastSlice?.page ?: s0.page
+                                lastViewShown = if (atEnd) map.count - 1 else lastSlice?.view ?: s0.view
+                                label = "${s0.view + 1} / ${map.count}"
                             }
                     }
                     // at the very end (the "— 끝 —" tail on screen), pulling up a little more opens the
@@ -580,6 +601,7 @@ private fun ComicViewer(
                     rtl = rtl, onRtl = { rtl = it },
                     coverAlone = coverAlone, onCoverAlone = { coverAlone = it },
                     narrow = narrow, onNarrow = { narrow = it },
+                    splitKey = splitKey, split = split, onSplit = { split = it },
                 )
                 com.oasisreader.app.ui.ReadPanel.PAGE -> ComicTurnPanel(
                     readerPrefs = readerPrefs, paged = mode == ComicMode.PAGE,
@@ -589,7 +611,7 @@ private fun ComicViewer(
                 com.oasisreader.app.ui.ReadPanel.NAV -> ComicNavPanel(
                     bookmarkCount = bookmarks.size, finished = finished, canOrigin = com.oasisreader.app.reader.canOpenOrigin(book),
                     onMarks = { marksOpen = true },
-                    onRestart = { panel = com.oasisreader.app.ui.ReadPanel.NONE; curPage = 0; curFrac = 0f; viewKey++ },
+                    onRestart = { panel = com.oasisreader.app.ui.ReadPanel.NONE; jumpTo(0) },
                     onFinished = {
                         finished = !finished
                         val at = if (finished) System.currentTimeMillis() else null
@@ -658,7 +680,7 @@ private fun ComicViewer(
         // the last page: the next volume, one tap away
         // 쪽 넘기기: a card on the last page. 웹툰 스크롤: the button in the "— 끝 —" tail (the card came
         // up as soon as the last strip peeked in, and went away again once the tail was on screen)
-        val atEnd = pageCount > 0 && lastPageShown >= pageCount - 1
+        val atEnd = pageCount > 0 && readThrough() >= pageCount - 1
         val lookUp = if (mode == ComicMode.SCROLL) tailSeen else atEnd
         LaunchedEffect(lookUp) {
             if (lookUp && !nextAsked) {
@@ -678,15 +700,15 @@ private fun ComicViewer(
 
         // the bottom bar with the top bar: title · page, −/+ (one page) and a slider to jump
         AnimatedVisibility(
-            visible = barsVisible && panel == com.oasisreader.app.ui.ReadPanel.NONE && pageCount > 1,
+            visible = barsVisible && panel == com.oasisreader.app.ui.ReadPanel.NONE && map.count > 1,
             enter = com.oasisreader.app.ui.theme.calm(fadeIn()), exit = com.oasisreader.app.ui.theme.calm(fadeOut()),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             ComicSeekBar(
-                title = book.title, page = lastPageShown.coerceIn(0, pageCount - 1), count = pageCount, rtl = rtl,
+                title = book.title, page = lastViewShown.coerceIn(0, map.count - 1), count = map.count, rtl = rtl,
                 barColor = barColor, chrome = chrome, navPad = !readingChrome.hideNav,
                 onTouch = { barsShownAt = System.currentTimeMillis() },
-            ) { p -> curPage = p; curFrac = 0f; lastPageShown = p; viewKey++ }
+            ) { v -> jumpTo(map.sourceOf(v), map.fractionOf(v)) }
         }
 
         if (label.isNotEmpty() && readingChrome.pageNum && !barsVisible) {

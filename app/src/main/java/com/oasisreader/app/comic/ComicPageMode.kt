@@ -1,6 +1,7 @@
 package com.oasisreader.app.comic
 
 import com.oasisreader.app.data.ComicPackage
+import com.oasisreader.app.data.ComicPage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -52,10 +53,11 @@ import androidx.compose.runtime.MutableLongState
  */
 @Composable
 internal fun ComicPageMode(
-    pkg: ComicPackage, content: java.io.File, isPdf: Boolean, spread: Boolean, wPx: Int, hPx: Int, density: androidx.compose.ui.unit.Density,
+    pkg: ComicPackage, map: PageMap, content: java.io.File, isPdf: Boolean, spread: Boolean, wPx: Int, hPx: Int, density: androidx.compose.ui.unit.Density,
     rtl: Boolean, coverAlone: Boolean, viewKey: Int, effTurn: com.oasisreader.app.ui.TurnStyle, scope: kotlinx.coroutines.CoroutineScope,
     readerPrefs: com.oasisreader.app.reader.ReaderPrefs, overlayAlpha: androidx.compose.animation.core.Animatable<Float, *>, turnPicker: Boolean,
     curPageState: MutableIntState, curFracState: MutableState<Float>, lastPageShownState: MutableIntState,
+    lastViewShownState: MutableIntState,
     labelState: MutableState<String>, panelState: MutableState<com.oasisreader.app.ui.ReadPanel>, turnShotState: MutableState<com.oasisreader.app.ui.TurnShot?>,
     turnStyleState: MutableState<com.oasisreader.app.ui.TurnStyle>, turnSpeedState: MutableState<com.oasisreader.app.ui.TurnSpeed>,
     lastActiveState: MutableLongState,
@@ -64,21 +66,26 @@ internal fun ComicPageMode(
     var curPage by curPageState
     var curFrac by curFracState
     var lastPageShown by lastPageShownState
+    var lastViewShown by lastViewShownState
     var label by labelState
     var panel by panelState
     var turnShot by turnShotState
     var turnStyle by turnStyleState
     var turnSpeed by turnSpeedState
     var lastActive by lastActiveState
-    val pageCount = pkg.pages.size
-        val groups = remember(pkg, spread, coverAlone) { groupsOf(pkg, spread, coverAlone) }
-    key(groups, viewKey) {
-        val startGroup = remember { groups.indexOfFirst { curPage in it }.coerceAtLeast(0) }
+    // here pages are screen pages (108: a two-page scan may be two of them)
+    val pageCount = map.count
+        val groups = remember(map, spread, coverAlone) {
+            groupsOf(pkg.copy(pages = map.screen.map { ComicPage(it.path, it.w, it.h) }), spread, coverAlone)
+        }
+    key(groups, viewKey, map) {
+        val startGroup = remember { map.viewAt(curPage, curFrac).let { v -> groups.indexOfFirst { v in it } }.coerceAtLeast(0) }
         val pager = rememberPagerState(initialPage = startGroup) { groups.size }
         LaunchedEffect(pager) {
             snapshotFlow { pager.currentPage }.collect { g ->
                 val grp = groups.getOrNull(g) ?: return@collect
-                curPage = grp.first(); curFrac = 0f; lastPageShown = grp.last()
+                curPage = map.sourceOf(grp.first()); curFrac = map.fractionOf(grp.first())
+                lastPageShown = map.sourceOf(grp.last()); lastViewShown = grp.last()
                 label = grp.joinToString("-") { (it + 1).toString() } + " / $pageCount"
             }
         }
@@ -287,9 +294,9 @@ internal fun ComicPageMode(
                         else -> Alignment.CenterStart      // right page hugs the gutter
                     }
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = align) {
-                        val path = pkg.pages[pageIdx].path
+                        val path = map.screen[pageIdx].path
                         PageImage(
-                            remember(content, path) { File(content, path) }, pkg.pages[pageIdx], slotW, hPx, align,
+                            remember(content, path) { File(content, path) }, map.screen[pageIdx], slotW, hPx, align,
                             // an image page is read just large enough for the screen: sharpen as soon as it is enlarged
                             sharp = isCurrent && zoom > (if (isPdf) 1.3f else 1.05f),
                             // pages off screen are drawn only once the swipe has settled

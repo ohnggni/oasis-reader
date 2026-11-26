@@ -1,7 +1,5 @@
 package com.oasisreader.app.comic
 
-import com.oasisreader.app.data.ComicPage
-import com.oasisreader.app.data.ComicPackage
 import com.oasisreader.app.data.PdfPages
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -38,16 +36,19 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** A horizontal strip of one page (webtoon pages can be 20 000 px tall: never decode them whole). */
-internal data class Slice(val page: Int, val path: String, val w: Int, val top: Int, val bottom: Int) {
+/**
+ * A horizontal strip of one screen page (webtoon pages can be 20 000 px tall: never decode them
+ * whole). [page]: the source image; [view]: the screen page; [left]: where its [w] columns start.
+ */
+internal data class Slice(val page: Int, val path: String, val w: Int, val top: Int, val bottom: Int, val left: Int = 0, val view: Int = page) {
     val h get() = bottom - top
 }
 
 internal const val SLICE_SRC = 1600   // source pixels per strip
 
-internal fun slicesOf(pkg: ComicPackage): List<Slice> = pkg.pages.flatMapIndexed { i, p ->
+internal fun slicesOf(screen: List<ScreenPage>): List<Slice> = screen.flatMapIndexed { v, p ->
     val n = (p.h + SLICE_SRC - 1) / SLICE_SRC
-    (0 until n).map { k -> Slice(i, p.path, p.w, k * SLICE_SRC, minOf(p.h, (k + 1) * SLICE_SRC)) }
+    (0 until n).map { k -> Slice(p.source, p.path, p.w, k * SLICE_SRC, minOf(p.h, (k + 1) * SLICE_SRC), p.left, v) }
 }
 
 internal object StripCache {
@@ -61,20 +62,28 @@ internal fun pdfOf(file: File) = File(file.parentFile!!.parentFile, PdfPages.FIL
 
 /** Decode one strip at roughly [targetW] pixels wide. */
 internal fun decodeStrip(file: File, s: Slice, targetW: Int): Bitmap? {
-    if (PdfPages.isPdfPage(s.path)) return PdfPages.render(pdfOf(file), PdfPages.indexOf(s.path), targetW, s.top, s.bottom)
+    if (PdfPages.isPdfPage(s.path)) return PdfPages.render(pdfOf(file), PdfPages.indexOf(s.path), targetW, s.top, s.bottom, s.left, s.left + s.w)
     var sample = 1
     while (s.w / (sample * 2) >= targetW) sample *= 2
+    return decodeRegion(file, Rect(s.left, s.top, s.left + s.w, s.bottom), sample)
+}
+
+/** The part [r] (source pixels) of an image, subsampled by [sample]. */
+private fun decodeRegion(file: File, r: Rect, sample: Int): Bitmap? {
     val opts = BitmapFactory.Options().apply { inSampleSize = sample }
     return try {
         val decoder = if (Build.VERSION.SDK_INT >= 31) BitmapRegionDecoder.newInstance(file.path)
                       else @Suppress("DEPRECATION") BitmapRegionDecoder.newInstance(file.path, false)
-        try { decoder.decodeRegion(Rect(0, s.top, s.w, s.bottom), opts) } finally { decoder.recycle() }
+        try { decoder.decodeRegion(r, opts) } finally { decoder.recycle() }
     } catch (e: Exception) {
         // formats the region decoder cannot read (gif, …): decode whole, then cut
         val full = BitmapFactory.decodeFile(file.path, opts) ?: return null
-        val top = s.top / sample
-        val h = (s.h / sample).coerceAtMost(full.height - top).coerceAtLeast(1)
-        Bitmap.createBitmap(full, 0, top.coerceIn(0, full.height - 1), full.width, h)
+        val top = r.top / sample
+        val h = (r.height() / sample).coerceAtMost(full.height - top).coerceAtLeast(1)
+        val left = (r.left / sample).coerceIn(0, full.width - 1)
+        // to the right edge unless the part is narrower than the image (one half of a scan)
+        val w = if (left == 0 && r.width() / sample >= full.width - 1) full.width else (r.width() / sample).coerceIn(1, full.width - left)
+        Bitmap.createBitmap(full, left, top.coerceIn(0, full.height - 1), w, h)
     }
 }
 
@@ -97,17 +106,18 @@ internal fun pageSample(w: Int, h: Int, boxW: Int, boxH: Int): Int {
 }
 
 /**
- * One whole page, decoded to fit [boxW] x [boxH] pixels and shown with ContentScale.Fit.
+ * One screen page (a whole image, or one half of it), decoded to fit [boxW] x [boxH] pixels and shown with ContentScale.Fit.
  * [shownW]: the width it really has on screen (a page alone in a spread gets both halves).
  * [sharp]: the page is zoomed in — draw it again at higher resolution (the plain one stays until then).
  * [waitIdle]: wait with the work until page turning has stopped (pages prepared off screen).
  */
 @Composable
 internal fun PageImage(
-    file: File, page: ComicPage, boxW: Int, boxH: Int, align: Alignment,
+    file: File, page: ScreenPage, boxW: Int, boxH: Int, align: Alignment,
     sharp: Boolean = false, waitIdle: (suspend () -> Unit)? = null, shownW: Int = boxW,
 ) {
-    val base = "${file.path}#page#$boxW#$boxH#$shownW"
+    val half = page.parts > 1
+    val base = "${file.path}#page#$boxW#$boxH#$shownW" + if (half) "#${page.left}+${page.w}" else ""
     val key = if (sharp) "$base#sharp" else base
     val bmp by produceState(StripCache.mem.get(key) ?: StripCache.mem.get(base), key) {
         StripCache.mem.get(key)?.let { value = it; return@produceState }
@@ -118,10 +128,11 @@ internal fun PageImage(
                 if (pdf) {
                     // 1x the size on screen; 2.5x when zoomed in
                     val fit = minOf(boxW.toFloat() / page.w, boxH.toFloat() / page.h) * (if (sharp) 2.5f else 1f)
-                    PdfPages.render(pdfOf(file), PdfPages.indexOf(page.path), (page.w * fit).toInt())
+                    PdfPages.render(pdfOf(file), PdfPages.indexOf(page.path), (page.w * fit).toInt(), left = page.left, right = page.left + page.w)
                 } else {
                     val sample = if (sharp) 1 else pageSample(page.w, page.h, shownW, boxH)
-                    BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
+                    if (half) decodeRegion(file, Rect(page.left, 0, page.left + page.w, page.h), sample)
+                    else BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
                 }?.let(::toGpu)
             }.getOrNull()
         }
@@ -143,7 +154,7 @@ internal fun PageImage(
 
 @Composable
 internal fun Strip(file: File, s: Slice, targetPx: Int) {
-    val key = "${file.path}#${s.top}#$targetPx"
+    val key = "${file.path}#${s.top}#$targetPx#${s.left}+${s.w}"
     val bmp by produceState(StripCache.mem.get(key), key) {
         if (value != null) return@produceState
         value = withContext(if (PdfPages.isPdfPage(s.path)) PdfPages.dispatcher else Dispatchers.IO) {

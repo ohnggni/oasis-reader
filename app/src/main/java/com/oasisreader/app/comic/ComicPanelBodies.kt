@@ -46,7 +46,7 @@ internal fun ColumnScope.ComicScreenPanel(
     }
 }
 
-/** ▣ 보기: page or webtoon scroll, direction, facing pages, width. */
+/** ▣ 보기: page or webtoon scroll, direction, facing pages, width, two-page scans. */
 @Composable
 internal fun ColumnScope.ComicViewPanel(
     prefs: SharedPreferences, modeKey: String,
@@ -54,6 +54,7 @@ internal fun ColumnScope.ComicViewPanel(
     rtl: Boolean, onRtl: (Boolean) -> Unit,
     coverAlone: Boolean, onCoverAlone: (Boolean) -> Unit,
     narrow: Boolean, onNarrow: (Boolean) -> Unit,
+    splitKey: String, split: Boolean, onSplit: (Boolean) -> Unit,
 ) {
     com.oasisreader.app.ui.PanelChoice("보기", listOf("책처럼 넘기기", "세로 스크롤 (웹툰)"), if (mode == ComicMode.PAGE) 0 else 1) { i ->
         val m = if (i == 0) ComicMode.PAGE else ComicMode.SCROLL
@@ -72,6 +73,8 @@ internal fun ColumnScope.ComicViewPanel(
             onNarrow(i == 1); prefs.edit().putBoolean("narrow", i == 1).apply()
         }
     }
+    // 108: kept like 보기, for this book or its 컬렉션 / series group
+    com.oasisreader.app.ui.PanelSwitch("두 쪽 스캔 나누기", null, split, { onSplit(it); prefs.edit().putBoolean(splitKey, it).apply() })
 }
 
 /** ⇆ 넘김: the page-turn effect (none in the webtoon scroll). */

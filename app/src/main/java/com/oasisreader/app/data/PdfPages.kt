@@ -72,12 +72,17 @@ object PdfPages {
         }
     }
 
-    /** Page [index] drawn [width] pixels wide (white paper), or only rows [top, bottom) of it (in page points). */
-    @Synchronized fun render(f: File, index: Int, width: Int, top: Int = 0, bottom: Int = -1): Bitmap {
+    /**
+     * Page [index] drawn [width] pixels wide (white paper), or only rows [top, bottom) and columns
+     * [left, right) of it (in page points) — then that part is [width] wide.
+     */
+    @Synchronized fun render(f: File, index: Int, width: Int, top: Int = 0, bottom: Int = -1, left: Int = 0, right: Int = -1): Bitmap {
         val r = open(f)
         r.openPage(index).use { p ->
             var w = width.coerceAtLeast(1)
-            var scale = w.toFloat() / p.width
+            val fromX = left.coerceIn(0, p.width - 1)
+            val toX = if (right < 0) p.width else right.coerceIn(fromX + 1, p.width)
+            var scale = w.toFloat() / (toX - fromX)
             val fromY = top.coerceAtLeast(0)
             val toY = if (bottom < 0) p.height else bottom.coerceAtMost(p.height)
             var h = ((toY - fromY) * scale).toInt().coerceAtLeast(1)
@@ -87,7 +92,7 @@ object PdfPages {
             }
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             bmp.eraseColor(Color.WHITE)
-            val m = Matrix().apply { postScale(scale, scale); postTranslate(0f, -fromY * scale) }
+            val m = Matrix().apply { postScale(scale, scale); postTranslate(-fromX * scale, -fromY * scale) }
             p.render(bmp, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             return bmp
         }
