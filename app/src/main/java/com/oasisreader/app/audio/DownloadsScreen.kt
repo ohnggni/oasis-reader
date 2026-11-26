@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.data.DownloadPrefs
 import com.oasisreader.app.ui.EmojiText
 import android.Manifest
 import android.content.Context
@@ -203,7 +204,7 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-                var wifi by remember { mutableStateOf(AudioDownloadWorker.wifiOnly(context)) }
+                var wifi by remember { mutableStateOf(DownloadPrefs.wifiOnly(context)) }
                 Row(
                     Modifier.fillMaxWidth().clickable { wifi = !wifi; AudioDownloads.setWifiOnly(context, wifi); com.oasisreader.app.data.BookQueue.rekick(context) }.padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -364,7 +365,7 @@ private fun BookCard(row: BookEntity, st: BookDl, onAll: () -> Unit, onRemove: (
                 val status = when {
                     st.running -> "⬇️ 받는 중 ${((overall ?: 0f) * 100).toInt()}%"
                     st.paused -> "⏸️ 일시정지"
-                    st.pending -> if (AudioDownloadWorker.wifiOnly(context)) "⏳ 받기 대기 (와이파이 연결되면 시작)" else "⏳ 받기 대기 (연결되면 시작)"
+                    st.pending -> if (DownloadPrefs.wifiOnly(context)) "⏳ 받기 대기 (와이파이 연결되면 시작)" else "⏳ 받기 대기 (연결되면 시작)"
                     st.error != null -> "⚠️ ${st.error}"
                     st.tracks > 0 && st.kept >= st.tracks -> "✅ 다 받음"
                     st.kept > 0 -> "◐ 일부 받음"

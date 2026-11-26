@@ -123,7 +123,7 @@ object BookQueue {
      */
     fun kick(c: Context, policy: ExistingWorkPolicy? = null) {
         // the same "와이파이에서만 받기" switch as the audiobooks (받기 관리)
-        val net = if (com.oasisreader.app.audio.AudioDownloadWorker.wifiOnly(c)) NetworkType.UNMETERED else NetworkType.CONNECTED
+        val net = if (DownloadPrefs.wifiOnly(c)) NetworkType.UNMETERED else NetworkType.CONNECTED
         val wm = WorkManager.getInstance(c.applicationContext)
         val request = OneTimeWorkRequestBuilder<Worker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(net).build())
