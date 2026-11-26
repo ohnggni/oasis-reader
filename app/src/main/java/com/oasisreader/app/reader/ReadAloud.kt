@@ -107,6 +107,16 @@ class ReadAloud(context: Context) {
     var sleepAtChapterEnd by mutableStateOf(false)
         private set
 
+    /** 소리 내 읽기 동안 스크롤 보기 (106): the screen shows a book-view book in scroll view while reading. */
+    var scrollView by mutableStateOf(prefs.getBoolean(TtsPrefs.SCROLL_VIEW, false))
+        private set
+    /** A view was picked in Aa while reading: that one wins until reading ends. */
+    var viewPicked by mutableStateOf(false)
+    fun changeScrollView(on: Boolean) {
+        scrollView = on; viewPicked = false
+        prefs.edit().putBoolean(TtsPrefs.SCROLL_VIEW, on).apply()
+    }
+
     /** The book's language (EPUB dc:language), used when no voice was picked. */
     var language: String? = null
 

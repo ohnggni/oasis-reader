@@ -17,7 +17,11 @@ class TtsPrefsTest {
             "rate_b1", "voice_b1", "own_b1", "aloud_b1",
             "gap_azure", "gap_default", "gap_com.google.android.tts",
         )
-        assertEquals(old, TtsPrefs.allKeys("b1", "com.google.android.tts"))
+        assertEquals(old, TtsPrefs.allKeys("b1", "com.google.android.tts") - TtsPrefs.SCROLL_VIEW)
+    }
+
+    @Test fun keysAddedIn3() {
+        assertEquals("scroll_view", TtsPrefs.SCROLL_VIEW)
     }
 
     @Test fun bookAndEngineKeys() {

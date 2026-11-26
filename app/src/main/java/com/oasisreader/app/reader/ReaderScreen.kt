@@ -140,6 +140,20 @@ private fun ReaderBody(
     var autoHide by remember { mutableStateOf(prefs.autoHideBars) }
     var barsShownAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
+    // ── 소리 내 읽기: a TTS engine reads from the page on screen, chapter after chapter ──
+    val al = remember { ReaderAloud(app, bookId) }
+    val readAloud = al.readAloud
+    // 106: reading aloud with 스크롤 보기 on shows the book in scroll view — for the time being only,
+    // the book's (or group's) saved view is not touched
+    fun tempScroll() = al.active && readAloud.scrollView && !readAloud.viewPicked
+    fun viewMode() = if (tempScroll()) ReaderMode.SCROLL else mode
+    val shownMode = viewMode()
+    /** The open page into [viewMode], at the same place; nothing when it already is. */
+    fun syncView() {
+        webView?.evaluateJavascript("window.Reader && Reader.setView && Reader.setView('${if (viewMode() == ReaderMode.PAGE) "page" else "scroll"}')", null)
+    }
+    LaunchedEffect(shownMode, webView) { syncView() }
+
     // ── open the book at its saved position ──
     LaunchedEffect(bookId, openAttempt) {
         try {
@@ -211,7 +225,7 @@ private fun ReaderBody(
         state = try {
             val ready = buildChapterPage(store, db, fonts, prefs, bookId, p, t, fontHref = ::fontHref) {
                 PageInputs(
-                    paged = mode == ReaderMode.PAGE, fontPx = fontPx, lineHeight = lineHeight,
+                    paged = viewMode() == ReaderMode.PAGE, fontPx = fontPx, lineHeight = lineHeight,
                     padTop = padTop, padBottom = padBottom, padLeft = padLeft, padRight = padRight,
                     turn = effTurn, spread = spread, weight = weight,
                     headShow = readingChrome.head && !readingChrome.hideStatus, liftHeads = liftHeads,
@@ -250,8 +264,9 @@ private fun ReaderBody(
     fun reloadHere() { target = Target(curIndex, curFraction) }
 
     fun setMode(m: ReaderMode) {
-        if (m == mode) return
-        mode = m; prefs.mode = m
+        if (m == viewMode()) return
+        if (tempScroll()) readAloud.viewPicked = true
+        if (m != mode) { mode = m; prefs.mode = m }
         pageLabel = ""   // the page reports again in the new mode
         webView?.evaluateJavascript("Reader.setMode('${if (m == ReaderMode.PAGE) "page" else "scroll"}')", null)
     }
@@ -277,9 +292,7 @@ private fun ReaderBody(
         target = Target(index, start, anchor)
     }
 
-    // ── 소리 내 읽기: a TTS engine reads from the page on screen, chapter after chapter ──
-    val al = remember { ReaderAloud(app, bookId) }
-    val readAloud = al.readAloud
+    // ── 소리 내 읽기: what it needs from this screen ──
     al.host = AloudHost(
         context = context, scope = scope, db = db, store = store, lifecycleOwner = lifecycleOwner,
         webView = { webView }, pkg = { pkg }, book = { book }, curIndex = { curIndex },
@@ -390,7 +403,7 @@ private fun ReaderBody(
     var marksOpen by remember { mutableStateOf(false) }
     val bookmarks by remember(bookId) { db.bookmarks().observeFor(bookId) }.collectAsState(initial = emptyList())
     val hereMark = bookmarks.firstOrNull {
-        bookmarkHere(it, curIndex, curFraction, if (mode == ReaderMode.PAGE) pageTotal else null)
+        bookmarkHere(it, curIndex, curFraction, if (shownMode == ReaderMode.PAGE) pageTotal else null)
     }
     fun toggleBookmark() = toggleBookmarkHere(hereMark, bookId, curIndex, curFraction, db, scope, context, webView)
     ReaderSearchMarkDialogs(
@@ -523,7 +536,7 @@ private fun ReaderBody(
                         },
                         onLink = { url -> openBookLink(url, bookId, pkg, context) { idx, frag -> rememberJump(); goChapter(idx, 0f, frag) } },
                         onJump = { rememberJump() },
-                        onReady = { al.onReady { requestAloud() } },   // a chapter opened while reading aloud
+                        onReady = { syncView(); al.onReady { requestAloud() } },   // a chapter opened while reading aloud
                         onCover = { on -> pageCovered = on },
                         onCopy = { t -> copyToClipboard(context, t) },
                         onDrag = { phase, x, y, extra ->
@@ -613,7 +626,7 @@ private fun ReaderBody(
                         )
                         Panel.PAGE -> PagePanelBody(
                             prefs = prefs, webView = { webView },
-                            mode = mode, onMode = { setMode(it) },
+                            mode = shownMode, onMode = { setMode(it) },
                             spreadMode = spreadMode, onSpreadMode = { spreadMode = it },
                             turnStyle = pt.turnStyle, turnSpeed = pt.turnSpeed, onTurnStyle = { pt.turnStyle = it }, onTurnSpeed = { pt.turnSpeed = it },
                             mTop = mTop, mBottom = mBottom, mLeft = mLeft, mRight = mRight,
@@ -674,7 +687,7 @@ private fun ReaderBody(
 
             ReaderPageLabel(
                 readingChrome = readingChrome, pageCovered = pageCovered, ready = state is LoadState.Ready, turnShown = pt.turnShot != null,
-                mode = mode, pageLabel = pageLabel, overall = overall, paper = paper, chrome = chrome,
+                mode = shownMode, pageLabel = pageLabel, overall = overall, paper = paper, chrome = chrome,
             )
 
             // reading aloud: the small player above the page number (and above the slider when shown)

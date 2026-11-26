@@ -765,6 +765,56 @@
     }
   }
 
+  /* ── 106: the same place when the view changes ────────────── */
+  var ttsNow = -1, ttsAt = null;   /* the sentence marked; its range stays after reading ends */
+  function headHeight() { return document.getElementById('rhead').offsetHeight; }
+  /* on this screen or after it / on this screen */
+  function fromScreen(r) { return paged ? r.left >= 0 : r.top >= headHeight() - 2; }   /* scroll: clear of the head */
+  function onScreen(r) {
+    return fromScreen(r) && (paged ? r.left < W() - 1 : r.top < window.innerHeight - padBottom);
+  }
+  /* the first letter at or after i that is drawn: { i, r } (spaces at a line's end are not) */
+  function letter(node, i) {
+    var g = document.createRange(), s = node.nodeValue;
+    for (; i < s.length; i++) {
+      if (/\s/.test(s.charAt(i))) continue;
+      g.setStart(node, i); g.setEnd(node, i + 1);
+      var rs = g.getClientRects();
+      if (rs.length && rs[0].width > 0) return { i: i, r: rs[0] };
+    }
+    return null;
+  }
+  /* the sentence being read if its start is on screen, else the first letter on screen */
+  function placeRange() {
+    if (ttsAt) { var now = ttsAt.getClientRects(); if (now.length && onScreen(now[0])) return ttsAt; }
+    var w = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null), n;
+    while ((n = w.nextNode())) {
+      if (!/\S/.test(n.nodeValue)) continue;
+      var all = document.createRange(); all.selectNodeContents(n);
+      var rs = all.getClientRects();
+      if (!rs.length || !fromScreen(rs[rs.length - 1])) continue;   /* ends before the screen */
+      var lo = 0, hi = n.nodeValue.length - 1;
+      while (lo < hi) {
+        var mid = (lo + hi) >> 1, c = letter(n, mid);
+        if (c && !fromScreen(c.r)) lo = mid + 1; else hi = mid;
+      }
+      var first = letter(n, lo);
+      if (!first) continue;
+      if (!onScreen(first.r)) return null;      /* a picture fills the screen: keep the fraction */
+      /* scroll view: the end of that line — where pages wrap a little differently, a line cut
+         by a page break then opens the later page, where the rest of the screen is */
+      var use = first;
+      while (!paged) {
+        var next = letter(n, use.i + 1);
+        if (!next || next.r.top > first.r.top + first.r.height / 2) break;
+        use = next;
+      }
+      var at = document.createRange(); at.setStart(n, use.i); at.setEnd(n, use.i + 1);
+      return at;
+    }
+    return null;
+  }
+
   window.Reader = {
     next: function () {
       if (atEnd()) { if (CFG.hasNext) bridge.edge(1, turnY); turnY = 0.5; return; }
@@ -806,6 +856,27 @@
       html.classList.toggle('paged', paged);
       layout(f);
     },
+    /* 106: read aloud's scroll view and back — unlike setMode, opens at the same words */
+    setView: function (m) {
+      if ((m === 'page') === paged) return;
+      if (pendingTurn !== null) commitTurn();
+      stopSlide();
+      var at = placeRange(), f = fraction();
+      focusId = null; anchorId = null;
+      paged = (m === 'page');
+      html.classList.toggle('paged', paged);
+      layout(f);
+      var r = at ? at.getClientRects()[0] : null;
+      if (r) {
+        if (paged) go(Math.floor((r.left + book.scrollLeft + 1) / W()));
+        else {
+          var head = headHeight();
+          window.scrollTo(0, Math.max(0, window.scrollY + r.top - Math.max(padTop, head ? head + 8 : 0)));
+          report();
+        }
+      }
+      if (tts && tts[ttsNow]) ttsPaint(ttsNow); else ttsAt = null;
+    },
     setInsets: function (t, b, l, r) {
       var f = fraction(); padTop = t; padBottom = b;
       if (l !== undefined) { padL = l; padR = r; }
@@ -817,6 +888,7 @@
     /* read aloud: this chapter's sentences and the first one on the page on screen */
     ttsList: function (matchText, frac) {
       tts = ttsBuild();
+      ttsNow = -1; ttsAt = null;
       var start = tts.length;
       if (typeof matchText === 'string' && matchText) {
         /* after reading on from the file (screen off): the same sentence, nearest that place */
@@ -839,12 +911,13 @@
     },
     ttsMark: function (i) {
       if (!tts || !tts[i]) return;
+      ttsNow = i; ttsAt = tts[i].range;
       ttsPaint(i);
       ttsShow(i);
     },
     ttsClear: function () {
       if (ttsLayer) ttsLayer.innerHTML = '';
-      tts = null;
+      tts = null; ttsNow = -1;
     },
     /* 지금 소제목 (2.9): of these anchor ids (in 목차 order; '' = the file's start), the last one
        already on or before the page on screen; -1 if none */

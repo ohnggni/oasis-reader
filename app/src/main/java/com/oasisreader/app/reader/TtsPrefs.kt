@@ -24,6 +24,8 @@ object TtsPrefs {
     /** Where the floating bar was left. */
     const val BAR_X = "bar_x"
     const val BAR_Y = "bar_y"
+    /** 106 (3.0): 소리 내 읽기 동안 스크롤 보기 — one switch for every book, off until chosen. */
+    const val SCROLL_VIEW = "scroll_view"
 
     // ── Azure voice (the key itself is not here: it is in SecureStore) ──
     const val AZURE_ON = "azure_on"
@@ -47,7 +49,7 @@ object TtsPrefs {
     /** Every key this object can make, for one book and one engine (the test compares it with 2.x). */
     fun allKeys(bookId: String, engine: String): List<String> = listOf(
         RATE, PITCH, VOICE, ENGINE, NORMALIZE, CHAPTER_CUE, RESUME_ALOUD, HIDDEN_ENGINES, BAR_X, BAR_Y,
-        AZURE_ON, AZURE_REGION, AZURE_VOICE, AZURE_MONTH, AZURE_CHARS, AI_AWAY,
+        AZURE_ON, AZURE_REGION, AZURE_VOICE, AZURE_MONTH, AZURE_CHARS, AI_AWAY, SCROLL_VIEW,
         rateOf(bookId), voiceOf(bookId), ownOf(bookId), aloudOf(bookId),
         gap(true, engine), gap(false, null), gap(false, engine),
     )

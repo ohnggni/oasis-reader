@@ -5,6 +5,12 @@ import com.oasisreader.app.ui.OgMenu
 import com.oasisreader.app.ui.EmojiText
 import android.speech.tts.Voice
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -62,11 +68,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * The small floating player shown while reading aloud (82, 2.8): see-through, folded to ⠿ ⏯ at
- * first — a tap opens it to sentence ⏮ ⏯ ⏭, speed, sleep timer, voice, stop, and it folds again
+ * The small floating player shown while reading aloud (82, 2.8): see-through, folded to ⠿ ⏯ ✕ —
+ * a tap opens it to sentence ⏮ ⏯ ⏭, speed, sleep timer, voice, 스크롤 보기, stop, and it folds again
  * when left alone. It sits at the bottom-left edge (clear of the page number); drag it by the grip
  * or its background and the place is kept for next time.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReadAloudBar(
     ra: ReadAloud, fill: Color, onVoice: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier,
@@ -105,7 +112,7 @@ fun ReadAloudBar(
     }
     val border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (eink) 1f else 0.4f))
     if (!open) {
-        // the simple bar (82): ⠿ ⏯, more see-through (92)
+        // the simple bar (82): ⠿ ⏯ ✕ (106), more see-through (92)
         Surface(
             modifier = modifier
                 .onSizeChanged { size = it }
@@ -125,6 +132,8 @@ fun ReadAloudBar(
                 ) {
                     DragGrip(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) { open = true; touch++ }
                     BarButton(if (ra.playing) "⏸" else "▶", if (ra.playing) "일시정지" else "계속 읽기", tap { ra.toggle() })
+                    Spacer(Modifier.width(8.dp))   // ✕ apart: easy to hit by mistake
+                    BarButton("✕", "소리 내 읽기 끝내기", onClose)
                 }
             }
         }
@@ -157,20 +166,22 @@ fun ReadAloudBar(
                         chapter, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // wraps to a second line where the card is too narrow for all four
+                    FlowRow(verticalArrangement = Arrangement.Center) {
                         var speedOpen by remember { mutableStateOf(false) }
                         var sleepMenu by remember { mutableStateOf(false) }
                         LaunchedEffect(speedOpen, sleepMenu) { menuOpen = speedOpen || sleepMenu }
-                        Box {
+                        Box(Modifier.align(Alignment.CenterVertically)) {
                             TextButton(
                                 onClick = { speedOpen = true; touch++ },
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                modifier = Modifier.height(28.dp),
+                                modifier = Modifier.height(28.dp).widthIn(min = 40.dp),
                             ) { Text(ReadAloud.rateLabel(ra.rate), style = MaterialTheme.typography.labelMedium) }
                             OgMenu(expanded = speedOpen, onDismissRequest = { speedOpen = false }) { RateSlider(ra) }
                         }
-                        SleepButton(ra) { sleepMenu = it }
-                        BarButton("🎙", "목소리", tap(onVoice))
+                        Box(Modifier.align(Alignment.CenterVertically)) { SleepButton(ra) { sleepMenu = it } }
+                        Box(Modifier.align(Alignment.CenterVertically)) { BarButton("🎙", "목소리", tap(onVoice)) }
+                        Box(Modifier.align(Alignment.CenterVertically)) { ScrollViewButton(ra) { touch++ } }
                     }
                 }
                 BarButton("⏮", "이전 문장", tap { ra.skip(-1) })
@@ -231,7 +242,7 @@ private fun SleepButton(ra: ReadAloud, onOpenChange: (Boolean) -> Unit = {}) {
         TextButton(
             onClick = { open = true },
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            modifier = Modifier.height(32.dp).semantics { contentDescription = "수면 타이머" },
+            modifier = Modifier.height(32.dp).widthIn(min = 40.dp).semantics { contentDescription = "수면 타이머" },
         ) {
             Text(
                 when { left > 0 -> "🌙${left}분"; ra.sleepAtChapterEnd -> "🌙장"; else -> "🌙" },
@@ -247,6 +258,26 @@ private fun SleepButton(ra: ReadAloud, onOpenChange: (Boolean) -> Unit = {}) {
             DropdownMenuItem(text = { Text("이 장 끝에서 멈춤") }, onClick = { open = false; ra.sleepAtEndOfChapter() })
             if (left > 0 || ra.sleepAtChapterEnd) DropdownMenuItem(text = { Text("타이머 끄기") }, onClick = { open = false; ra.sleepIn(0) })
         }
+    }
+}
+
+/** 소리 내 읽기 동안 스크롤 보기 (106): one switch for every book, filled when on. */
+@Composable
+private fun ScrollViewButton(ra: ReadAloud, onTouch: () -> Unit) {
+    val on = ra.scrollView && !ra.viewPicked
+    val colors = MaterialTheme.colorScheme
+    Box(
+        Modifier.size(32.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .then(
+                if (on) Modifier.background(colors.primaryContainer).border(1.dp, colors.primary, androidx.compose.foundation.shape.CircleShape)
+                else Modifier,
+            )
+            .toggleable(value = on, role = androidx.compose.ui.semantics.Role.Switch) { onTouch(); ra.changeScrollView(it) }
+            .semantics { contentDescription = "소리 내 읽기 동안 스크롤 보기" },
+        contentAlignment = Alignment.Center,
+    ) {
+        EmojiText("📜", fontSize = 16.sp, color = if (on) colors.onPrimaryContainer else colors.onSurface)
     }
 }
 

@@ -70,6 +70,7 @@ internal class ReaderAloud(private val app: Context, private val bookId: String)
 
     fun stop() {
         active = false
+        readAloud.viewPicked = false
         readAloud.markAloud(false)
         bg.chapter = -1
         turn.title = null; turn.cue = false
@@ -96,7 +97,7 @@ internal class ReaderAloud(private val app: Context, private val bookId: String)
     }
 
     fun start() {
-        host.clearForReading(); active = true
+        host.clearForReading(); readAloud.viewPicked = false; active = true
         readAloud.markAloud(true)
         readAloud.language = host.pkg()?.language
         ReadAloudService.show(app, player, host.book()?.title.orEmpty(), host.pkg()?.let { chapterTitleFor(it, host.curIndex()) }.orEmpty())

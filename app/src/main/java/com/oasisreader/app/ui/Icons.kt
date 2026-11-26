@@ -94,6 +94,7 @@ object OgIconPaths {
         "select_all" to "M4.5 4.5H19.5V19.5H4.5ZM8 12L11 15L16 9",
         "copy" to "M9 8.5H19.5V20.5H9ZM5 16V4H15",
         // 읽기
+        "scroll_view" to "M12 4V20M8 8L12 4L16 8M8 16L12 20L16 16M4 5V19M20 5V19",
         "highlight" to "M5 19l1-4L16 5l3 3L9 18zM14 7l3 3M13 20.5H20",
         "review" to "M19 12.5V20H4V5H11.5M9 15l.8-3.2L18 3.6l2.4 2.4-8.2 8.2z",
         "bookmark" to "M7 4H17V20L12 16L7 20Z",
@@ -143,7 +144,7 @@ object OgIconPaths {
         "📚" to "shelf", "📖" to "book", "🎧" to "audiobook", "📄" to "file", "📁" to "folder", "📂" to "folder_open",
         "📦" to "storage", "🔲" to "tiles", "📃" to "list",
         "⬇" to "download", "☁" to "cloud", "✅" to "done", "⚠" to "warning", "📌" to "pin", "☑" to "select_all", "📋" to "copy",
-        "🖍" to "highlight", "📝" to "review", "🔖" to "bookmark", "☀" to "brightness", "🔗" to "link",
+        "🖍" to "highlight", "📜" to "scroll_view", "📝" to "review", "🔖" to "bookmark", "☀" to "brightness", "🔗" to "link",
         "▶" to "play", "⏸" to "pause", "⏹" to "stop", "⏮" to "prev", "⏭" to "next", "🌙" to "sleep",
         "🔊" to "volume", "🔈" to "volume_low", "🎙" to "mic",
         "✏" to "edit", "⭐" to "star", "🔼" to "up", "🔽" to "down", "✔" to "check", "↩" to "undo",
