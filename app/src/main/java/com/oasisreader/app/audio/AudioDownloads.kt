@@ -53,7 +53,21 @@ object AudioDownloads {
     private val lock = Any()
 
     @Serializable
-    internal data class Queue(val wanted: List<Int> = emptyList(), val since: Long = 0, val error: String? = null, val paused: Boolean = false)
+    internal data class Queue(
+        val wanted: List<Int> = emptyList(), val since: Long = 0, val error: String? = null, val paused: Boolean = false,
+        val mobile: List<Int> = emptyList(),   // 이번만 모바일 데이터로 (103): these tracks ([ALL] = every one) do not wait for Wi-Fi
+    ) {
+        fun onMobile(trackId: Int) = ALL in mobile || trackId in mobile
+
+        /** Track [id] is here: no longer wanted (unless [all] are), nor marked for mobile data. */
+        fun arrived(id: Int, all: Boolean) = copy(wanted = if (all) wanted else wanted - id, mobile = mobile - id)
+
+        /** [add] asked for at [now]: with leave to use mobile data, or ([mobileOk] false) to wait for Wi-Fi. */
+        fun asking(add: Collection<Int>, mobileOk: Boolean, now: Long) = Queue(
+            wanted = (wanted + add).distinct(), since = if (wanted.isEmpty()) now else since,
+            mobile = if (mobileOk) (mobile + add).distinct() else mobile - add.toSet(),
+        )
+    }
 
     fun root(context: Context) = File(context.applicationContext.filesDir, "media")
     internal fun dir(context: Context, bookId: String) = File(root(context), bookId)
@@ -150,17 +164,14 @@ object AudioDownloads {
      * Receive [trackIds] of a 서재 audiobook (null = all its tracks). The track list comes from
      * the server in the worker; the work goes on with the app closed (a notification shows it).
      */
-    fun enqueue(context: Context, row: BookEntity, trackIds: Collection<Int>? = null, book: AudioBook? = null) {
+    fun enqueue(context: Context, row: BookEntity, trackIds: Collection<Int>? = null, book: AudioBook? = null, mobile: Boolean = false) {
         val app = context.applicationContext
         com.oasisreader.app.data.BatteryExempt.noteQueued(app)   // asked once (TODO 70)
         scope.launch {
             dir(app, row.id).mkdirs()
             // the track list right away (the worker refreshes it), so 받기 관리 can show the tracks
             if (book != null) writeManifest(app, row.id, book)
-            updateQueue(app, row.id) { q ->
-                val add = trackIds ?: listOf(ALL)
-                Queue(wanted = (q.wanted + add).distinct(), since = if (q.wanted.isEmpty()) System.currentTimeMillis() else q.since, error = null, paused = false)
-            }
+            updateQueue(app, row.id) { q -> q.asking(trackIds ?: listOf(ALL), mobile, System.currentTimeMillis()) }
             errors.remove(row.id)
             if (progress[row.id] == null) progress[row.id] = 0f
             version++
@@ -168,10 +179,31 @@ object AudioDownloads {
         }
     }
 
-    /** Start (or queue behind the running one) the worker. */
+    /**
+     * Start (or queue behind the running one) the worker. With a 이번만 track waiting (103), one
+     * that only waits is replaced instead, or the new one would sit behind its Wi-Fi condition.
+     */
     internal fun kick(context: Context) {
-        WorkManager.getInstance(context.applicationContext)
-            .enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, AudioDownloadWorker.request(context))
+        val app = context.applicationContext
+        val wm = WorkManager.getInstance(app)
+        val mixed = mixedNow(app)
+        val request = AudioDownloadWorker.request(app, mixed)
+        if (!mixed) { wm.enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request); return }
+        val infos = wm.getWorkInfosForUniqueWork(WORK)
+        infos.addListener({
+            val running = runCatching { infos.get().any { it.state == androidx.work.WorkInfo.State.RUNNING } }.getOrDefault(false)
+            wm.enqueueUniqueWork(WORK, if (running) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE, request)
+        }, Runnable::run)
+    }
+
+    /** "와이파이에서만 받기" is on, yet something waiting may use mobile data. */
+    private fun mixedNow(app: Context) =
+        com.oasisreader.app.data.DownloadPrefs.wifiOnly(app) && pendingBooks(app).any { readQueue(app, it).mobile.isNotEmpty() }
+
+    /** After a run on any connection: what it held back goes on once there is Wi-Fi. */
+    internal fun waitForWifi(context: Context) {
+        val app = context.applicationContext
+        WorkManager.getInstance(app).enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, AudioDownloadWorker.request(app, mixed = false))
     }
 
     /** Wi-Fi only on or off: the waiting work starts again under the new rule (half tracks resume). */
@@ -181,7 +213,7 @@ object AudioDownloads {
         scope.launch {
             if (pendingBooks(app).isNotEmpty()) {
                 current.clear()
-                WorkManager.getInstance(app).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, AudioDownloadWorker.request(app))
+                WorkManager.getInstance(app).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, AudioDownloadWorker.request(app, mixedNow(app)))
             }
             version++
         }
@@ -210,10 +242,10 @@ object AudioDownloads {
     }
 
     /** ▶️ Go on with [bookId] (also tries a failed one again). */
-    fun resume(context: Context, bookId: String) {
+    fun resume(context: Context, bookId: String, mobile: Boolean = false) {
         val app = context.applicationContext
         scope.launch {
-            updateQueue(app, bookId) { it.copy(paused = false, error = null) }
+            updateQueue(app, bookId) { it.copy(paused = false, error = null, mobile = if (mobile) it.wanted else emptyList()) }
             errors.remove(bookId)
             if (progress[bookId] == null) progress[bookId] = 0f
             version++
@@ -240,7 +272,7 @@ object AudioDownloads {
             updateQueue(app, bookId) { q ->
                 val list = if (ALL in q.wanted) trackList(app, bookId)?.map { it.id }.orEmpty() + (q.wanted - ALL) else q.wanted
                 val left = list.distinct() - trackId - keptTracks(app, bookId)
-                if (left.isEmpty()) Queue() else q.copy(wanted = left)
+                if (left.isEmpty()) Queue() else q.copy(wanted = left, mobile = q.mobile - trackId)
             }
             if (readQueue(app, bookId).wanted.isEmpty()) { progress.remove(bookId); current.remove(bookId) }
             version++
@@ -261,7 +293,7 @@ object AudioDownloads {
     /** One kept track off the phone (the 서재 row goes back to ☁️ when the book is no longer whole). */
     suspend fun removeTrack(context: Context, bookId: String, trackId: Int) = withContext(Dispatchers.IO) {
         val app = context.applicationContext
-        updateQueue(app, bookId) { q -> q.copy(wanted = q.wanted - trackId) }
+        updateQueue(app, bookId) { q -> q.copy(wanted = q.wanted - trackId, mobile = q.mobile - trackId) }
         trackFile(app, bookId, trackId).delete()
         partFile(app, bookId, trackId).delete()
         refreshRow(app, bookId)

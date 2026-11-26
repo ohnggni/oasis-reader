@@ -136,7 +136,7 @@ internal fun OpdsFeedBody(
                             owned = e.id in ownedSet,
                             progress = progress[e.id],
                             onClick = { if (e.navHref != null && !e.isBook) path.open(e.navHref, e.title) else detail = e },
-                            onDownload = { WifiAsk.run(app) { Downloads.start(app, server, e, origin = path.here()) } },
+                            onDownload = { WifiAsk.run(app) { mobile -> Downloads.start(app, server, e, origin = path.here(), mobile = mobile) } },
                             onLongClick = if (e.isBook && e.readable != null && nBooks > 1) ({ rangeMenu = e }) else null,
                         )
                     }
@@ -157,7 +157,7 @@ internal fun OpdsFeedBody(
                         onClick = {
                             if (e.navHref != null && !e.isBook) path.open(e.navHref, e.title) else detail = e
                         },
-                        onDownload = { WifiAsk.run(app) { Downloads.start(app, server, e, origin = path.here()) } },
+                        onDownload = { WifiAsk.run(app) { mobile -> Downloads.start(app, server, e, origin = path.here(), mobile = mobile) } },
                         onLongClick = if (e.isBook && e.readable != null && nBooks > 1) ({ rangeMenu = e }) else null,
                     )
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)

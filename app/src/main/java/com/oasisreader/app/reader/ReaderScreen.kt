@@ -482,9 +482,9 @@ private fun ReaderBody(
                     busy = refetching,
                     onFetch = {
                         val url = book?.sourceUrl ?: return@MissingFiles
-                        com.oasisreader.app.ui.WifiAsk.run(context) {
+                        com.oasisreader.app.ui.WifiAsk.run(context, allowed = com.oasisreader.app.data.Downloads.allowedOnMobile(app, url)) { mobile ->
                             refetching = true
-                            fetchMissingBook(scope, app, context, bookId, url, onRetry = { openAttempt++ }, onEnd = { refetching = false })
+                            fetchMissingBook(scope, app, context, bookId, url, mobile, onRetry = { openAttempt++ }, onEnd = { refetching = false })
                         }
                     },
                     onBack = onBack,

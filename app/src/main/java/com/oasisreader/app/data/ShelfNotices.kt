@@ -16,6 +16,15 @@ object ShelfNotices {
         if (l != null) l(message, bookId) else waiting = message to bookId
     }
 
+    private var offerListener: ((message: String, label: String, run: () -> Unit) -> Unit)? = null
+
+    /** A short card with one thing to do about it (103); dropped when no screen listens. */
+    @Synchronized
+    fun offer(message: String, label: String, run: () -> Unit) { offerListener?.invoke(message, label, run) }
+
+    @Synchronized
+    fun listenOffers(l: (message: String, label: String, run: () -> Unit) -> Unit) { offerListener = l }
+
     @Synchronized
     fun listen(l: (message: String, bookId: String) -> Unit) {
         listener = l

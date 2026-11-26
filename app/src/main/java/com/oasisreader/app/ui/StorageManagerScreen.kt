@@ -224,8 +224,8 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                 } else {
                     MiniChip("⬇️ 받기", onClick = {
                         val list = chosen
-                        WifiAsk.run(context) {
-                            val n = receive(app, list)
+                        WifiAsk.run(context) { mobile ->
+                            val n = receive(app, list, mobile)
                             Toast.makeText(context, "${n}권 받기를 시작했습니다", Toast.LENGTH_SHORT).show()
                             selected = emptySet()
                         }
@@ -279,16 +279,16 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
 }
 
 /** Receive the chosen books again: books into the book queue, audiobooks into theirs. */
-private fun receive(app: Context, list: List<Stored>): Int {
+private fun receive(app: Context, list: List<Stored>, mobile: Boolean): Int {
     var n = 0
     val servers = ServerSettings(app)
     list.forEach { s ->
         val b = s.book
-        if (s.audio) { AudioDownloads.enqueue(app, b); n++; return@forEach }
+        if (s.audio) { AudioDownloads.enqueue(app, b, mobile = mobile); n++; return@forEach }
         val href = b.sourceUrl ?: return@forEach
         val server = servers.forUrl(href) ?: return@forEach
         // the same key the catalog used (OPDS entry id / meta key), so the 서재 entry is reused
-        BookQueue.enqueue(app, BookQueue.Job(b.opdsId ?: href, server.id, href, b.title, meta = true))
+        BookQueue.enqueue(app, BookQueue.Job(b.opdsId ?: href, server.id, href, b.title, meta = true, mobile = mobile))
         n++
     }
     return n

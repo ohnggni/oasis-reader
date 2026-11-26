@@ -51,9 +51,12 @@ object BookQueue {
         val fails: Int = 0,              // tries in a row that got nowhere (TODO 70)
         val temp: Boolean = false,       // 바로 읽기 waiting for Wi-Fi (103): kept 임시, like a direct one
         val shelvesOf: String? = null,   // 다음 권 (103): joins the 컬렉션 this book is on
+        val mobile: Boolean = false,     // 이번만 모바일 데이터로 (103): this one does not wait for Wi-Fi
+        val quiet: Boolean = false,      // 다음 회차 미리 받기 waiting for Wi-Fi (103): no card, no message
     )
 
     private const val WORK = "book-download"
+    private const val MIXED = "mixed"
     /** Tries in a row without a single new byte before a book is given up as ⚠️ (▶️ tries again). */
     const val MAX_FAILS = 8
     private const val CHANNEL = "book_downloads"
@@ -88,7 +91,7 @@ object BookQueue {
             list.filterNot { it.key == job.key } + job.copy(temp = job.temp && !kept)
         }
         Downloads.setProgress(job.key, -1f)
-        BatteryExempt.noteQueued(c)
+        if (!job.quiet) BatteryExempt.noteQueued(c)   // a background one asks nothing
         kick(c)
     }
 
@@ -97,10 +100,24 @@ object BookQueue {
         Downloads.setProgress(key, null)
     }
 
-    fun resume(c: Context, key: String) {
-        change(c) { list -> list.map { if (it.key == key) it.copy(state = State.WAITING, error = null, fails = 0) else it } }
+    /** ▶️ Go on; [mobile]: over mobile data this time. Also "지금 받기" for a waiting one. */
+    fun resume(c: Context, key: String, mobile: Boolean = false) {
+        change(c) { list -> list.map { if (it.key == key) it.copy(state = State.WAITING, error = null, fails = 0, mobile = mobile, quiet = false) else it } }
+        if (get(c, key) == null) return
         Downloads.setProgress(key, -1f)
         kick(c)
+    }
+
+    /** Only the latest 미리 받기 waits: the earlier ones leave the queue. */
+    fun dropQuiet(c: Context, except: String) = cancelMany(c, all(c).filter { it.quiet && it.key != except }.map { it.key })
+
+    /**
+     * The one to receive now: waiting, not tried this round and not [held] back for Wi-Fi —
+     * what the person asked for before a 미리 받기.
+     */
+    internal fun next(jobs: List<Job>, tried: Set<String>, held: (Job) -> Boolean): Job? {
+        val ready = jobs.filter { it.state == State.WAITING && it.key !in tried && !held(it) }
+        return ready.firstOrNull { !it.quiet } ?: ready.firstOrNull()
     }
 
     fun cancel(c: Context, key: String) {
@@ -127,11 +144,15 @@ object BookQueue {
      * is replaced at once, so a new ▶️ never sits behind a back-off of minutes; one that is running
      * is left alone and picks the new book up in its loop.
      */
-    fun kick(c: Context, policy: ExistingWorkPolicy? = null) {
-        // the same "와이파이에서만 받기" switch as the audiobooks (받기 관리)
-        val net = if (DownloadPrefs.wifiOnly(c)) NetworkType.UNMETERED else NetworkType.CONNECTED
+    fun kick(c: Context, policy: ExistingWorkPolicy? = null, forWifi: Boolean = false) {
+        // the same "와이파이에서만 받기" switch as the audiobooks (받기 관리). With a 이번만 one waiting
+        // (103) the work starts on any connection, and holds the others back itself ("mixed")
+        val wifiOnly = DownloadPrefs.wifiOnly(c)
+        val mixed = !forWifi && wifiOnly && all(c).any { it.state == State.WAITING && it.mobile }
+        val net = if (wifiOnly && !mixed) NetworkType.UNMETERED else NetworkType.CONNECTED
         val wm = WorkManager.getInstance(c.applicationContext)
         val request = OneTimeWorkRequestBuilder<Worker>()
+            .setInputData(androidx.work.Data.Builder().putBoolean(MIXED, mixed).build())
             .setConstraints(Constraints.Builder().setRequiredNetworkType(net).build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, 30, java.util.concurrent.TimeUnit.SECONDS)
             .build()
@@ -154,6 +175,10 @@ object BookQueue {
 
         override suspend fun getForegroundInfo(): ForegroundInfo = info("받을 준비 중…", 0, 0)
 
+        /** This run is on any connection for a 이번만 one: the rest wait while it is not Wi-Fi. */
+        private val mixed get() = inputData.getBoolean(MIXED, false)
+        private fun held(app: Context, job: Job) = mixed && !job.mobile && DownloadPrefs.mustWait(app)
+
         override suspend fun doWork(): Result {
             val app = applicationContext
             channel(app)
@@ -161,8 +186,8 @@ object BookQueue {
             var retry = false
             val tried = HashSet<String>()   // a book that failed this round waits for the next one; the others go on
             while (!isStopped) {
-                val job = all(app).firstOrNull { it.state == State.WAITING && it.key !in tried } ?: break
-                val left = all(app).count { it.state == State.WAITING }
+                val job = next(all(app), tried) { held(app, it) } ?: break
+                val left = all(app).count { it.state == State.WAITING && !held(app, it) }
                 val part = partFile(app, job.key)
                 val before = if (part.isFile) part.length() else 0L
                 try {
@@ -171,9 +196,12 @@ object BookQueue {
                     throw e
                 } catch (e: HttpException) {
                     // the server said no: keep it as failed (▶️ tries again)
-                    change(app) { l -> l.map { if (it.key == job.key) it.copy(state = State.FAILED, error = e.message) else it } }
-                    Downloads.setProgress(job.key, null)
-                    Downloads.message("받기 실패: ${job.title} — ${e.message}")
+                    if (get(app, job.key)?.quiet == true) cancel(app, job.key)   // 미리 받기: opening it tries again
+                    else {
+                        change(app) { l -> l.map { if (it.key == job.key) it.copy(state = State.FAILED, error = e.message) else it } }
+                        Downloads.setProgress(job.key, null)
+                        Downloads.message("받기 실패: ${job.title} — ${e.message}")
+                    }
                 } catch (e: Exception) {
                     // network trouble: from where it stopped, later. New bytes = still getting somewhere.
                     val grew = (if (part.isFile) part.length() else 0L) > before
@@ -182,7 +210,9 @@ object BookQueue {
                     val why = e.message ?: e.javaClass.simpleName
                     change(app) { l -> l.map { if (it.key == job.key) it.copy(error = why, fails = fails, state = if (dead) State.FAILED else State.WAITING) else it } }
                     tried += job.key
-                    if (dead) {
+                    if (dead && get(app, job.key)?.quiet == true) {
+                        cancel(app, job.key)
+                    } else if (dead) {
                         Downloads.setProgress(job.key, null)
                         Downloads.message("받기 실패: ${job.title} — $why")
                     } else {
@@ -198,20 +228,33 @@ object BookQueue {
                 // not for ever: what is still waiting becomes ⚠️ where the person can see it
                 change(app) { l -> l.map { if (it.state == State.WAITING && it.error != null) it.copy(state = State.FAILED) else it } }
             }
+            // what was held back goes on once there is Wi-Fi
+            if (mixed && !isStopped && all(app).any { it.state == State.WAITING }) kick(app, ExistingWorkPolicy.APPEND_OR_REPLACE, forWifi = true)
             return Result.success()
         }
 
         private suspend fun one(app: Context, job: Job, left: Int) {
+            // a 미리 받기 whose book arrived another way meanwhile
+            if (job.quiet) AppDatabase.get(app).books().findBySource(job.key, job.href)?.let {
+                if (BookStore.get(app).hasFiles(it.id)) { cancel(app, job.key); return }
+            }
             val server = ServerSettings(app).get(job.serverId) ?: throw HttpException(0, "서버 설정이 지워졌습니다")
             val part = partFile(app, job.key)
             var lastFrac = -1f
             val progress = { done: Long, total: Long ->
                 val f = if (total > 0) done.toFloat() / total else -1f
-                if (f < 0 || f - lastFrac >= 0.01f) { lastFrac = f; Downloads.setProgress(job.key, f); Downloads.nowReceiving(job.title, f, left) }
+                if (f < 0 || f - lastFrac >= 0.01f) { lastFrac = f; Downloads.setProgress(job.key, f); if (!job.quiet) Downloads.nowReceiving(job.title, f, left) }
                 note(job.title, left, f)
             }
-            // paused or cancelled meanwhile?
-            val stop = { isStopped || all(app).firstOrNull { it.key == job.key }?.state != State.WAITING }
+            // paused or cancelled meanwhile — or Wi-Fi gone while this one must wait for it?
+            var checkedAt = 0L
+            var wait = false
+            val stop = {
+                val now = System.currentTimeMillis()
+                val current = get(app, job.key)
+                if (mixed && current != null && now - checkedAt >= 1000) { checkedAt = now; wait = held(app, current) }
+                isStopped || wait || current?.state != State.WAITING
+            }
             val (fileName, complete) = if (server.isRemote) {
                 // a file server (WebDAV · SFTP · SMB · FTP): href is remote://<server>/<path>
                 val path = RemoteAddress.parseUrl(job.href)?.second ?: throw HttpException(0, "주소가 잘못되었습니다")
@@ -220,7 +263,7 @@ object BookQueue {
                 }
                 RemoteAddress.nameOf(path) to ok
             } else OpdsClient(server).downloadResume(job.href, part, progress, stop)
-            if (!complete) { Downloads.setProgress(job.key, null); return }
+            if (!complete) { Downloads.setProgress(job.key, if (wait) -1f else null); return }   // -1: still waiting
             val generic = !job.meta && OpdsClient.isGenericTitle(job.title)
             val hint = if (generic) fileName?.substringBeforeLast('.')?.ifBlank { null } else job.title
             val store = BookStore.get(app)
@@ -233,9 +276,10 @@ object BookQueue {
             job.collectionId?.let { com.oasisreader.app.data.ShelfCollections.set(db, it, book.id, true) }
             Downloads.recordOrigin(app, book.id, job.origin)
             job.shelvesOf?.let { NextVolumes.joinShelves(app, it, book.id) }
+            val quiet = get(app, job.key)?.quiet ?: job.quiet
             change(app) { l -> l.filterNot { it.key == job.key } }
             Downloads.setProgress(job.key, null)
-            ShelfNotices.added((if (job.temp) "받았습니다: " else "서재에 담았습니다: ") + book.title, book.id)
+            if (!quiet) ShelfNotices.added((if (job.temp) "받았습니다: " else "서재에 담았습니다: ") + book.title, book.id)
             if (job.temp) runCatching { store.trimCache(CachePrefs(app).limitBytes, keep = book.id) }
         }
 

@@ -136,11 +136,11 @@ fun ComicScreen(bookId: String, onBack: () -> Unit, onOpenBook: (String) -> Unit
                 Spacer(Modifier.height(16.dp))
                 val url = b?.sourceUrl
                 if (url != null) {
-                    fun fetch() = com.oasisreader.app.ui.WifiAsk.run(context) {
+                    fun fetch() = com.oasisreader.app.ui.WifiAsk.run(context, allowed = com.oasisreader.app.data.Downloads.allowedOnMobile(app, url)) { mobile ->
                         refetching = true
                         scope.launch {
                             try {
-                                if (com.oasisreader.app.data.Downloads.receiveOrQueue(app, bookId, url)) attempt++
+                                if (com.oasisreader.app.data.Downloads.receiveOrQueue(app, bookId, url, mobile)) attempt++
                             } catch (e: Exception) {
                                 com.oasisreader.app.ui.Notice.show(context, "다시 받기 실패: ${e.message}")
                             } finally {

@@ -219,9 +219,9 @@ private fun App() {
             remote = false, what = "고른 폴더",
             onPick = { copy ->
                 audioTree = null
-                fun add() = com.oasisreader.app.audio.OwnAudioImport.fromFolder(context, tree, copy)
+                fun add(mobile: Boolean) = com.oasisreader.app.audio.OwnAudioImport.fromFolder(context, tree, copy, mobile)
                 // a copy is made by the receiving worker, under the same Wi-Fi rule (103)
-                if (copy) com.oasisreader.app.ui.WifiAsk.run(context) { add() } else add()
+                if (copy) com.oasisreader.app.ui.WifiAsk.run(context) { mobile -> add(mobile) } else add(false)
             },
             onDismiss = { audioTree = null },
         )

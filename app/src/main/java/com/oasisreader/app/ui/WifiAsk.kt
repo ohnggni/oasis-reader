@@ -27,35 +27,44 @@ import com.oasisreader.app.data.DownloadPrefs
  * place goes through [run]; background work (다음 회차 미리 받기, 동기화) does not.
  */
 object WifiAsk {
-    internal var waiting by mutableStateOf<List<() -> Unit>>(emptyList())
+    internal var waiting by mutableStateOf<List<(Boolean) -> Unit>>(emptyList())
         private set
 
-    /** [receive] at once when nothing would wait; else after the choice ([WifiAskDialog]), or never (취소). */
-    fun run(context: Context, receive: () -> Unit) {
-        if (!DownloadPrefs.mustWait(context)) receive() else waiting = waiting + receive
+    /**
+     * [receive] at once when nothing would wait; else after the choice ([WifiAskDialog]), or never
+     * (취소). It must pass its `mobile` on: true = this one may use mobile data (이번만, or
+     * [allowed] already).
+     */
+    fun run(context: Context, allowed: Boolean = false, receive: (mobile: Boolean) -> Unit) {
+        if (allowed) receive(true)
+        else if (!DownloadPrefs.mustWait(context)) receive(false)
+        else waiting = waiting + receive
     }
 
     internal fun cancel() { waiting = emptyList() }
 
     /** Into the queue as it is (it comes once Wi-Fi is there), and the phone's Wi-Fi panel. */
     internal fun turnOnWifi(context: Context) {
-        proceed()
+        proceed(false)
         Toast.makeText(context.applicationContext, "와이파이에 연결되면 받습니다.", Toast.LENGTH_SHORT).show()
         runCatching { context.startActivity(Intent(Settings.Panel.ACTION_WIFI)) }
             .onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) } }
     }
 
+    /** This one over mobile data; the switch stays on, and what already waits goes on waiting. */
+    internal fun onceOnMobile() = proceed(true)
+
     /** The switch off — what already waits starts over mobile data too — then this one. */
     internal fun useMobileData(context: Context) {
         AudioDownloads.setWifiOnly(context, false)
         BookQueue.rekick(context)
-        proceed()
+        proceed(false)
     }
 
-    private fun proceed() {
+    private fun proceed(mobile: Boolean) {
         val list = waiting
         waiting = emptyList()
-        list.forEach { it() }
+        list.forEach { it(mobile) }
     }
 }
 
@@ -70,6 +79,7 @@ fun WifiAskDialog() {
         text = {
             Column {
                 WifiChoice("와이파이 켜기", "연결되면 받습니다.") { WifiAsk.turnOnWifi(context) }
+                WifiChoice("이번만 모바일 데이터로 받기", "설정은 그대로 둡니다.") { WifiAsk.onceOnMobile() }
                 WifiChoice("와이파이에서만 받기 끄기", "모바일 데이터로 받습니다.") { WifiAsk.useMobileData(context) }
             }
         },

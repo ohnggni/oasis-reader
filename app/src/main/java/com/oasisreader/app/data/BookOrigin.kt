@@ -60,7 +60,7 @@ sealed interface NextVolume {
 
     data class InLibrary(val book: BookEntity) : NextVolume { override val title get() = book.title }
 
-    class OnServer(override val title: String, val receive: (Context, (BookEntity) -> Unit) -> Unit) : NextVolume
+    class OnServer(override val title: String, val receive: (Context, mobile: Boolean, (BookEntity) -> Unit) -> Unit) : NextVolume
 }
 
 /**
@@ -121,8 +121,8 @@ object NextVolumes {
                 val found = entries.indexOfFirst { it.id == book.opdsId || it.readable?.href == book.sourceUrl }
                 val e = entries.getOrNull(found + step)?.takeIf { found >= 0 } ?: return null
                 db.books().findBySource(e.id, e.readable?.href)?.let { return NextVolume.InLibrary(it) }
-                NextVolume.OnServer(e.title) { c, done ->
-                    Downloads.start(c, server, e, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id)
+                NextVolume.OnServer(e.title) { c, mobile, done ->
+                    Downloads.start(c, server, e, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id, mobile = mobile)
                 }
             }
             BookOrigin.META -> {
@@ -136,8 +136,8 @@ object NextVolumes {
                 val m = list.getOrNull(i + step) ?: return null
                 val href = api.downloadUrl(m) ?: return null
                 db.books().findBySource(api.key(m), href)?.let { return NextVolume.InLibrary(it) }
-                NextVolume.OnServer(m.name) { c, done ->
-                    Downloads.startUrl(c, server, api.key(m), href, m.name, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id)
+                NextVolume.OnServer(m.name) { c, mobile, done ->
+                    Downloads.startUrl(c, server, api.key(m), href, m.name, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id, mobile = mobile)
                 }
             }
             BookOrigin.REMOTE -> {
@@ -152,8 +152,8 @@ object NextVolumes {
                 val f = list.getOrNull(i + step) ?: return null
                 val url = RemoteAddress.url(server.id, f.path)
                 db.books().findBySource(url, url)?.let { return NextVolume.InLibrary(it) }
-                NextVolume.OnServer(f.name.substringBeforeLast('.')) { c, done ->
-                    Downloads.startRemote(c, server, f.path, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id)
+                NextVolume.OnServer(f.name.substringBeforeLast('.')) { c, mobile, done ->
+                    Downloads.startRemote(c, server, f.path, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id, mobile = mobile)
                 }
             }
             else -> null

@@ -54,10 +54,10 @@ internal class OpdsFolderActions(
 
     fun keepFolder(name: String, list: List<OpdsEntry>, collection: Boolean) {
         // one question for the whole folder (103), none when every book is on the 서재 already
-        if (list.any { it.id !in byOpds }) WifiAsk.run(app) { receiveFolder(name, list, collection) }
-        else receiveFolder(name, list, collection)
+        if (list.any { it.id !in byOpds }) WifiAsk.run(app) { mobile -> receiveFolder(name, list, collection, mobile) }
+        else receiveFolder(name, list, collection, false)
     }
-    private fun receiveFolder(name: String, list: List<OpdsEntry>, collection: Boolean) {
+    private fun receiveFolder(name: String, list: List<OpdsEntry>, collection: Boolean, mobile: Boolean) {
         scope.launch {
             val col = if (collection) ShelfCollections.findOrCreate(db, name) else null
             var n = 0
@@ -68,7 +68,7 @@ internal class OpdsFolderActions(
                     col?.let { ShelfCollections.set(db, it.id, already.id, true) }
                 } else {
                     n++
-                    Downloads.start(app, server, e, collectionId = col?.id, origin = path.here())
+                    Downloads.start(app, server, e, collectionId = col?.id, origin = path.here(), mobile = mobile)
                 }
             }
             android.widget.Toast.makeText(

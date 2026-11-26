@@ -352,7 +352,7 @@ object OwnAudio {
      * tracks to the phone (encrypted) — else it plays from where it is (☁️ for a 파일 서버).
      * Returns the 서재 id.
      */
-    suspend fun add(context: Context, d: Draft, own: Own, key: String, keep: Boolean, origin: String? = null): String = withContext(Dispatchers.IO) {
+    suspend fun add(context: Context, d: Draft, own: Own, key: String, keep: Boolean, origin: String? = null, mobile: Boolean = false): String = withContext(Dispatchers.IO) {
         val app = context.applicationContext
         val id = idOf(key)
         val store = BookStore.get(app)
@@ -377,7 +377,7 @@ object OwnAudio {
             origin = origin ?: old?.origin,
         )
         dao.insert(row)
-        if (keep) AudioDownloads.enqueue(app, row, null, book)
+        if (keep) AudioDownloads.enqueue(app, row, null, book, mobile)
         id
     }
 

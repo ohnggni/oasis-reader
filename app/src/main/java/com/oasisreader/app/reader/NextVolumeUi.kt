@@ -28,10 +28,10 @@ import com.oasisreader.app.data.db.BookEntity
 fun openNextVolume(context: Context, next: NextVolume, onOpenBook: (String) -> Unit) {
     when (next) {
         is NextVolume.InLibrary -> onOpenBook(next.book.id)
-        is NextVolume.OnServer -> com.oasisreader.app.ui.WifiAsk.run(context) {
+        is NextVolume.OnServer -> com.oasisreader.app.ui.WifiAsk.run(context) { mobile ->
             // waiting for Wi-Fi (103) it only goes into the queue, and the dialog has said so
-            if (!com.oasisreader.app.data.DownloadPrefs.mustWait(context)) Toast.makeText(context, "「${next.title}」을(를) 받는 중입니다…", Toast.LENGTH_SHORT).show()
-            next.receive(context) { b -> onOpenBook(b.id) }
+            if (mobile || !com.oasisreader.app.data.DownloadPrefs.mustWait(context)) Toast.makeText(context, "「${next.title}」을(를) 받는 중입니다…", Toast.LENGTH_SHORT).show()
+            next.receive(context, mobile) { b -> onOpenBook(b.id) }
         }
     }
 }

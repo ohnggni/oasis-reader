@@ -19,11 +19,11 @@ internal fun Modifier.swallowTouch(onEnd: () -> Unit): Modifier = pointerInput(U
 /** Fetch the files of a book that is not on this phone: [onRetry] opens it again, [onEnd] runs at the end either way. */
 internal fun fetchMissingBook(
     scope: kotlinx.coroutines.CoroutineScope, app: android.content.Context, context: android.content.Context,
-    bookId: String, url: String, onRetry: () -> Unit, onEnd: () -> Unit,
+    bookId: String, url: String, mobile: Boolean, onRetry: () -> Unit, onEnd: () -> Unit,
 ) {
     scope.launch {
         try {
-            if (com.oasisreader.app.data.Downloads.receiveOrQueue(app, bookId, url)) onRetry()
+            if (com.oasisreader.app.data.Downloads.receiveOrQueue(app, bookId, url, mobile)) onRetry()
         } catch (e: Exception) {
             com.oasisreader.app.ui.Notice.show(context, "다시 받기 실패: ${e.message}")
         } finally {

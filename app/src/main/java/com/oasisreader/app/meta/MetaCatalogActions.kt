@@ -95,19 +95,19 @@ internal class MetaShelfActions(
     fun readNow(b: MetaBook) {
         val href = api.downloadUrl(b) ?: return
         if (href in ownedSet) scope.launch { db.books().findBySource(null, href)?.let { onOpenBook(it.id) } }
-        else WifiAsk.run(app) {
-            Downloads.startUrl(app, server, api.key(b), href, b.name, pinned = false, onDone = { onOpenBook(it.id) }, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+        else WifiAsk.run(app) { mobile ->
+            Downloads.startUrl(app, server, api.key(b), href, b.name, pinned = false, onDone = { onOpenBook(it.id) }, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId), mobile = mobile)
         }
     }
 
     /** 서재에 담기 / 보관: keep for good (a cached book with its file still here is just marked). */
-    fun keep(b: MetaBook) = keep(b, quiet = false, collectionId = null) { receive -> WifiAsk.run(app, receive) }
+    fun keep(b: MetaBook) = keep(b, quiet = false, collectionId = null) { receive -> WifiAsk.run(app, receive = receive) }
 
     /** [ask]: how a download is started (103: asked about Wi-Fi once, by whoever calls). */
-    private fun keep(b: MetaBook, quiet: Boolean, collectionId: String?, ask: (() -> Unit) -> Unit) {
+    private fun keep(b: MetaBook, quiet: Boolean, collectionId: String?, ask: ((Boolean) -> Unit) -> Unit) {
         val href = api.downloadUrl(b) ?: return
-        fun receive() = ask {
-            Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+        fun receive() = ask { mobile ->
+            Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId), mobile = mobile)
         }
         if (href in ownedSet) scope.launch {
             val book = db.books().findBySource(null, href) ?: return@launch
@@ -134,19 +134,19 @@ internal class MetaShelfActions(
     fun keepSeries(list: List<MetaBook>, collection: String?) {
         scope.launch {
             // one question for the whole series (103)
-            if (list.any { needsDownload(it) }) WifiAsk.run(app) { receiveSeries(list, collection) }
-            else receiveSeries(list, collection)
+            if (list.any { needsDownload(it) }) WifiAsk.run(app) { mobile -> receiveSeries(list, collection, mobile) }
+            else receiveSeries(list, collection, false)
         }
     }
 
-    private fun receiveSeries(list: List<MetaBook>, collection: String?) {
+    private fun receiveSeries(list: List<MetaBook>, collection: String?, mobile: Boolean) {
         scope.launch {
             val col = collection?.let { com.oasisreader.app.data.ShelfCollections.findOrCreate(db, it) }
             var n = 0
             list.forEach { b ->
                 val href = api.downloadUrl(b) ?: return@forEach
                 if (!b.readable) return@forEach
-                if (href !in pinnedSet) { keep(b, quiet = true, collectionId = col?.id) { it() }; n++ }
+                if (href !in pinnedSet) { keep(b, quiet = true, collectionId = col?.id) { receive -> receive(mobile) }; n++ }
                 else if (col != null) db.books().findBySource(null, href)?.let { com.oasisreader.app.data.ShelfCollections.set(db, col.id, it.id, true) }
             }
             android.widget.Toast.makeText(
@@ -162,8 +162,8 @@ internal class MetaShelfActions(
         if (href in ownedSet) {
             scope.launch { db.books().findBySource(null, href)?.let { onOpenBook(it.id) } }
         } else {
-            WifiAsk.run(app) {
-                Downloads.startUrl(app, server, api.key(b), href, b.name, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+            WifiAsk.run(app) { mobile ->
+                Downloads.startUrl(app, server, api.key(b), href, b.name, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId), mobile = mobile)
             }
         }
     }

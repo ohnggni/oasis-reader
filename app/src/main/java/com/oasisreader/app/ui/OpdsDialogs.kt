@@ -80,9 +80,9 @@ internal fun OpdsEntryDialog(
                     e.readable != null -> Row {
                         TextButton(onClick = {
                             detail = null
-                            WifiAsk.run(app) { Downloads.start(app, server, e, pinned = false, onDone = { onOpenBook(it.id) }, origin = path.here()) }
+                            WifiAsk.run(app) { mobile -> Downloads.start(app, server, e, pinned = false, onDone = { onOpenBook(it.id) }, origin = path.here(), mobile = mobile) }
                         }) { EmojiText("📖 바로 읽기") }
-                        TextButton(onClick = { WifiAsk.run(app) { Downloads.start(app, server, e, origin = path.here()) } }) { EmojiText("⬇️ 서재에 담기") }
+                        TextButton(onClick = { WifiAsk.run(app) { mobile -> Downloads.start(app, server, e, origin = path.here(), mobile = mobile) } }) { EmojiText("⬇️ 서재에 담기") }
                     }
                 }
             },

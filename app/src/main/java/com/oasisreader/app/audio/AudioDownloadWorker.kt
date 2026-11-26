@@ -44,8 +44,14 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
     private class Unwanted : Exception()
     /** The book was paused while it came (the half track stays). */
     private class Paused : Exception()
+    /** Wi-Fi went away while a track that waits for it came (the half track stays). */
+    private class Held : Exception()
 
     private var lastNote = 0L
+
+    /** This run is on any connection for a 이번만 track (103): the rest wait while it is not Wi-Fi. */
+    private val mixed get() = inputData.getBoolean(MIXED, false)
+    private fun held(app: Context, q: AudioDownloads.Queue, trackId: Int) = mixed && !q.onMobile(trackId) && DownloadPrefs.mustWait(app)
 
     override suspend fun getForegroundInfo(): ForegroundInfo = info(applicationContext, "받을 준비 중…", null, -1)
 
@@ -53,10 +59,12 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val app = applicationContext
         channel(app)
         runCatching { setForeground(getForegroundInfo()) }   // may be refused in the background: the work still runs
+        val waiting = HashSet<String>()   // books whose remaining tracks wait for Wi-Fi
         while (true) {
-            val bookId = AudioDownloads.pendingBooks(app).firstOrNull() ?: break
+            val bookId = AudioDownloads.pendingBooks(app).firstOrNull { it !in waiting } ?: break
             try {
-                book(app, bookId)
+                if (mixed && AudioDownloads.readQueue(app, bookId).mobile.isEmpty() && DownloadPrefs.mustWait(app)) waiting += bookId
+                else if (!book(app, bookId)) waiting += bookId
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Refused) {
@@ -73,6 +81,7 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 }
             }
         }
+        if (mixed && AudioDownloads.pendingBooks(app).isNotEmpty()) AudioDownloads.waitForWifi(app)
         return Result.success()
     }
 
@@ -83,10 +92,11 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         AudioDownloads.version++
     }
 
-    private suspend fun book(app: Context, bookId: String) {
+    /** Receives what is wanted of one book. False: what is left of it waits for Wi-Fi. */
+    private suspend fun book(app: Context, bookId: String): Boolean {
         val dao = AppDatabase.get(app).books()
-        val row = dao.get(bookId) ?: run { AudioDownloads.writeQueue(app, bookId, AudioDownloads.Queue()); return }
-        if (OwnAudio.isOwn(row)) { ownBook(app, row); return }
+        val row = dao.get(bookId) ?: run { AudioDownloads.writeQueue(app, bookId, AudioDownloads.Queue()); return true }
+        if (OwnAudio.isOwn(row)) return ownBook(app, row)
         val (sid, aid) = AudioLibraryLink.parse(row) ?: throw Refused("오디오북 정보가 없습니다")
         val server = ServerSettings(app).get(sid) ?: throw Refused("이 오디오북의 서버 설정이 지워졌습니다")
         val web = BookOasisWeb.of(server)
@@ -99,13 +109,14 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val scope = HashSet<Int>()   // the tracks this run is about (for the percentage)
         while (true) {
             val q = AudioDownloads.readQueue(app, bookId)
-            if (q.paused) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return }
+            if (q.paused) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return true }
             val all = AudioDownloads.ALL in q.wanted
             val kept = AudioDownloads.keptTracks(app, bookId)
             val wanted = d.book.tracks.filter { all || it.id in q.wanted }
             scope += wanted.map { it.id }
-            val next = wanted.firstOrNull { it.id !in kept }
+            val next = wanted.firstOrNull { it.id !in kept && !held(app, q, it.id) }
             if (next == null) {
+                if (wanted.any { it.id !in kept }) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return false }
                 AudioDownloads.writeQueue(app, bookId, AudioDownloads.Queue())
                 break
             }
@@ -129,18 +140,21 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 continue   // the queue changed: read it again
             } catch (e: Paused) {
                 AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
-                return
+                return true
+            } catch (e: Held) {
+                continue   // Wi-Fi gone: the half track stays, another may still come
             }
-            if (!all) AudioDownloads.updateQueue(app, bookId) { it.copy(wanted = it.wanted - next.id) }
+            AudioDownloads.updateQueue(app, bookId) { it.arrived(next.id, all) }
             AudioDownloads.refreshRow(app, bookId)
         }
         AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
         AudioDownloads.refreshRow(app, bookId)
         if (scope.isNotEmpty() && scope.all { it in AudioDownloads.keptTracks(app, bookId) }) done(app, row.title, scope.size)
+        return true
     }
 
     /** 소장 오디오북 (TODO 30): the tracks from the 파일 서버 / 폰 폴더 into the phone, encrypted like the others. */
-    private suspend fun ownBook(app: Context, row: com.oasisreader.app.data.db.BookEntity) {
+    private suspend fun ownBook(app: Context, row: com.oasisreader.app.data.db.BookEntity): Boolean {
         val bookId = row.id
         val own = OwnAudio.read(app, bookId) ?: throw Refused("이 오디오북의 정보 파일이 없습니다")
         val book = own.book
@@ -152,13 +166,17 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             val scope = HashSet<Int>()
             while (true) {
                 val q = AudioDownloads.readQueue(app, bookId)
-                if (q.paused) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return }
+                if (q.paused) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return true }
                 val all = AudioDownloads.ALL in q.wanted
                 val kept = AudioDownloads.keptTracks(app, bookId)
                 val wanted = book.tracks.filter { all || it.id in q.wanted }
                 scope += wanted.map { it.id }
-                val next = wanted.firstOrNull { it.id !in kept }
-                if (next == null) { AudioDownloads.writeQueue(app, bookId, AudioDownloads.Queue()); break }
+                val next = wanted.firstOrNull { it.id !in kept && !held(app, q, it.id) }
+                if (next == null) {
+                    if (wanted.any { it.id !in kept }) { AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId); return false }
+                    AudioDownloads.writeQueue(app, bookId, AudioDownloads.Queue())
+                    break
+                }
                 val index = book.tracks.indexOf(next)
                 val doneInScope = scope.count { it in kept }
                 fun report(frac: Float) {
@@ -179,14 +197,17 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                     continue
                 } catch (e: Paused) {
                     AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
-                    return
+                    return true
+                } catch (e: Held) {
+                    continue
                 }
-                if (!all) AudioDownloads.updateQueue(app, bookId) { it.copy(wanted = it.wanted - next.id) }
+                AudioDownloads.updateQueue(app, bookId) { it.arrived(next.id, all) }
                 AudioDownloads.refreshRow(app, bookId)
             }
             AudioDownloads.progress.remove(bookId); AudioDownloads.current.remove(bookId)
             AudioDownloads.refreshRow(app, bookId)
             if (scope.isNotEmpty() && scope.all { it in AudioDownloads.keptTracks(app, bookId) }) done(app, row.title, scope.size)
+            return true
         } finally { runCatching { opener.close() } }
     }
 
@@ -217,6 +238,7 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                         val q = AudioDownloads.readQueue(app, bookId)
                         if (AudioDownloads.ALL !in q.wanted && t.id !in q.wanted) throw Unwanted()
                         if (q.paused) throw Paused()
+                        if (held(app, q, t.id)) throw Held()
                         if (len > 0) onFrac((got.toFloat() / len).coerceIn(0f, 1f))
                     }
                 }
@@ -271,6 +293,7 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                                 val q = AudioDownloads.readQueue(app, bookId)
                                 if (AudioDownloads.ALL !in q.wanted && t.id !in q.wanted) throw Unwanted()
                                 if (q.paused) throw Paused()
+                                if (held(app, q, t.id)) throw Held()
                                 if (len > 0) onFrac((got.toFloat() / len).coerceIn(0f, 1f))
                             }
                         }
@@ -302,8 +325,12 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         private const val DONE_ID = 7400
         private const val MAX_RETRIES = 30
 
-        fun request(context: Context): OneTimeWorkRequest = OneTimeWorkRequestBuilder<AudioDownloadWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(if (DownloadPrefs.wifiOnly(context)) NetworkType.UNMETERED else NetworkType.CONNECTED).build())
+        private const val MIXED = "mixed"
+
+        /** [mixed]: "와이파이에서만 받기" is on but a 이번만 track waits — start on any connection (103). */
+        fun request(context: Context, mixed: Boolean): OneTimeWorkRequest = OneTimeWorkRequestBuilder<AudioDownloadWorker>()
+            .setInputData(androidx.work.Data.Builder().putBoolean(MIXED, mixed).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(if (DownloadPrefs.wifiOnly(context) && !mixed) NetworkType.UNMETERED else NetworkType.CONNECTED).build())
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()

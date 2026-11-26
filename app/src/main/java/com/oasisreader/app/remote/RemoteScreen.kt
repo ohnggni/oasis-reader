@@ -184,7 +184,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
     BackHandler(onBack = ::back)
 
     fun receive(f: RemoteFile) {
-        WifiAsk.run(app) { Downloads.startRemote(app, server, f.path, origin = BookOrigin.remote(serverId, Remote.parent(f.path))) }
+        WifiAsk.run(app) { mobile -> Downloads.startRemote(app, server, f.path, origin = BookOrigin.remote(serverId, Remote.parent(f.path)), mobile = mobile) }
     }
     fun openNow(f: RemoteFile) {
         val url = Remote.url(serverId, f.path)
@@ -192,9 +192,9 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
             scope.launch { db.books().findBySource(url, url)?.let { onOpenBook(it.id) } }
             return
         }
-        WifiAsk.run(app) {
+        WifiAsk.run(app) { mobile ->
             Downloads.startRemote(app, server, f.path, pinned = false, onDone = { b -> onOpenBook(b.id) },
-                origin = BookOrigin.remote(serverId, Remote.parent(f.path)))
+                origin = BookOrigin.remote(serverId, Remote.parent(f.path)), mobile = mobile)
         }
     }
 
@@ -218,7 +218,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                 val coverOf = if (!registerOnly) emptySet() else unique.groupBy { Remote.parent(it.path) }.values
                     .mapNotNull { fs -> fs.minWithOrNull { a, b -> ShelfSearch.naturalCompare(a.name, b.name) }?.path }.toSet()
                 val store = com.oasisreader.app.data.BookStore.get(app)
-                val fetch = ArrayList<() -> Unit>()    // what is to be received, asked about at once (103)
+                val fetch = ArrayList<(Boolean) -> Unit>()    // what is to be received, asked about at once (103)
                 unique.forEach { f ->
                     val folder = Remote.parent(f.path)
                     val col = if (byFolder) {
@@ -230,7 +230,7 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                     if (already != null && !registerOnly && !store.hasFiles(already.id)) {
                         // registered earlier (등록만) or dropped: 전부 받기 now receives it (import puts the file back)
                         n++
-                        fetch += { Downloads.startRemote(app, server, f.path, collectionId = col, origin = already.origin ?: BookOrigin.remote(serverId, folder)) }
+                        fetch += { mobile -> Downloads.startRemote(app, server, f.path, collectionId = col, origin = already.origin ?: BookOrigin.remote(serverId, folder), mobile = mobile) }
                     } else if (already != null) {
                         have++
                         if (!registerOnly && !already.pinned) db.books().setPinned(already.id, true)
@@ -239,8 +239,8 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                         n++
                         val origin = BookOrigin.remote(serverId, folder)
                         when {
-                            !registerOnly -> fetch += { Downloads.startRemote(app, server, f.path, collectionId = col, origin = origin) }
-                            f.path in coverOf -> fetch += { Downloads.startRemote(app, server, f.path, pinned = false, collectionId = col, origin = origin) }
+                            !registerOnly -> fetch += { mobile -> Downloads.startRemote(app, server, f.path, collectionId = col, origin = origin, mobile = mobile) }
+                            f.path in coverOf -> fetch += { mobile -> Downloads.startRemote(app, server, f.path, pinned = false, collectionId = col, origin = origin, mobile = mobile) }
                             else -> {
                                 val b = store.registerRemote(url, Remote.nameOf(f.path).substringBeforeLast('.'), origin)
                                 col?.let { ShelfCollections.set(db, it, b.id, true) }
@@ -257,8 +257,8 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
                 ) }
                 // 등록만 is done already: its message does not wait for the covers
                 if (registerOnly || fetch.isEmpty()) result()
-                if (fetch.isNotEmpty()) WifiAsk.run(app) {
-                    fetch.forEach { it() }
+                if (fetch.isNotEmpty()) WifiAsk.run(app) { mobile ->
+                    fetch.forEach { it(mobile) }
                     if (!registerOnly) result()
                 }
                 selected.clear()
@@ -429,8 +429,8 @@ fun RemoteScreen(serverId: String, onBack: () -> Unit, onOpenSettings: () -> Uni
             what = if (dirs.size == 1) "「${Remote.nameOf(dirs[0]).ifBlank { server.name }}」" else "고른 폴더 ${dirs.size}개",
             onPick = { keep ->
                 audioAsk = null; selected.clear()
-                fun add() = dirs.forEach { com.oasisreader.app.audio.OwnAudioImport.fromRemote(context, server, it, keep) }
-                if (keep) WifiAsk.run(app) { add() } else add()
+                fun add(mobile: Boolean) = dirs.forEach { com.oasisreader.app.audio.OwnAudioImport.fromRemote(context, server, it, keep, mobile) }
+                if (keep) WifiAsk.run(app) { mobile -> add(mobile) } else add(false)
             },
             onDismiss = { audioAsk = null },
         )

@@ -68,6 +68,9 @@ object Notice {
     /** the book 서재에서 보기 goes to (null: a plain message) */
     var book by mutableStateOf<String?>(null)
         private set
+    /** the card's one button: its label and what it does (null: none) */
+    var action by mutableStateOf<Pair<String, () -> Unit>?>(null)
+        private set
 
     fun show(context: Context, message: String) {
         if (message.length <= TOAST_MAX) {
@@ -75,6 +78,7 @@ object Notice {
             return
         }
         book = null
+        action = null
         text = message
         seq++
     }
@@ -82,14 +86,23 @@ object Notice {
     /** A book (or the first of several) went into the 서재. */
     fun added(message: String, bookId: String) {
         book = bookId
+        action = null
         text = message
         seq++
     }
 
-    fun dismiss() { text = null; book = null }
+    /** A card with a button, there for 5 seconds like [added]'s. */
+    fun offer(message: String, label: String, run: () -> Unit) {
+        book = null
+        action = label to run
+        text = message
+        seq++
+    }
+
+    fun dismiss() { text = null; book = null; action = null }
 
     // after the properties: what the data layer said before this woke is handed over right here
-    init { ShelfNotices.listen(::added) }
+    init { ShelfNotices.listen(::added); ShelfNotices.listenOffers(::offer) }
 }
 
 /** Hosted once over the whole app (MainActivity). */
@@ -97,10 +110,11 @@ object Notice {
 fun NoticeHost() {
     val t = Notice.text
     val target = Notice.book
+    val action = Notice.action
     val ring = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(1f) }
     LaunchedEffect(Notice.seq) {
         val shown = Notice.text ?: return@LaunchedEffect
-        if (Notice.book != null) {
+        if (Notice.book != null || Notice.action != null) {
             ring.snapTo(1f)
             if (com.oasisreader.app.ui.theme.ThemeMode.eink) delay(Notice.ADDED_MS.toLong())
             else ring.animateTo(0f, androidx.compose.animation.core.tween(Notice.ADDED_MS, easing = androidx.compose.animation.core.LinearEasing))
@@ -163,11 +177,15 @@ fun NoticeHost() {
                 androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         t.orEmpty(), style = MaterialTheme.typography.bodyMedium,
-                        maxLines = if (target != null) 3 else Int.MAX_VALUE, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        maxLines = if (target != null || action != null) 3 else Int.MAX_VALUE, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false).padding(horizontal = 18.dp, vertical = 12.dp),
                     )
-                    if (target != null) androidx.compose.foundation.layout.Row(
-                        Modifier.clickable(onClickLabel = "서재에서 보기") { Notice.dismiss(); ShelfJump.to(target) }
+                    val label = if (target != null) "서재에서 보기" else action?.first
+                    if (label != null) androidx.compose.foundation.layout.Row(
+                        Modifier.clickable(onClickLabel = label) {
+                            Notice.dismiss()
+                            if (target != null) ShelfJump.to(target) else action?.second?.invoke()
+                        }
                             .padding(start = 4.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -180,10 +198,10 @@ fun NoticeHost() {
                                 strokeWidth = 3.dp,
                                 trackColor = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.18f),
                             )
-                            EmojiText("📚", style = MaterialTheme.typography.labelMedium)
+                            EmojiText(if (target != null) "📚" else "⬇️", style = MaterialTheme.typography.labelMedium)
                         }
                         Text(
-                            "서재에서 보기", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.inversePrimary,
+                            label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.inversePrimary,
                             modifier = Modifier.padding(start = 8.dp),
                         )
                     }

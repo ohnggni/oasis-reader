@@ -46,7 +46,7 @@ object OwnAudioImport {
     private val blank = AudioBook(0, "", null, null, emptyList())
 
     /** Every audiobook in [dir] of [server] (it may be one itself). [keep]: receive the tracks; else stream (☁️). */
-    fun fromRemote(context: Context, server: Server, dir: String, keep: Boolean) {
+    fun fromRemote(context: Context, server: Server, dir: String, keep: Boolean, mobile: Boolean) {
         val app = context.applicationContext
         setLastKeep(app, true, keep)
         Notice.show(app, "🎧 오디오북을 찾는 중…")
@@ -62,7 +62,7 @@ object OwnAudioImport {
                             OwnAudio.add(
                                 app, d,
                                 OwnAudio.Own(blank, OwnAudio.REMOTE, serverId = server.id, path = home),
-                                key = "remote:${server.id}:$home", keep = keep,
+                                key = "remote:${server.id}:$home", keep = keep, mobile = mobile,
                                 origin = BookOrigin.remote(server.id, Remote.parent(home)),
                             )
                         }
@@ -74,7 +74,7 @@ object OwnAudioImport {
     }
 
     /** Every audiobook in the phone folder [tree]. [copy]: copy the tracks into the app; else play them in place. */
-    fun fromFolder(context: Context, tree: Uri, copy: Boolean) {
+    fun fromFolder(context: Context, tree: Uri, copy: Boolean, mobile: Boolean) {
         val app = context.applicationContext
         setLastKeep(app, false, copy)
         // kept readable after a restart (in place: always; copy: until the copy is done, in the background)
@@ -91,7 +91,7 @@ object OwnAudioImport {
                         OwnAudio.add(
                             app, d,
                             OwnAudio.Own(blank, OwnAudio.FOLDER, path = home, tree = tree.toString(), inPlace = !copy),
-                            key = "folder:$home", keep = copy,
+                            key = "folder:$home", keep = copy, mobile = mobile,
                         )
                     }
                 }
