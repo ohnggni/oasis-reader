@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.WifiAsk
 import kotlinx.coroutines.CoroutineScope
 import com.oasisreader.app.data.db.BookEntity
 import androidx.compose.runtime.State
@@ -143,20 +144,22 @@ private fun AudiobookHeader(
             dlErr?.let { EmojiText("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
             when {
                 dl != null || AudioDownloads.isPaused(context, rowId) -> Row {
-                    if (AudioDownloads.isPaused(context, rowId)) TextButton(onClick = { AudioDownloads.resume(context, rowId) }) { EmojiText("▶️ 이어 받기") }
+                    if (AudioDownloads.isPaused(context, rowId)) TextButton(onClick = { WifiAsk.run(context) { AudioDownloads.resume(context, rowId) } }) { EmojiText("▶️ 이어 받기") }
                     else TextButton(onClick = { AudioDownloads.pause(context, rowId) }) { EmojiText("⏸️ 받는 중 ${((dl ?: 0f) * 100).toInt()}%") }
                     TextButton(onClick = { AudioDownloads.cancel(context, rowId) }) { EmojiText("✖️ 취소") }
                 }
                 kept -> EmojiText("⬇️ 폰에 받음 (오프라인으로 들을 수 있음)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
                 else -> TextButton(onClick = {
-                    scope.launch {
-                        runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
-                            .onSuccess { row ->
-                                askNotif()
-                                AudioDownloads.enqueue(context, row, book = b)
-                                com.oasisreader.app.ui.Notice.show(context, "받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
-                            }
-                            .onFailure { com.oasisreader.app.ui.Notice.show(context, "받지 못했습니다: ${it.message}") }
+                    askNotif()
+                    WifiAsk.run(context) {
+                        scope.launch {
+                            runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
+                                .onSuccess { row ->
+                                    AudioDownloads.enqueue(context, row, book = b)
+                                    com.oasisreader.app.ui.Notice.show(context, "받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
+                                }
+                                .onFailure { com.oasisreader.app.ui.Notice.show(context, "받지 못했습니다: ${it.message}") }
+                        }
                     }
                 }) { Text(if ((onShelf?.fileBytes ?: 0) > 0) "⬇️ 나머지 트랙도 받기" else "⬇️ 폰에 받기 (오프라인)") }
             }
@@ -189,10 +192,12 @@ private fun AudiobookTrackRow(
             st, frac,
             onDownload = {
                 askNotif()
-                scope.launch {
-                    runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
-                        .onSuccess { row -> AudioDownloads.enqueue(context, row, listOf(t.id), book = b) }
-                        .onFailure { com.oasisreader.app.ui.Notice.show(context, "받지 못했습니다: ${it.message}") }
+                WifiAsk.run(context) {
+                    scope.launch {
+                        runCatching { onShelf ?: AudioLibraryLink.add(context, web, b, pct, completed) }
+                            .onSuccess { row -> AudioDownloads.enqueue(context, row, listOf(t.id), book = b) }
+                            .onFailure { com.oasisreader.app.ui.Notice.show(context, "받지 못했습니다: ${it.message}") }
+                    }
                 }
             },
             onCancel = { AudioDownloads.dequeueTrack(context, rowId, t.id) },

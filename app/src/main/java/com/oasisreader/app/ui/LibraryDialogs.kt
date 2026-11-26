@@ -83,15 +83,17 @@ internal fun BookMenuDialog(
                     val err = ad.errors[b.id]
                     fun startDl() {
                         onDismiss()
-                        askNotif()
-                        ad.enqueue(ctx, b)
-                        com.oasisreader.app.ui.Notice.show(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
+                        askNotif()   // before asking: this dialog (and its launcher) is gone afterwards
+                        WifiAsk.run(ctx) {
+                            ad.enqueue(ctx, b)
+                            com.oasisreader.app.ui.Notice.show(ctx, "「${b.title}」 받기를 시작했습니다. 앱을 닫아도 계속 받고, 알림에서 진행을 볼 수 있습니다.")
+                        }
                     }
                     err?.let { EmojiText("⚠️ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
                     val paused = remember(b.id, ad.version) { ad.isPaused(ctx, b.id) }
                     when {
                         dl != null || paused -> Row {
-                            if (paused) TextButton(onClick = { ad.resume(ctx, b.id) }) { EmojiText("▶️ 이어 받기") }
+                            if (paused) TextButton(onClick = { WifiAsk.run(ctx) { ad.resume(ctx, b.id) } }) { EmojiText("▶️ 이어 받기") }
                             else TextButton(onClick = { ad.pause(ctx, b.id) }) { EmojiText("⏸️ 일시정지 ${((dl ?: 0f) * 100).roundToInt()}%") }
                             TextButton(onClick = { ad.cancel(ctx, b.id) }) { EmojiText("✖️ 받기 취소") }
                         }

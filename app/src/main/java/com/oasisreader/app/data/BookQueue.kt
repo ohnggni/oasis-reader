@@ -49,6 +49,8 @@ object BookQueue {
         val addedAt: Long = System.currentTimeMillis(),
         val origin: String? = null,      // BookOrigin JSON (DB v8)
         val fails: Int = 0,              // tries in a row that got nowhere (TODO 70)
+        val temp: Boolean = false,       // 바로 읽기 waiting for Wi-Fi (103): kept 임시, like a direct one
+        val shelvesOf: String? = null,   // 다음 권 (103): joins the 컬렉션 this book is on
     )
 
     private const val WORK = "book-download"
@@ -80,7 +82,11 @@ object BookQueue {
     fun get(c: Context, key: String) = all(c).firstOrNull { it.key == key }
 
     fun enqueue(c: Context, job: Job) {
-        change(c) { list -> list.filterNot { it.key == job.key } + job }
+        change(c) { list ->
+            // a 임시 request does not turn a waiting 서재에 담기 of the same book into a 임시 one
+            val kept = list.any { it.key == job.key && !it.temp }
+            list.filterNot { it.key == job.key } + job.copy(temp = job.temp && !kept)
+        }
         Downloads.setProgress(job.key, -1f)
         BatteryExempt.noteQueued(c)
         kick(c)
@@ -218,7 +224,7 @@ object BookQueue {
             val generic = !job.meta && OpdsClient.isGenericTitle(job.title)
             val hint = if (generic) fileName?.substringBeforeLast('.')?.ifBlank { null } else job.title
             val store = BookStore.get(app)
-            var book = store.import(part, sourceUrl = job.href, opdsId = job.key, titleHint = hint, fallbackTitle = job.title, pinned = true, moveSource = true)
+            var book = store.import(part, sourceUrl = job.href, opdsId = job.key, titleHint = hint, fallbackTitle = job.title, pinned = !job.temp, moveSource = true)
             part.delete()
             val db = AppDatabase.get(app)
             if (job.meta && (book.format == BookStore.FORMAT_COMIC || book.format == BookStore.FORMAT_PDF) && book.title != job.title) {
@@ -226,9 +232,11 @@ object BookQueue {
             }
             job.collectionId?.let { com.oasisreader.app.data.ShelfCollections.set(db, it, book.id, true) }
             Downloads.recordOrigin(app, book.id, job.origin)
+            job.shelvesOf?.let { NextVolumes.joinShelves(app, it, book.id) }
             change(app) { l -> l.filterNot { it.key == job.key } }
             Downloads.setProgress(job.key, null)
-            ShelfNotices.added("서재에 담았습니다: ${book.title}", book.id)
+            ShelfNotices.added((if (job.temp) "받았습니다: " else "서재에 담았습니다: ") + book.title, book.id)
+            if (job.temp) runCatching { store.trimCache(CachePrefs(app).limitBytes, keep = book.id) }
         }
 
         private fun note(title: String, left: Int, f: Float) {

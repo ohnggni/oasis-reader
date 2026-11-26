@@ -108,6 +108,8 @@ class MainActivity : ComponentActivity() {
                     App()
                     // 오디오북: the phone's place or the server's, when that cannot be told
                     com.oasisreader.app.audio.PlaceChoiceDialog()
+                    // 103: 받기를 시작하는데 와이파이만 받기라 기다려야 할 때
+                    com.oasisreader.app.ui.WifiAskDialog()
                     // 받기를 처음 시작할 때, 한 번: 배터리 제한 없음 (TODO 70)
                     com.oasisreader.app.ui.BatteryAskDialog()
                     // long messages (Toasts cut them to two lines)
@@ -215,7 +217,12 @@ private fun App() {
     audioTree?.let { tree ->
         com.oasisreader.app.audio.OwnAudioChoiceDialog(
             remote = false, what = "고른 폴더",
-            onPick = { copy -> audioTree = null; com.oasisreader.app.audio.OwnAudioImport.fromFolder(context, tree, copy) },
+            onPick = { copy ->
+                audioTree = null
+                fun add() = com.oasisreader.app.audio.OwnAudioImport.fromFolder(context, tree, copy)
+                // a copy is made by the receiving worker, under the same Wi-Fi rule (103)
+                if (copy) com.oasisreader.app.ui.WifiAsk.run(context) { add() } else add()
+            },
             onDismiss = { audioTree = null },
         )
     }

@@ -53,6 +53,11 @@ internal class OpdsFolderActions(
     private var detail by detailState
 
     fun keepFolder(name: String, list: List<OpdsEntry>, collection: Boolean) {
+        // one question for the whole folder (103), none when every book is on the 서재 already
+        if (list.any { it.id !in byOpds }) WifiAsk.run(app) { receiveFolder(name, list, collection) }
+        else receiveFolder(name, list, collection)
+    }
+    private fun receiveFolder(name: String, list: List<OpdsEntry>, collection: Boolean) {
         scope.launch {
             val col = if (collection) ShelfCollections.findOrCreate(db, name) else null
             var n = 0

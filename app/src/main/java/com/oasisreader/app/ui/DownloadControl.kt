@@ -42,7 +42,7 @@ fun DownloadControl(key: String, progress: Float?, onStart: () -> Unit, size: Dp
                 EmojiText("⏸", fontSize = (size.value * 0.28f).sp, color = MaterialTheme.colorScheme.primary)
             }
             job != null && job.state != BookQueue.State.WAITING -> Box(
-                Modifier.size(size).clickable { BookQueue.resume(context, key) }
+                Modifier.size(size).clickable { WifiAsk.run(context) { BookQueue.resume(context, key) } }
                     .semantics { contentDescription = if (job.state == BookQueue.State.FAILED) "다시 받기" else "이어 받기" },
                 contentAlignment = Alignment.Center,
             ) { Text(if (job.state == BookQueue.State.FAILED) "🔁" else "▶️", style = MaterialTheme.typography.titleMedium) }

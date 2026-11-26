@@ -223,9 +223,12 @@ fun StorageManagerScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                     })
                 } else {
                     MiniChip("⬇️ 받기", onClick = {
-                        val n = receive(app, chosen)
-                        Toast.makeText(context, "${n}권 받기를 시작했습니다", Toast.LENGTH_SHORT).show()
-                        selected = emptySet()
+                        val list = chosen
+                        WifiAsk.run(context) {
+                            val n = receive(app, list)
+                            Toast.makeText(context, "${n}권 받기를 시작했습니다", Toast.LENGTH_SHORT).show()
+                            selected = emptySet()
+                        }
                     })
                 }
                 MiniChip("📚 컬렉션에 넣기", onClick = { pickCollection = true })

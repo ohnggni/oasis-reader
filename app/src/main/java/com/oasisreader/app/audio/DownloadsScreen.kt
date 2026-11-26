@@ -1,5 +1,6 @@
 package com.oasisreader.app.audio
 
+import com.oasisreader.app.ui.WifiAsk
 import com.oasisreader.app.data.DownloadPrefs
 import com.oasisreader.app.ui.EmojiText
 import android.Manifest
@@ -204,7 +205,8 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-                var wifi by remember { mutableStateOf(DownloadPrefs.wifiOnly(context)) }
+                // read again when it changes elsewhere (103: the Wi-Fi choice can turn it off)
+                var wifi by remember(AudioDownloads.version) { mutableStateOf(DownloadPrefs.wifiOnly(context)) }
                 Row(
                     Modifier.fillMaxWidth().clickable { wifi = !wifi; AudioDownloads.setWifiOnly(context, wifi); com.oasisreader.app.data.BookQueue.rekick(context) }.padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -288,7 +290,7 @@ fun DownloadsScreen(onBack: () -> Unit, onStorage: () -> Unit = {}, onOpen: (Str
                 )
             }
             items(books, key = { it.first.id }, contentType = { "audio" }) { (row, st) ->
-                BookCard(row, st, onAll = { askNotif(); AudioDownloads.enqueue(context, row) }, onRemove = { scope.launch { AudioDownloads.remove(context, row) } })
+                BookCard(row, st, onAll = { askNotif(); WifiAsk.run(context) { AudioDownloads.enqueue(context, row) } }, onRemove = { scope.launch { AudioDownloads.remove(context, row) } })
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             }
             // ✅ 최근 받음: finished in the last day (books and audiobooks), folded; tap to open
@@ -387,7 +389,7 @@ private fun BookCard(row: BookEntity, st: BookDl, onAll: () -> Unit, onRemove: (
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
             when {
-                st.paused -> MiniChip("▶️", onClick = { AudioDownloads.resume(context, row.id) }, description = "이어 받기")
+                st.paused -> MiniChip("▶️", onClick = { WifiAsk.run(context) { AudioDownloads.resume(context, row.id) } }, description = "이어 받기")
                 st.pending -> MiniChip("⏸️", onClick = { AudioDownloads.pause(context, row.id) }, description = "일시정지")
                 st.tracks == 0 || st.kept < st.tracks -> MiniChip(if (st.error != null) "🔁" else "⬇️", onClick = onAll, description = if (st.error != null) "다시 받기" else "전부 받기")
             }
@@ -408,7 +410,7 @@ private fun BookCard(row: BookEntity, st: BookDl, onAll: () -> Unit, onRemove: (
                     if (t.durationSec > 0) Text(hms(t.durationSec), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TrackDownloadButton(
                         s, f,
-                        onDownload = { askNotif(); AudioDownloads.enqueue(context, row, listOf(t.id)) },
+                        onDownload = { askNotif(); WifiAsk.run(context) { AudioDownloads.enqueue(context, row, listOf(t.id)) } },
                         onCancel = { AudioDownloads.dequeueTrack(context, row.id, t.id) },
                         onRemove = { scope.launch { AudioDownloads.removeTrack(context, row.id, t.id) } },
                     )
@@ -492,7 +494,7 @@ private fun BookJobRow(job: com.oasisreader.app.data.BookQueue.Job, progress: Fl
             }
             if (!selecting) Row(horizontalArrangement = Arrangement.spacedBy(MiniChipGap)) {
                 if (job.state == com.oasisreader.app.data.BookQueue.State.WAITING) MiniChip("⏸️", onClick = { com.oasisreader.app.data.BookQueue.pause(context, job.key) }, description = "일시정지")
-                else MiniChip(if (job.state == com.oasisreader.app.data.BookQueue.State.FAILED) "🔁" else "▶️", onClick = { com.oasisreader.app.data.BookQueue.resume(context, job.key) }, description = "이어 받기")
+                else MiniChip(if (job.state == com.oasisreader.app.data.BookQueue.State.FAILED) "🔁" else "▶️", onClick = { WifiAsk.run(context) { com.oasisreader.app.data.BookQueue.resume(context, job.key) } }, description = "이어 받기")
                 MiniChip("✖️", onClick = { com.oasisreader.app.data.BookQueue.cancel(context, job.key) }, description = "받기 취소")
             }
         }

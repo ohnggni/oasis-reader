@@ -67,10 +67,15 @@ object Downloads {
      * it goes on with the app closed and can be paused. 바로 읽기 (opens the book when done)
      * runs here, right away.
      */
-    fun start(context: Context, server: Server, entry: OpdsEntry, pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null, origin: String? = null) {
+    fun start(context: Context, server: Server, entry: OpdsEntry, pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null, origin: String? = null, shelvesOf: String? = null) {
         val acq = entry.readable ?: run { _messages.tryEmit("EPUB, CBZ/ZIP, TXT, PDF 파일이 없는 항목입니다"); return }
         if (pinned && onDone == null) {
             BookQueue.enqueue(context, BookQueue.Job(entry.id, server.id, acq.href, entry.title, collectionId = collectionId, origin = origin))
+            return
+        }
+        // 103: it must wait for Wi-Fi — into the queue (received later, not opened by itself)
+        if (DownloadPrefs.mustWait(context)) {
+            BookQueue.enqueue(context, BookQueue.Job(entry.id, server.id, acq.href, entry.title, collectionId = collectionId, origin = origin, temp = !pinned, shelvesOf = shelvesOf))
             return
         }
         if (_progress.value.containsKey(entry.id)) return
@@ -109,10 +114,14 @@ object Downloads {
     fun startUrl(
         context: Context, server: Server, key: String, href: String, title: String,
         pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null,
-        origin: String? = null,
+        origin: String? = null, shelvesOf: String? = null,
     ) {
         if (pinned && onDone == null) {
             BookQueue.enqueue(context, BookQueue.Job(key, server.id, href, title, meta = true, collectionId = collectionId, origin = origin))
+            return
+        }
+        if (DownloadPrefs.mustWait(context)) {   // 103
+            BookQueue.enqueue(context, BookQueue.Job(key, server.id, href, title, meta = true, collectionId = collectionId, origin = origin, temp = !pinned, shelvesOf = shelvesOf))
             return
         }
         if (_progress.value.containsKey(key)) return
@@ -153,12 +162,16 @@ object Downloads {
     fun startRemote(
         context: Context, server: Server, path: String,
         pinned: Boolean = true, onDone: ((com.oasisreader.app.data.db.BookEntity) -> Unit)? = null, collectionId: String? = null,
-        origin: String? = null,
+        origin: String? = null, shelvesOf: String? = null,
     ) {
         val url = RemoteAddress.url(server.id, path)
         val title = RemoteAddress.nameOf(path).substringBeforeLast('.')
         if (pinned && onDone == null) {
             BookQueue.enqueue(context, BookQueue.Job(url, server.id, url, title, collectionId = collectionId, origin = origin))
+            return
+        }
+        if (DownloadPrefs.mustWait(context)) {   // 103
+            BookQueue.enqueue(context, BookQueue.Job(url, server.id, url, title, collectionId = collectionId, origin = origin, temp = !pinned, shelvesOf = shelvesOf))
             return
         }
         if (_progress.value.containsKey(url)) return
@@ -229,6 +242,23 @@ object Downloads {
         } finally {
             lock.unlock()
         }
+    }
+
+    /**
+     * The reader asked for a missing book now (다시 받기, or opening a ☁ one): received at once
+     * (true), or — "와이파이에서만 받기" with no Wi-Fi (103) — put in the queue to come later (false).
+     */
+    suspend fun receiveOrQueue(app: Context, bookId: String, url: String): Boolean {
+        if (DownloadPrefs.mustWait(app) && !BookStore.get(app).hasFiles(bookId)) {
+            val book = com.oasisreader.app.data.db.AppDatabase.get(app).books().get(bookId)
+            val server = ServerSettings(app).forUrl(url)
+            if (book != null && server != null) {
+                BookQueue.enqueue(app, BookQueue.Job(book.opdsId ?: url, server.id, url, book.title, temp = !book.pinned))
+                return false
+            }
+        }
+        receiveMissing(app, bookId, url)
+        return true
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.oasisreader.app.meta
 
+import com.oasisreader.app.ui.WifiAsk
 import com.oasisreader.app.data.BookStore
 import kotlinx.coroutines.CoroutineScope
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -94,20 +95,36 @@ internal class MetaShelfActions(
     fun readNow(b: MetaBook) {
         val href = api.downloadUrl(b) ?: return
         if (href in ownedSet) scope.launch { db.books().findBySource(null, href)?.let { onOpenBook(it.id) } }
-        else Downloads.startUrl(app, server, api.key(b), href, b.name, pinned = false, onDone = { onOpenBook(it.id) }, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+        else WifiAsk.run(app) {
+            Downloads.startUrl(app, server, api.key(b), href, b.name, pinned = false, onDone = { onOpenBook(it.id) }, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+        }
     }
 
     /** 서재에 담기 / 보관: keep for good (a cached book with its file still here is just marked). */
-    fun keep(b: MetaBook, quiet: Boolean = false, collectionId: String? = null) {
+    fun keep(b: MetaBook) = keep(b, quiet = false, collectionId = null) { receive -> WifiAsk.run(app, receive) }
+
+    /** [ask]: how a download is started (103: asked about Wi-Fi once, by whoever calls). */
+    private fun keep(b: MetaBook, quiet: Boolean, collectionId: String?, ask: (() -> Unit) -> Unit) {
         val href = api.downloadUrl(b) ?: return
+        fun receive() = ask {
+            Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+        }
         if (href in ownedSet) scope.launch {
             val book = db.books().findBySource(null, href) ?: return@launch
             if (store.hasFiles(book.id)) {
                 db.books().setPinned(book.id, true)
                 if (!quiet) android.widget.Toast.makeText(context, "서재에 보관합니다: ${book.title}", android.widget.Toast.LENGTH_SHORT).show()
                 collectionId?.let { com.oasisreader.app.data.ShelfCollections.set(db, it, book.id, true) }
-            } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
-        } else Downloads.startUrl(app, server, api.key(b), href, b.name, collectionId = collectionId, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+            } else receive()
+        } else receive()
+    }
+
+    /** Would keeping [b] receive anything? */
+    private suspend fun needsDownload(b: MetaBook): Boolean {
+        val href = api.downloadUrl(b) ?: return false
+        if (!b.readable || href in pinnedSet) return false
+        if (href !in ownedSet) return true
+        return db.books().findBySource(null, href)?.let { !store.hasFiles(it.id) } == true
     }
 
     /**
@@ -116,12 +133,20 @@ internal class MetaShelfActions(
      */
     fun keepSeries(list: List<MetaBook>, collection: String?) {
         scope.launch {
+            // one question for the whole series (103)
+            if (list.any { needsDownload(it) }) WifiAsk.run(app) { receiveSeries(list, collection) }
+            else receiveSeries(list, collection)
+        }
+    }
+
+    private fun receiveSeries(list: List<MetaBook>, collection: String?) {
+        scope.launch {
             val col = collection?.let { com.oasisreader.app.data.ShelfCollections.findOrCreate(db, it) }
             var n = 0
             list.forEach { b ->
                 val href = api.downloadUrl(b) ?: return@forEach
                 if (!b.readable) return@forEach
-                if (href !in pinnedSet) { keep(b, quiet = true, collectionId = col?.id); n++ }
+                if (href !in pinnedSet) { keep(b, quiet = true, collectionId = col?.id) { it() }; n++ }
                 else if (col != null) db.books().findBySource(null, href)?.let { com.oasisreader.app.data.ShelfCollections.set(db, col.id, it.id, true) }
             }
             android.widget.Toast.makeText(
@@ -137,7 +162,9 @@ internal class MetaShelfActions(
         if (href in ownedSet) {
             scope.launch { db.books().findBySource(null, href)?.let { onOpenBook(it.id) } }
         } else {
-            Downloads.startUrl(app, server, api.key(b), href, b.name, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+            WifiAsk.run(app) {
+                Downloads.startUrl(app, server, api.key(b), href, b.name, origin = com.oasisreader.app.data.BookOrigin.meta(server.id, b.seriesName, b.libraryId))
+            }
         }
     }
 }

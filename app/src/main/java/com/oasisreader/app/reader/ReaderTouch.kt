@@ -23,8 +23,7 @@ internal fun fetchMissingBook(
 ) {
     scope.launch {
         try {
-            com.oasisreader.app.data.Downloads.receiveMissing(app, bookId, url)
-            onRetry()
+            if (com.oasisreader.app.data.Downloads.receiveOrQueue(app, bookId, url)) onRetry()
         } catch (e: Exception) {
             com.oasisreader.app.ui.Notice.show(context, "다시 받기 실패: ${e.message}")
         } finally {

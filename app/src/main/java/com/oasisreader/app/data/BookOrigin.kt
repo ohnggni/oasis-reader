@@ -122,7 +122,7 @@ object NextVolumes {
                 val e = entries.getOrNull(found + step)?.takeIf { found >= 0 } ?: return null
                 db.books().findBySource(e.id, e.readable?.href)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(e.title) { c, done ->
-                    Downloads.start(c, server, e, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin)
+                    Downloads.start(c, server, e, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id)
                 }
             }
             BookOrigin.META -> {
@@ -137,7 +137,7 @@ object NextVolumes {
                 val href = api.downloadUrl(m) ?: return null
                 db.books().findBySource(api.key(m), href)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(m.name) { c, done ->
-                    Downloads.startUrl(c, server, api.key(m), href, m.name, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin)
+                    Downloads.startUrl(c, server, api.key(m), href, m.name, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id)
                 }
             }
             BookOrigin.REMOTE -> {
@@ -153,7 +153,7 @@ object NextVolumes {
                 val url = RemoteAddress.url(server.id, f.path)
                 db.books().findBySource(url, url)?.let { return NextVolume.InLibrary(it) }
                 NextVolume.OnServer(f.name.substringBeforeLast('.')) { c, done ->
-                    Downloads.startRemote(c, server, f.path, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin)
+                    Downloads.startRemote(c, server, f.path, pinned = false, onDone = { b -> afterReceive(c, book, b); done(b) }, origin = book.origin, shelvesOf = book.id)
                 }
             }
             else -> null
@@ -164,12 +164,15 @@ object NextVolumes {
 
     /** The next volume joins the 컬렉션 the current one is on (as a series usually is). */
     private fun afterReceive(app: Context, current: BookEntity, next: BookEntity) {
-        scope.launch {
-            runCatching {
-                val db = AppDatabase.get(app)
-                db.collections().observeLinks().first().filter { it.bookId == current.id }.forEach {
-                    ShelfCollections.set(db, it.collectionId, next.id, true)
-                }
+        scope.launch { joinShelves(app, current.id, next.id) }
+    }
+
+    /** [bookId] goes on every 컬렉션 [likeId] is on. */
+    internal suspend fun joinShelves(app: Context, likeId: String, bookId: String) {
+        runCatching {
+            val db = AppDatabase.get(app)
+            db.collections().observeLinks().first().filter { it.bookId == likeId }.forEach {
+                ShelfCollections.set(db, it.collectionId, bookId, true)
             }
         }
     }
