@@ -508,9 +508,9 @@ class ReadAloud(context: Context) {
             val full = GAP_MS[level.coerceIn(0, GAP_MS.lastIndex)]
             val ms = when {
                 end == ReadAloudText.HEAD -> HEAD_MS[level.coerceIn(0, HEAD_MS.lastIndex)]   // after a heading (85)
-                end in ".?!…。？！\"'”’」』)]" -> full
-                end in ",，、" -> 0          // a long sentence cut at its comma: go straight on (2.9)
-                else -> minOf(150, full)     // a line with no end mark (a 텍본 line)
+                end in TtsTuning.GAP_END_MARKS -> full
+                end in TtsTuning.TEXT_COMMA -> 0                         // a long sentence cut at its comma: go straight on (2.9)
+                else -> minOf(TtsTuning.GAP_NO_MARK_MS, full)            // a line with no end mark (a 텍본 line)
             }
             return (ms / rate.coerceIn(0.5f, 3f)).toLong()
         }

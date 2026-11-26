@@ -38,6 +38,10 @@ object TtsTuning {
     /** After a heading or a chapter number line (85): a step longer than after a sentence. */
     val HEAD_MS = intArrayOf(150, 350, 600, 900)
     const val GAP_NORMAL = 2
+    /** A line ending in one of these gets the full 문장 사이 pause. */
+    const val GAP_END_MARKS = ".?!…。？！\"'”’」』)]"
+    /** A line with no end mark (a 텍본 line): at most this, so lines don't run together nor drag. */
+    const val GAP_NO_MARK_MS = 150
     const val CUE_GAP_MS = 8_000L
     /** Under the engines' input limit (4000). */
     const val MAX_LEN = 3000

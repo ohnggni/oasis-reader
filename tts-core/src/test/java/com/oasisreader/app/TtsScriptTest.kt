@@ -9,7 +9,7 @@ import org.junit.Test
 
 class TtsScriptTest {
 
-    /** The JS lines as the 2.x ReaderHtml had them by hand (git b86b283), byte for byte. */
+    /** The JS lines as the 2.x ReaderHtml had them by hand (git b86b283), byte for byte — plus TTS_COMMA (3.0, was inline in the script). */
     private val bs = "\\"   // a raw string would still have its unicode escapes read by the compiler
 
     private val oldLines = listOf(
@@ -18,6 +18,7 @@ class TtsScriptTest {
         """var TTS_OPEN = '“‘「『（〈《([', TTS_LONG = 250, TTS_HARD = 400, TTS_MIN = 30;""",
         """var TTS_LABEL = /(?:제\s?[0-9]+\s?[장부편권화절]|[0-9]+\s?[장부편]|(?:part|chapter|book)\s*[0-9IVXivx]+|[${bs}u2460-${bs}u2473]|[${bs}u2160-${bs}u216B]|[0-9]+\.?|prologue|epilogue|프롤로그|에필로그)/i;""",
         """var TTS_LEAD = /(?:제\s?[0-9]+\s?[장부편권화절]|[0-9]+\s?[장부편]|(?:part|chapter|book)\s*[0-9IVXivx]+|[${bs}u2460-${bs}u2473]|[${bs}u2160-${bs}u216B]|[0-9]+\.|prologue|epilogue|프롤로그|에필로그)(?=\s+\S)/i;""",
+        """var TTS_COMMA = ',，、';""",
     )
 
     /** Reads a single-quoted JS string literal back (what a JS engine would make of it). */
@@ -56,6 +57,7 @@ class TtsScriptTest {
         assertEquals(TtsTuning.TEXT_LONG, num("TTS_LONG"))
         assertEquals(TtsTuning.TEXT_HARD, num("TTS_HARD"))
         assertEquals(TtsTuning.TEXT_MIN, num("TTS_MIN"))
+        assertEquals(TtsTuning.TEXT_COMMA, str("TTS_COMMA"))
         assertEquals("/" + TtsTuning.TEXT_LABEL + "/i", Regex("""TTS_LABEL = (/.*/i);""").find(d)!!.groupValues[1])
         assertEquals("/" + TtsTuning.TEXT_LEAD + """(?=\s+\S)/i""", Regex("""TTS_LEAD = (/.*/i);""").find(d)!!.groupValues[1])
     }
@@ -72,6 +74,7 @@ class TtsScriptTest {
         assertEquals(".!?。！？…", TtsTuning.TEXT_END)
         assertEquals(250, TtsTuning.TEXT_LONG); assertEquals(400, TtsTuning.TEXT_HARD); assertEquals(30, TtsTuning.TEXT_MIN)
         assertEquals(",，、", TtsTuning.TEXT_COMMA)
+        assertEquals(".?!…。？！\"'”’」』)]", TtsTuning.GAP_END_MARKS); assertEquals(150, TtsTuning.GAP_NO_MARK_MS)
         assertEquals(listOf(0, 150, 350, 600), TtsTuning.GAP_MS.toList())
         assertEquals(listOf(150, 350, 600, 900), TtsTuning.HEAD_MS.toList())
         assertEquals(2, TtsTuning.GAP_NORMAL); assertEquals(8_000L, TtsTuning.CUE_GAP_MS); assertEquals(3000, TtsTuning.MAX_LEN)

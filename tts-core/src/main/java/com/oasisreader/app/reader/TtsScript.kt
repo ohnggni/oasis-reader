@@ -24,12 +24,13 @@ object TtsScript {
         return sb.append('\'').toString().replace("</", "<\\/")
     }
 
-    /** The var lines: TTS_END, TTS_CLOSE, TTS_QEND, TTS_OPEN, TTS_LONG, TTS_HARD, TTS_MIN, TTS_LABEL, TTS_LEAD. */
+    /** The var lines: TTS_END, TTS_CLOSE, TTS_QEND, TTS_OPEN, TTS_LONG, TTS_HARD, TTS_MIN, TTS_LABEL, TTS_LEAD, TTS_COMMA (3.0). */
     fun declarations(): String = listOf(
         "var TTS_END = ${jsString(TtsTuning.TEXT_END)}, TTS_CLOSE = ${jsString(TtsTuning.TEXT_CLOSE)};",
         "var TTS_QEND = ${jsString(TtsTuning.TEXT_QUOTE_END)};",
         "var TTS_OPEN = ${jsString(TtsTuning.TEXT_OPEN)}, TTS_LONG = ${TtsTuning.TEXT_LONG}, TTS_HARD = ${TtsTuning.TEXT_HARD}, TTS_MIN = ${TtsTuning.TEXT_MIN};",
         "var TTS_LABEL = /${TtsTuning.TEXT_LABEL}/i;",
         "var TTS_LEAD = /${TtsTuning.TEXT_LEAD}(?=\\s+\\S)/i;",
+        "var TTS_COMMA = ${jsString(TtsTuning.TEXT_COMMA)};",
     ).joinToString("\n  ")
 }

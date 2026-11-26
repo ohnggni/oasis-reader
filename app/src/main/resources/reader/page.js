@@ -654,7 +654,7 @@
       function piece(x, y) {
         while (y - x > TTS_LONG) {
           var lim = x + TTS_LONG, cut = -1, k;
-          for (k = lim; k > x + TTS_MIN; k--) if (',，、'.indexOf(s.charAt(k - 1)) >= 0 && ttsSpace(s.charAt(k))) { cut = k; break; }
+          for (k = lim; k > x + TTS_MIN; k--) if (TTS_COMMA.indexOf(s.charAt(k - 1)) >= 0 && ttsSpace(s.charAt(k))) { cut = k; break; }
           if (cut < 0) {
             if (y - x <= TTS_HARD) break;
             for (k = lim; k > x + TTS_MIN; k--) if (ttsSpace(s.charAt(k))) { cut = k; break; }

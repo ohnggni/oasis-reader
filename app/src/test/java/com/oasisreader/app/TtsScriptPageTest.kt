@@ -21,5 +21,6 @@ class TtsScriptPageTest {
         assertTrue(html.contains(TtsScript.declarations()))
         assertEquals(1, Regex("var TTS_END =").findAll(html).count())
         assertEquals(1, Regex("var TTS_LEAD =").findAll(html).count())
+        assertEquals(1, Regex("var TTS_COMMA =").findAll(html).count())
     }
 }
