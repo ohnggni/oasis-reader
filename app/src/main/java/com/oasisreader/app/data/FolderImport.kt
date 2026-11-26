@@ -158,7 +158,7 @@ object FolderImport {
                     tmp.delete()
                 }
             }
-            lastId?.let { com.oasisreader.app.ui.Notice.added("「${plan.rootName}」 ${ok}권을 서재에 담았습니다", it) }
+            lastId?.let { ShelfNotices.added("「${plan.rootName}」 ${ok}권을 서재에 담았습니다", it) }
             done(
                 app,
                 "「${plan.rootName}」 ${ok}권을 서재에 담았습니다" +

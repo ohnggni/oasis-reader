@@ -228,7 +228,7 @@ object BookQueue {
             Downloads.recordOrigin(app, book.id, job.origin)
             change(app) { l -> l.filterNot { it.key == job.key } }
             Downloads.setProgress(job.key, null)
-            com.oasisreader.app.ui.Notice.added("서재에 담았습니다: ${book.title}", book.id)
+            ShelfNotices.added("서재에 담았습니다: ${book.title}", book.id)
         }
 
         private fun note(title: String, left: Int, f: Float) {

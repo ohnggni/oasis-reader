@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.oasisreader.app.data.ShelfNotices
 import kotlinx.coroutines.delay
 
 /**
@@ -86,6 +87,9 @@ object Notice {
     }
 
     fun dismiss() { text = null; book = null }
+
+    // after the properties: what the data layer said before this woke is handed over right here
+    init { ShelfNotices.listen(::added) }
 }
 
 /** Hosted once over the whole app (MainActivity). */
