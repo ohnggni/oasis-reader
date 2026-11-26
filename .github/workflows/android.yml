@@ -27,7 +27,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "8.11.1"
 
@@ -75,7 +75,7 @@ jobs:
           ls -l "out/OasisReader-$V.apk" | awk '{printf "::notice::APK %.1f MB\n", $5/1048576}'
           unzip -l "out/OasisReader-$V.apk" | grep -E 'classes[0-9]*\.dex' | awk '{s+=$1; n++} END {printf "::notice::dex %d files, %.1f MB\n", n, s/1048576}' 
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: OasisReader-${{ env.APP_VERSION }}
           path: out/*.apk
